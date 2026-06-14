@@ -1,68 +1,27 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { handleGenerate } from './server/generate.js'
 
 // --- Local /generate endpoint (dev + preview middleware) -------------------
-// TEMPORARY. NOT a production server.
-// TODO: Replace Vite middleware with server endpoint before production.
-// This placeholder backend lives in the Vite middleware chain so the front
-// end has a real HTTP round-trip to call.
-// Phase 4: verifies request structure, mints a Job ID, and returns a
-// placeholder narrative. No parsing, AI, storage, calculations, or export.
-function readJsonBody(req) {
-  return new Promise((resolve) => {
-    let raw = ''
-    req.on('data', (chunk) => { raw += chunk })
-    req.on('end', () => {
-      try { resolve(raw ? JSON.parse(raw) : {}) }
-      catch { resolve(null) } // signal malformed body
-    })
-  })
-}
-
+// The real request handler now lives in server/generate.js so it can graduate
+// to a production Node/Express server unchanged. Here it is simply mounted in
+// the Vite middleware chain so the front end has a real HTTP round-trip during
+// dev and preview.
+// Phase 5: receives multipart/form-data with actual file bytes, verifies
+// surface facts (filename, size, MIME, role), and returns a placeholder
+// response. No parsing, AI, storage, calculations, persistence, or export.
 function generateEndpoint() {
-  const handler = (server) => {
-    server.middlewares.use('/generate', async (req, res, next) => {
+  const mount = (server) => {
+    server.middlewares.use('/generate', (req, res, next) => {
       if (req.method !== 'POST') return next()
-      res.setHeader('Content-Type', 'application/json')
-
-      const body = await readJsonBody(req)
-
-      // Structure verification (no validation of file contents).
-      if (body === null) {
-        res.statusCode = 400
-        res.end(JSON.stringify({ success: false, error: 'Malformed request body.' }))
-        return
-      }
-      // Structure verification only (no inspection of file contents).
-      const files = Array.isArray(body.files) ? body.files : null
-      if (!files || files.length === 0 || !body.style || !body.variance) {
-        res.statusCode = 422
-        res.end(JSON.stringify({
-          success: false,
-          error: 'Request is missing required fields (files, style, or variance).'
-        }))
-        return
-      }
-
-      // Server-minted placeholder Job ID. No real processing happens here.
-      const jobId = 'JOB-' + String(Date.now()).slice(-6)
-      res.statusCode = 200
-      res.end(JSON.stringify({
-        success: true,
-        jobId,
-        filesReceived: files.length,
-        settingsReceived: true,
-        narrative: {
-          summary: 'Narrative generation placeholder. Analysis engine not connected yet.'
-        }
-      }))
+      handleGenerate(req, res)
     })
   }
   return {
     name: 'generate-endpoint',
-    configureServer: handler,   // dev
-    configurePreviewServer: handler // preview
+    configureServer: mount,   // dev
+    configurePreviewServer: mount // preview
   }
 }
 
