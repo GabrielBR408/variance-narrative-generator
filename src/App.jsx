@@ -22,10 +22,6 @@ const DEFAULT_VARIANCE = {
   ignore: { zeroVariances: true, smallRepeatItems: true }
 }
 
-function fileMeta(f, role) {
-  return { name: f.name, size: f.size, type: f.type, role }
-}
-
 export default function App() {
   // Upload state (isolated slice)
   const [baseReport, setBaseReport] = useState(null)
@@ -51,31 +47,26 @@ export default function App() {
       return
     }
 
-    // Preparing: assemble one structured request. No interpretation, no
-    // extraction, no validation beyond the required base file above.
+    // Preparing: assemble one multipart request carrying the actual file
+    // bytes. No interpretation, no extraction, no validation beyond the
+    // required base file above.
     setStatus('preparing')
     setMessage('')
     setResult(null)
 
     const { notes, ...styleSettings } = style
-    const payload = {
-      files: [
-        fileMeta(baseReport, 'base'),
-        ...supportingFiles.map((f) => fileMeta(f, 'supporting'))
-      ],
-      style: styleSettings,
-      variance,
-      notes: notes || ''
-    }
+    const form = new FormData()
+    form.append('baseReport', baseReport) // real File object
+    supportingFiles.forEach((f) => form.append('supportingFiles', f)) // real File objects
+    form.append('style', JSON.stringify(styleSettings))
+    form.append('variance', JSON.stringify(variance))
+    form.append('notes', notes || '')
 
-    // Sending
+    // Sending. Do not set Content-Type — the browser adds the multipart
+    // boundary automatically.
     setStatus('sending')
     try {
-      const res = await fetch('/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
+      const res = await fetch('/generate', { method: 'POST', body: form })
 
       let data
       try {
@@ -92,6 +83,7 @@ export default function App() {
         jobId: data.jobId,
         filesReceived: data.filesReceived,
         settingsReceived: data.settingsReceived,
+        files: Array.isArray(data.files) ? data.files : [],
         summary: data.narrative.summary
       })
       setStatus('success')

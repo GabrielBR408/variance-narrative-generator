@@ -172,6 +172,17 @@ body {
 .result-row { display: flex; justify-content: space-between; padding: 0.6rem 0.9rem; font-size: 0.88rem; }
 .result-row + .result-row { border-top: 1px solid var(--line); }
 
+.received-files { list-style: none; margin: 0.7rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.received-file { border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.8rem; }
+.received-file-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.received-file-name { font-weight: 600; font-size: 0.88rem; word-break: break-word; }
+.received-file-role {
+  flex: none; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 0.15rem 0.5rem; border-radius: 999px; background: #eef1f5; color: var(--muted);
+}
+.received-file-role--baseReport { background: var(--accent); color: #fff; }
+.received-file-meta { display: flex; gap: 0.9rem; margin-top: 0.3rem; font-size: 0.8rem; color: var(--muted); }
+
 .narrative { margin-top: 0.9rem; border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.1rem; background: #fafbfc; }
 .narrative-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 0.4rem; }
 .narrative-body { margin: 0; font-size: 0.92rem; }
