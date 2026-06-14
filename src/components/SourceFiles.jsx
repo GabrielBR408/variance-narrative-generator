@@ -1,4 +1,5 @@
 import React, { useRef } from 'react'
+import { classifyFile, confidenceTier } from '../lib/classify.js'
 
 const ACCEPT = '.pdf,.xlsx,.xls,.csv,.docx'
 const CATEGORIES = [
@@ -16,14 +17,23 @@ function prettySize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function Chip({ file, onRemove }) {
+function Chip({ file, role, onRemove }) {
+  // Classification is purely advisory and computed from name + role only.
+  // It never gates the upload; the file is already here regardless.
+  const { type, confidence } = classifyFile({ name: file.name, role })
   return (
     <span className="chip">
-      <span className="chip-name">{file.name}</span>
-      <span className="chip-size">{prettySize(file.size)}</span>
-      <button type="button" className="chip-x" aria-label={`Remove ${file.name}`} onClick={onRemove}>
-        ×
-      </button>
+      <span className="chip-top">
+        <span className="chip-name">{file.name}</span>
+        <span className="chip-size">{prettySize(file.size)}</span>
+        <button type="button" className="chip-x" aria-label={`Remove ${file.name}`} onClick={onRemove}>
+          ×
+        </button>
+      </span>
+      <span className={`chip-class chip-class--${confidenceTier(confidence)}`}>
+        <span className="chip-class-type">{type}</span>
+        <span className="chip-class-conf">{confidence}%</span>
+      </span>
     </span>
   )
 }
@@ -63,7 +73,7 @@ export default function SourceFiles({ baseReport, setBaseReport, supportingFiles
 
         {baseReport && (
           <div className="chips">
-            <Chip file={baseReport} onRemove={() => setBaseReport(null)} />
+            <Chip file={baseReport} role="baseReport" onRemove={() => setBaseReport(null)} />
           </div>
         )}
       </div>
@@ -80,7 +90,7 @@ export default function SourceFiles({ baseReport, setBaseReport, supportingFiles
         {supportingFiles.length > 0 && (
           <div className="chips">
             {supportingFiles.map((f, i) => (
-              <Chip key={`${f.name}-${i}`} file={f} onRemove={() => removeSupport(i)} />
+              <Chip key={`${f.name}-${i}`} file={f} role="supportingFile" onRemove={() => removeSupport(i)} />
             ))}
           </div>
         )}
