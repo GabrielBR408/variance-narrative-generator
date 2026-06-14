@@ -1,4 +1,5 @@
 import React from 'react'
+import { classifyFile, confidenceTier } from '../lib/classify.js'
 
 const STATUS_TEXT = {
   idle: 'Idle',
@@ -48,20 +49,31 @@ export default function ResultPanel({ status, result }) {
 
           {files.length > 0 && (
             <ul className="received-files">
-              {files.map((f, i) => (
-                <li key={`${f.name}-${i}`} className="received-file">
-                  <div className="received-file-head">
-                    <span className="received-file-name">{f.name}</span>
-                    <span className={`received-file-role received-file-role--${f.role}`}>
-                      {ROLE_LABEL[f.role] || f.role}
-                    </span>
-                  </div>
-                  <div className="received-file-meta">
-                    <span>{prettySize(f.size)}</span>
-                    <span>{f.type || 'unknown type'}</span>
-                  </div>
-                </li>
-              ))}
+              {files.map((f, i) => {
+                // Deterministic, content-free classification from name + role.
+                const { type, confidence } = classifyFile({ name: f.name, role: f.role })
+                return (
+                  <li key={`${f.name}-${i}`} className="received-file">
+                    <div className="received-file-head">
+                      <span className="received-file-name">{f.name}</span>
+                      <span className={`received-file-role received-file-role--${f.role}`}>
+                        {ROLE_LABEL[f.role] || f.role}
+                      </span>
+                    </div>
+                    <div className="received-file-class">
+                      <span className="received-file-class-label">Detected</span>
+                      <span className="received-file-class-type">{type}</span>
+                      <span className={`received-file-class-conf received-file-class-conf--${confidenceTier(confidence)}`}>
+                        {confidence}% confidence
+                      </span>
+                    </div>
+                    <div className="received-file-meta">
+                      <span>{prettySize(f.size)}</span>
+                      <span>{f.type || 'unknown type'}</span>
+                    </div>
+                  </li>
+                )
+              })}
             </ul>
           )}
 
