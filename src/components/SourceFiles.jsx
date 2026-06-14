@@ -1,5 +1,6 @@
 import React, { useRef } from 'react'
 import { classifyFile, confidenceTier } from '../lib/classify.js'
+import ExtractionPreview from './ExtractionPreview.jsx'
 
 const ACCEPT = '.pdf,.xlsx,.xls,.csv,.docx'
 const CATEGORIES = [
@@ -38,9 +39,24 @@ function Chip({ file, role, onRemove }) {
   )
 }
 
-export default function SourceFiles({ baseReport, setBaseReport, supportingFiles, setSupportingFiles }) {
+export default function SourceFiles({
+  baseReport,
+  setBaseReport,
+  supportingFiles,
+  setSupportingFiles,
+  extractions = {},
+  fileKey
+}) {
   const baseInput = useRef(null)
   const supportInput = useRef(null)
+
+  // Ordered extraction items (base first), if extraction is wired in.
+  const orderedFiles = []
+  if (baseReport) orderedFiles.push(baseReport)
+  supportingFiles.forEach((f) => orderedFiles.push(f))
+  const previewItems = fileKey
+    ? orderedFiles.map((f) => extractions[fileKey(f)]).filter(Boolean)
+    : []
 
   const onBase = (e) => {
     const f = e.target.files?.[0]
@@ -102,6 +118,8 @@ export default function SourceFiles({ baseReport, setBaseReport, supportingFiles
           </ul>
         </details>
       </div>
+
+      <ExtractionPreview items={previewItems} />
     </section>
   )
 }
