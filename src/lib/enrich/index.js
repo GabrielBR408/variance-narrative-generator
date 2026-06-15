@@ -118,7 +118,15 @@ function enrichNote(note, index, options, period) {
       accountType: note.accountType,
       contribution
     })
-    const sentence = commentarySentence({ type, account: note.account, detail, period, contribution })
+    const sentence = commentarySentence({
+      type,
+      account: note.account,
+      detail,
+      period,
+      contribution,
+      varianceAmount: note.varianceAmount,
+      accountType: note.accountType
+    })
     if (sentence) text = appendSentence(note.text, sentence)
   } else {
     const clause = explanationClause({ classificationType: primary.classificationType })
