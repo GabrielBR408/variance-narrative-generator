@@ -29,14 +29,15 @@ export default function ResultPanel({ status, result }) {
     <section className="step step--result" aria-live="polite">
       <div className="step-head">
         <span className="step-eyebrow">Result</span>
-        <h2 className="step-title">Narrative Summary</h2>
+        <h2 className="step-title">Generated Narrative</h2>
         <span className={`status-pill status-pill--${status}`}>{STATUS_TEXT[status]}</span>
       </div>
 
       {!showResult ? (
         <p className="result-empty">
           Nothing generated yet. Add a base report, choose your settings, and select
-          Generate Narrative — the summary will appear here.
+          Generate Narrative — the finished narrative will appear here. The cards above
+          are a live preview only.
         </p>
       ) : (
         <>

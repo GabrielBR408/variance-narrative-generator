@@ -6,6 +6,7 @@ import GeneratePanel from './components/GeneratePanel.jsx'
 import ResultPanel from './components/ResultPanel.jsx'
 import { classifyFile } from './lib/classify.js'
 import { extractFile } from './lib/extract/extract.js'
+import { extractionReadiness } from './lib/generateState.js'
 
 // Stable in-memory key for a File. Same name+size+mtime ⇒ same extraction, so
 // we never re-open a file we've already read this session.
@@ -64,6 +65,12 @@ export default function App() {
 
   const busy = status === 'preparing' || status === 'sending'
 
+  // Generate readiness (Phase 9C): the base report must have finished extracting
+  // and produced usable content before a narrative can be generated. While the
+  // base file is still being read, Generate stays disabled with a clear note.
+  const baseExtraction = baseReport ? extractions[fileKey(baseReport)] : null
+  const readiness = extractionReadiness({ hasBase: !!baseReport, baseExtraction })
+
   // Extraction pipeline: classify (Phase 6) → extract → normalize → preview.
   // Runs whenever the uploaded files change. Each file is opened at most once;
   // removed files are pruned so their content is released.
@@ -115,11 +122,13 @@ export default function App() {
   async function generate() {
     if (busy) return // prevent duplicate submits
 
-    // Required-field check: a base file must exist before anything is sent.
-    if (!baseReport) {
+    // Readiness gate (Phase 9C): no base, still extracting, or extraction failed.
+    // The button is already disabled in these states; this guards programmatic
+    // or race-y calls and surfaces the same friendly explanation.
+    if (!readiness.ready) {
       setStatus('failure')
       setResult(null)
-      setMessage('Add a base variance report before generating.')
+      setMessage(readiness.message)
       return
     }
 
@@ -199,7 +208,7 @@ export default function App() {
         />
         <StylePanel style={style} setStyle={setStyle} />
         <VarianceDetail variance={variance} setVariance={setVariance} />
-        <GeneratePanel status={status} busy={busy} message={message} onGenerate={generate} />
+        <GeneratePanel status={status} message={message} readiness={readiness} onGenerate={generate} />
         <ResultPanel status={status} result={result} />
       </div>
     </main>

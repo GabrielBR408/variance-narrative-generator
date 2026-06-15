@@ -162,8 +162,22 @@ body {
 
 .generate-msg { font-size: 0.86rem; margin-top: 0.8rem; }
 .generate-msg--error { color: var(--danger); }
+.generate-msg--info { color: var(--muted, #5b6675); }
 
-.generate-msg--error { color: var(--danger); }
+/* Loading indication while a generate request is in flight. */
+.generate-progress {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.86rem; margin-top: 0.8rem; color: var(--muted, #5b6675);
+}
+.generate-spinner {
+  width: 0.9rem; height: 0.9rem; border-radius: 50%;
+  border: 2px solid currentColor; border-top-color: transparent;
+  animation: generate-spin 0.7s linear infinite;
+}
+@keyframes generate-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .generate-spinner { animation: none; }
+}
 
 /* Result panel */
 .step--result { padding: 1.5rem; }
