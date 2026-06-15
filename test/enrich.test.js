@@ -111,7 +111,7 @@ test('supporting files but no match: narrative unchanged and Markdown byte-ident
 
 // --- evidence attaches to a matching flagged note --------------------------
 
-test('GL thick evidence merges an owner-facing explanation into the sentence', () => {
+test('GL thick reliable total renders as a standalone evidence sentence (no causation)', () => {
   const n = baseNarrative(FLAGGED)
   const enriched = enrichNarrative(n, { supporting: [GL()] })
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
@@ -119,12 +119,11 @@ test('GL thick evidence merges an owner-facing explanation into the sentence', (
   assert.equal(note.support.length, 1)
   assert.equal(note.support[0].fileName, 'General Ledger.pdf')
   assert.equal(note.support[0].thick, true, 'GL row with an Amount column is thick')
-  // The original variance amount + percent are preserved, and the explanation is
-  // merged into the SAME sentence (single period at the end), now including the
-  // Phase 17 GL-detail summary.
+  // The variance sentence is preserved verbatim, then a SEPARATE GL evidence
+  // sentence states context only — never a causal comma clause.
   assert.match(
     note.text,
-    /^Utility Expense Recovery exceeded budget by \$7,366 \(138\.1%\), primarily due to higher current-period .*charges shown in the GL detail, including 1 matching entry totaling approximately \$7,400\.$/
+    /^Utility Expense Recovery exceeded budget by \$7,366 \(138\.1%\)\. GL detail shows approximately \$7,400 of related utility activity during the current period\.$/
   )
   // No citation / file-name / debug language leaks into the owner text.
   assert.doesNotMatch(note.text, /Supporting file/)
@@ -187,7 +186,7 @@ test('scoreMatch tiers: code exact > name exact > substring', () => {
 
 // --- multiple files: deterministic order + dedupe --------------------------
 
-test('multiple matching files: support keeps stable file-name order, GL phrases the clause', () => {
+test('multiple matching files: support keeps stable file-name order, GL phrases the evidence', () => {
   const n = baseNarrative(FLAGGED)
   const budget = supporting({
     fileName: 'Budget Detail.xlsx',
@@ -200,8 +199,8 @@ test('multiple matching files: support keeps stable file-name order, GL phrases 
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
   // All matches retained in metadata, stable order.
   assert.deepEqual(note.support.map((s) => s.fileName), ['Budget Detail.xlsx', 'General Ledger.pdf'])
-  // GL outranks budget, so the merged owner clause is the GL explanation.
-  assert.match(note.text, /shown in the GL detail, including 1 matching entry totaling approximately \$7,400\.$/)
+  // GL outranks budget, so the standalone GL evidence sentence is used.
+  assert.match(note.text, /\. GL detail shows approximately \$7,400 of related utility activity during the current period\.$/)
   assert.doesNotMatch(note.text, /budget assumptions/)
   assert.doesNotMatch(note.text, /Budget Detail\.xlsx|General Ledger\.pdf|Supporting file/)
 })
@@ -239,9 +238,9 @@ test('explanation preserves the base amount/percent and adds only a rounded GL a
   assert.doesNotMatch(note.text.replace('$7,366', ''), /7366/)
 })
 
-// --- Phase 17: GL detail summaries -----------------------------------------
+// --- Phase 17 / 17.1: GL detail summaries (evidence-only wording) ----------
 
-test('GL detail names a recurring vendor and a reliable total', () => {
+test('GL reliable total renders the evidence sentence; vendor stays in metadata only', () => {
   const gl = supporting({
     fileName: 'General Ledger.pdf',
     type: 'General Ledger (GL)',
@@ -254,12 +253,15 @@ test('GL detail names a recurring vendor and a reliable total', () => {
   })
   const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [gl] })
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
+  // Raw totals + vendor remain in the structured metadata (for Excel/support).
   const detail = note.support[0].detail
   assert.equal(detail.count, 2)
   assert.equal(detail.total, 7400)
   assert.equal(detail.topVendor, 'PG&E')
   assert.equal(detail.topVendorCount, 2)
-  assert.match(note.text, /including PG&E activity totaling approximately \$7,400\./)
+  // The owner narrative states context only — the vendor name is NOT rendered.
+  assert.match(note.text, /\. GL detail shows approximately \$7,400 of related utility activity during the current period\.$/)
+  assert.doesNotMatch(note.text, /PG&E/)
 })
 
 test('GL total is omitted when amounts are ambiguous (Debit + Credit columns)', () => {
@@ -277,26 +279,28 @@ test('GL total is omitted when amounts are ambiguous (Debit + Credit columns)', 
   const detail = note.support[0].detail
   assert.equal(detail.count, 2)
   assert.equal(detail.total, null, 'two amount columns are ambiguous → no total')
-  // Count wording, but NO "totaling approximately" since the total is unreliable.
-  assert.match(note.text, /including 2 matching entries\./)
-  assert.doesNotMatch(note.text, /totaling approximately/)
+  // Count wording, but NO total since it is unreliable. No causal language.
+  assert.match(note.text, /\. Detailed activity includes 2 related transactions during the current period\.$/)
+  assert.doesNotMatch(note.text, /approximately|GL detail shows/)
 })
 
-test('a single stray vendor is not asserted as the vendor (no invention)', () => {
+test('GL with descriptions but no reliable total uses descriptions-only wording', () => {
+  // Two amount columns make the total ambiguous, but a description column is
+  // present → the descriptions-only evidence sentence (no vendor name, no total).
   const gl = supporting({
     fileName: 'General Ledger.pdf',
     type: 'General Ledger (GL)',
-    columns: ['Account', 'Description', 'Amount'],
+    columns: ['Account', 'Description', 'Debit', 'Credit'],
     rows: [
-      ['Utility Expense Recovery', 'PG&E', '4000'],
-      ['Utility Expense Recovery', 'City Water', '3400']
+      ['Utility Expense Recovery', 'PG&E', '4000', ''],
+      ['Utility Expense Recovery', 'City Water', '3400', '']
     ]
   })
   const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [gl] })
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
-  // No vendor recurs, so wording falls back to entry count — no name is asserted.
-  assert.doesNotMatch(note.text, /PG&E|City Water/)
-  assert.match(note.text, /including 2 matching entries totaling approximately \$7,400\./)
+  assert.equal(note.support[0].detail.total, null, 'ambiguous amounts → no total')
+  assert.match(note.text, /\. Related transactions appear in detailed activity for the current period\.$/)
+  assert.doesNotMatch(note.text, /PG&E|City Water|approximately/)
 })
 
 test('no enriched owner text contains "Supporting file" or an uploaded file name', () => {
@@ -326,8 +330,9 @@ test('GL thin evidence (name-only, no amount/description) stays conservative', (
   const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [thinGL] })
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
   assert.equal(note.support[0].thick, false)
-  assert.match(note.text, /with matching GL activity supporting the variance\.$/)
-  assert.doesNotMatch(note.text, /primarily due to|shown in the GL detail/)
+  // Weak/name-only match → review-only language, never "supporting the variance".
+  assert.match(note.text, /\. Detailed account activity was available for review\.$/)
+  assert.doesNotMatch(note.text, /supporting the variance|primarily due to|GL detail shows/)
 })
 
 // --- budget-only evidence ---------------------------------------------------
@@ -371,8 +376,43 @@ test('Markdown and DOCX carry the enriched note text identically', () => {
     .flatMap((chunk) => chunk.split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2)))
   const dx = narrativeToDocxBlocks(enriched).filter((b) => b.kind === 'bullet').map((b) => b.text)
   assert.deepEqual(md, dx)
-  // And the merged explanation actually made it into both renderers.
-  assert.ok(md.some((t) => /shown in the GL detail, including/.test(t)))
+  // And the standalone GL evidence sentence actually made it into both renderers.
+  assert.ok(md.some((t) => /GL detail shows approximately/.test(t)))
+})
+
+// --- Phase 17.1: no causation / implied-causation language -----------------
+
+const FORBIDDEN = [
+  /primarily due to/i,
+  /\bdue to\b/i,
+  /caused by/i,
+  /driven by/i,
+  /supporting the variance/i,
+  /\bexplains\b/i,
+  /because of/i,
+  /resulting from/i
+]
+
+function assertNoForbidden(text) {
+  for (const re of FORBIDDEN) assert.doesNotMatch(text, re, `forbidden phrase ${re} in: ${text}`)
+}
+
+test('no rendered narrative contains causation or implied-causation phrases', () => {
+  // Cover every evidence shape: reliable GL, ambiguous GL, descriptions-only GL,
+  // thin GL, budget-only, prior, and other.
+  const variants = [
+    GL('General Ledger.pdf'),
+    supporting({ fileName: 'gl2.pdf', type: 'General Ledger (GL)', columns: ['Account', 'Debit', 'Credit'], rows: [['Utility Expense Recovery', '4000', ''], ['Utility Expense Recovery', '3366', '']] }),
+    supporting({ fileName: 'gl3.pdf', type: 'General Ledger (GL)', columns: ['Account', 'Description', 'Debit', 'Credit'], rows: [['Utility Expense Recovery', 'PG&E', '4000', ''], ['Utility Expense Recovery', 'City Water', '3400', '']] }),
+    supporting({ fileName: 'gl4.pdf', type: 'General Ledger (GL)', columns: ['Account'], rows: [['Utility Expense Recovery']] }),
+    supporting({ fileName: 'budget.xlsx', type: 'Budget', columns: ['Account', 'Budget'], rows: [['Utility Expense Recovery', '5334']] }),
+    supporting({ fileName: 'prior.xlsx', type: 'Prior Period', columns: ['Account', 'Amount'], rows: [['Utility Expense Recovery', '5000']] }),
+    supporting({ fileName: 'misc.pdf', type: 'Supporting Document', columns: ['Account', 'Amount'], rows: [['Utility Expense Recovery', '1']] })
+  ]
+  for (const ev of variants) {
+    const md = narrativeToMarkdown(enrichNarrative(baseNarrative(FLAGGED), { supporting: [ev] }))
+    assertNoForbidden(md)
+  }
 })
 
 // --- internal support metadata ----------------------------------------------
@@ -406,9 +446,9 @@ test('Period Scope selector still narrows an enriched two-period narrative', () 
   const current = scopeNarrative(enriched, 'current')
   assert.equal(current.periods.length, 1)
   assert.equal(current.periods[0].period, 'current')
-  // Enrichment survives the scope narrowing.
+  // Enrichment survives the scope narrowing (current-period wording).
   const note = current.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
-  assert.match(note.text, /current-period/)
+  assert.match(note.text, /during the current period/)
 })
 
 // --- normalize / code helpers ----------------------------------------------
