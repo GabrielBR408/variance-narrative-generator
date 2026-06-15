@@ -108,10 +108,11 @@ export default function NarrativeSummary({ items }) {
 
   return (
     <div className="card narrative-card">
-      <div className="card-label">Narrative Summary</div>
+      <div className="card-label">Narrative Preview</div>
       <p className="card-sub">
-        Owner-ready notes generated in your browser from the variance results above. Every line
-        traces back to a source row. Preview only — nothing is saved, sent, or exported.
+        A live preview computed in your browser from the variance results above — it updates as you
+        add files. Press <strong>Generate Narrative</strong> to produce the final version below.
+        Every line traces back to a source row. Nothing is saved, sent, or exported.
       </p>
       <div className="narrative-list">
         {narratives.map((n) => (
