@@ -47,10 +47,10 @@ export function buildPeriodNarrative(set, thresholds) {
   const comparisons = Array.isArray(set.comparisons) ? set.comparisons : []
 
   const executiveSummary = buildExecutiveSummary(comparisons, period, thresholds)
-  const highVariances = buildHighVariances(comparisons, period)
-  const missingData = buildMissingData(comparisons, period)
-  const revenueNotes = buildRevenueNotes(comparisons, period)
-  const expenseNotes = buildExpenseNotes(comparisons, period)
+  const highVariances = buildHighVariances(comparisons)
+  const missingData = buildMissingData(comparisons)
+  const revenueNotes = buildRevenueNotes(comparisons)
+  const expenseNotes = buildExpenseNotes(comparisons)
 
   // Top-level traceability: every source row any sentence in this period drew on.
   const sourceRows = unionSourceRows([

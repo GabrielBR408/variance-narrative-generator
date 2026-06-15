@@ -16,8 +16,7 @@ import { formatMoney } from './formatters.js'
 import {
   varianceSentence,
   missingSentence,
-  executiveSentence,
-  executiveSplitSentence
+  executiveSentence
 } from './templates.js'
 
 function sourceRowsOf(c) {
@@ -40,14 +39,24 @@ function byMateriality(a, b) {
   return (a.sourceRows?.[0] ?? 0) - (b.sourceRows?.[0] ?? 0)
 }
 
-function toNote(c, period) {
+// Owner priority ordering (Phase 14): the High Variances list is the headline
+// "what should I worry about" view, so unfavorable movements lead, then
+// favorable, with materiality breaking ties within each group. Pure and
+// deterministic — only re-groups what byMateriality already orders.
+function byOwnerPriority(a, b) {
+  const ax = a.category === 'unfavorable' ? 0 : 1
+  const bx = b.category === 'unfavorable' ? 0 : 1
+  if (ax !== bx) return ax - bx
+  return byMateriality(a, b)
+}
+
+function toNote(c) {
   return {
     text: varianceSentence({
       account: c.account,
       comparisonType: c.comparisonType,
       varianceAmount: c.varianceAmount,
-      variancePercent: c.variancePercent,
-      period
+      variancePercent: c.variancePercent
     }),
     account: c.account || '',
     sourceRows: sourceRowsOf(c),
@@ -64,32 +73,34 @@ function triggeredRows(comparisons) {
   return comparisons.filter((c) => c && c.thresholdTriggered)
 }
 
-// High Variances — every triggered row, most material first.
-export function buildHighVariances(comparisons, period) {
-  return triggeredRows(comparisons).slice().sort(byMateriality).map((c) => toNote(c, period))
+// High Variances — every triggered row, unfavorable first then favorable, most
+// material within each group. This is the owner's "watch list", so problems lead.
+export function buildHighVariances(comparisons) {
+  return triggeredRows(comparisons).slice().sort(byOwnerPriority).map((c) => toNote(c))
 }
 
-// Revenue Notes — triggered revenue lines only.
-export function buildRevenueNotes(comparisons, period) {
+// Revenue Notes — triggered revenue lines only, most material first. (Within a
+// single account type the dollar movement is the clearest ordering.)
+export function buildRevenueNotes(comparisons) {
   return triggeredRows(comparisons)
     .filter((c) => c.accountType === 'revenue')
     .slice()
     .sort(byMateriality)
-    .map((c) => toNote(c, period))
+    .map((c) => toNote(c))
 }
 
-// Expense Notes — triggered expense lines only.
-export function buildExpenseNotes(comparisons, period) {
+// Expense Notes — triggered expense lines only, most material first.
+export function buildExpenseNotes(comparisons) {
   return triggeredRows(comparisons)
     .filter((c) => c.accountType === 'expense')
     .slice()
     .sort(byMateriality)
-    .map((c) => toNote(c, period))
+    .map((c) => toNote(c))
 }
 
 // Missing Data — rows that could not be fully compared. Reported, never
 // assumed. Kept in source order so the list mirrors the statement.
-export function buildMissingData(comparisons, period) {
+export function buildMissingData(comparisons) {
   return comparisons
     .filter((c) => c && c.missingData)
     .map((c) => {
@@ -98,7 +109,7 @@ export function buildMissingData(comparisons, period) {
         (c.budget !== null && c.budget !== undefined) ||
         (c.prior !== null && c.prior !== undefined)
       return {
-        text: missingSentence({ account: c.account, hasActual, hasComparison, period }),
+        text: missingSentence({ account: c.account, hasActual, hasComparison }),
         account: c.account || '',
         sourceRows: sourceRowsOf(c),
         hasActual,
@@ -115,13 +126,13 @@ export function buildExecutiveSummary(comparisons, period, thresholds = {}) {
   const total = triggered.reduce((sum, c) => sum + Math.abs(c.varianceAmount ?? 0), 0)
   const favorable = triggered.filter((c) => c.category === 'favorable').length
   const unfavorable = triggered.filter((c) => c.category === 'unfavorable').length
-  const revenueCount = triggered.filter((c) => c.accountType === 'revenue').length
-  const expenseCount = triggered.filter((c) => c.accountType === 'expense').length
 
   const sourceRows = unionSourceRows(triggered)
   const thresholdAmount = formatMoney(thresholds.amount ?? 0)
   const thresholdPercent = `${thresholds.percent ?? 0}%`
 
+  // One owner-ready sentence. The revenue/expense breakdown lives in the
+  // dedicated Revenue/Expense Notes sections, so it is not repeated here.
   const lead = {
     text: executiveSentence({
       period,
@@ -135,10 +146,7 @@ export function buildExecutiveSummary(comparisons, period, thresholds = {}) {
     sourceRows
   }
 
-  const notes = [lead]
-  const splitText = executiveSplitSentence({ revenueCount, expenseCount })
-  if (splitText) notes.push({ text: splitText, sourceRows })
-  return notes
+  return [lead]
 }
 
 // Sorted, de-duplicated union of source-row indices across a set of records.
