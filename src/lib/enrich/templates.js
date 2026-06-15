@@ -1,17 +1,23 @@
-// --- Supporting-evidence explanation text — Phase 16 ----------------------
-// Owner-facing explanation CLAUSES that merge into the base variance sentence.
-// Pure string builders: they read only the account label (from the BASE report,
-// never a file name), the variance direction, the account type, the period, the
-// supporting file's classification, and whether the evidence is "thick".
+// --- Supporting-evidence wording — Phase 16 / 17 / 17.1 -------------------
+// Owner-facing supporting-evidence language. Pure string builders: they read
+// only the account label (from the BASE report, never a file name), the period,
+// the supporting file's classification, and the deterministic GL-detail summary.
 //
-// Hard rules (Phase 16):
+// Accounting rule (Phase 17.1): the COMPARATIVE REPORT determines the variance;
+// GL / budget / supporting files provide CONTEXT ONLY. So no rendered phrase
+// asserts or implies the evidence caused, drove, explains, or supports the
+// variance. GL evidence renders as a STANDALONE evidence sentence; non-GL
+// evidence remains a short, conservative clause merged into the variance line.
+//
+// Forbidden phrasings (never emitted): "primarily due to", "due to", "caused by",
+// "driven by", "supporting the variance", "explains", "because of",
+// "resulting from".
+//
+// Hard rules carried from Phase 16/17:
 //   • Never render a file name, "Supporting file", or any debug/source language.
-//   • Never invent or quote a figure from a supporting file.
-//   • Never claim a cause unless GL evidence is thick (a real amount/description
-//     was matched); thin evidence gets conservative "matching activity" wording.
+//   • Never invent or quote a figure from a supporting file (GL totals are real
+//     sums of matched rows, rounded and flagged "approximately").
 //   • Never say "current-period" for a year-to-date period.
-// The base sentence supplies the account, dollars, and percent; these clauses
-// only explain — they read like a property manager wrote them.
 
 import { normalizeName } from './match.js'
 
@@ -25,19 +31,13 @@ export function displayAccount(account = '') {
   return stripped || String(account).trim()
 }
 
-// The period qualifier, only when it can be stated safely. An unknown period
-// yields '' so we never assert a scope the narrative did not carry.
-function periodWord(period) {
-  if (period === 'current') return 'current-period'
+// The period phrase for an evidence sentence. YTD is always "year-to-date";
+// the current/unknown period uses a "<prep> the [current] period" form. Never
+// emits the hyphenated "current-period" used by older clause wording.
+function periodSuffix(period, prep = 'during') {
   if (period === 'ytd') return 'year-to-date'
-  return ''
-}
-
-// "higher" / "lower" from the signed variance amount. Matches the base sentence's
-// own direction verb (e.g. "exceeded budget" ⇒ higher), so the clause never
-// contradicts the figure it is appended to.
-function directionWord(varianceAmount) {
-  return (varianceAmount ?? 0) > 0 ? 'higher' : 'lower'
+  if (period === 'current') return `${prep} the current period`
+  return `${prep} the period`
 }
 
 // A small, deterministic lexicon mapping well-known account-name tokens to a
@@ -66,17 +66,6 @@ export function descriptorFor(account = '') {
   return ''
 }
 
-// The activity noun by account type: an expense "charge", revenue/other
-// "activity". Keeps the clause grammatical regardless of descriptor.
-function activityNoun(accountType) {
-  return accountType === 'expense' ? 'charges' : 'activity'
-}
-
-// Join optional parts with single spaces, dropping empties.
-function join(...parts) {
-  return parts.filter(Boolean).join(' ')
-}
-
 // Round a GL total to a sensible "approximately" magnitude so it reads as an
 // aggregate, never a fabricated exact figure: nearest 100 at/above $1,000, else
 // nearest 10. Formatted with thousands separators and no decimals. Shared with
@@ -88,87 +77,64 @@ export function approxMoney(total) {
   return `$${rounded.toLocaleString('en-US')}`
 }
 
-// A short, owner-facing description of a vendor/description string: collapse
-// whitespace and cap length so a long memo cannot bloat the sentence. Returns ''
-// for anything that is empty or reads like a pure number/code.
-function tidyVendor(text = '') {
-  const t = String(text).replace(/\s+/g, ' ').trim()
-  if (!t || /^[\s0-9.,$()%\-]+$/.test(t)) return ''
-  return t.length > 40 ? `${t.slice(0, 39).trimEnd()}…` : t
-}
+// Build the STANDALONE GL evidence sentence (Phase 17.1). It states what the GL
+// contains — context only — and never asserts or implies causation. Always
+// returns a full sentence (ending in a period) for a GL match. Tiers:
+//   • reliable total → "GL detail shows approximately $X of related <type>
+//     activity <period>."
+//   • descriptions present (no reliable total) → "Related transactions appear in
+//     detailed activity <period>."
+//   • count only (amounts ambiguous, no descriptions) → "Detailed activity
+//     includes N related transactions <period>."
+//   • thin / name-only match → "Detailed account activity was available for
+//     review."
+export function glEvidenceSentence({ account, thick, detail, period } = {}) {
+  if (!thick) return 'Detailed account activity was available for review.'
 
-// Build the optional GL-detail fragment that follows the GL clause, e.g.
-// "including PG&E activity totaling approximately $17,400" or
-// "including 3 matching entries totaling approximately $17,400". Returns '' when
-// there is nothing reliable to add, so the base GL clause stands alone. Never
-// invents a vendor or a figure — only summarizes what was deterministically
-// matched, and omits the total when it could not be reliably parsed.
-export function glDetailFragment(detail) {
-  if (!detail || typeof detail !== 'object') return ''
-  const count = Number(detail.count) || 0
-  if (count <= 0) return ''
+  const d = detail || {}
+  const count = Number(d.count) || 0
+  const totalReliable = typeof d.total === 'number' && Number.isFinite(d.total) && d.total !== 0
 
-  // A vendor/description is only surfaced when it recurs (appears on more than
-  // one matched row), so a single stray memo is never asserted as "the" vendor.
-  const vendor = detail.topVendorCount > 1 ? tidyVendor(detail.topVendor) : ''
-  const subject = vendor
-    ? `${vendor} activity`
-    : `${count} matching ${count === 1 ? 'entry' : 'entries'}`
-
-  const totalIsReliable = typeof detail.total === 'number' && Number.isFinite(detail.total) && detail.total !== 0
-  const totalClause = totalIsReliable ? ` totaling approximately ${approxMoney(detail.total)}` : ''
-
-  return `including ${subject}${totalClause}`
-}
-
-// Build the owner-facing explanation CLAUSE (no leading comma, no trailing
-// period — the caller merges it into the base sentence). Returns '' when no
-// safe clause applies, leaving the base sentence untouched.
-export function explanationClause({
-  classificationType = '',
-  accountType,
-  varianceAmount,
-  account,
-  period,
-  thick,
-  detail
-} = {}) {
-  const type = String(classificationType)
-  const pw = periodWord(period)
-
-  // General Ledger — the only evidence that may phrase a cause, and only when
-  // thick (a real amount/description was matched).
-  if (/general\s*ledger|\bgl\b/i.test(type)) {
-    if (thick) {
-      const direction = directionWord(varianceAmount)
-      const descriptor = descriptorFor(account)
-      const noun = activityNoun(accountType)
-      const base = join('primarily due to', direction, pw, descriptor, noun, 'shown in the GL detail')
-      // Phase 17: append the deterministic GL-detail summary when available.
-      const fragment = glDetailFragment(detail)
-      return fragment ? `${base}, ${fragment}` : base
-    }
-    // Thin: a name match only — confirm the line is in the ledger, claim no cause.
-    return 'with matching GL activity supporting the variance'
+  if (totalReliable) {
+    const descriptor = descriptorFor(account)
+    const activity = descriptor ? `${descriptor} activity` : 'activity'
+    return `GL detail shows approximately ${approxMoney(d.total)} of related ${activity} ${periodSuffix(period, 'during')}.`
   }
+  if (d.topVendor) {
+    return `Related transactions appear in detailed activity ${periodSuffix(period, 'for')}.`
+  }
+  if (count > 0) {
+    const noun = count === 1 ? 'transaction' : 'transactions'
+    return `Detailed activity includes ${count} related ${noun} ${periodSuffix(period, 'during')}.`
+  }
+  return 'Detailed account activity was available for review.'
+}
 
-  // Budget / forecast — never overstate causation from a plan.
+// Build a NON-GL supporting-evidence clause (no leading comma, no trailing
+// period — the caller merges it into the variance sentence). GL evidence is NOT
+// handled here; it renders as its own sentence via glEvidenceSentence. All
+// wording is conservative context, with no causal language. Returns '' when no
+// clause applies, leaving the variance sentence untouched.
+export function explanationClause({ classificationType = '' } = {}) {
+  const type = String(classificationType)
+
+  // GL is rendered as a standalone sentence elsewhere — never a clause here.
+  if (/general\s*ledger|\bgl\b/i.test(type)) return ''
+
+  // Budget / forecast — context only, no causation.
   if (/budget|forecast/i.test(type)) {
     return 'compared against scheduled budget assumptions for the period'
   }
-
   // Prior-period detail — conservative, no causation.
   if (/prior|previous/i.test(type)) {
     return 'consistent with the prior-period detail provided'
   }
-
   // A matching variance schedule — conservative.
   if (/variance/i.test(type)) {
     return 'consistent with the supporting variance detail provided'
   }
-
   // Any other supporting document — conservative, owner-facing.
-  return 'supported by matching detail in the source records'
+  return 'matched against detail in the source records'
 }
 
 // Re-export so callers can build an index/normalize without reaching into match.

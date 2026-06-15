@@ -1,16 +1,18 @@
-// --- Supporting-file enrichment — Phase 15 / 16 (public surface) ----------
+// --- Supporting-file enrichment — Phase 15 / 16 / 17 / 17.1 (public surface) -
 // Deterministic, client-side enrichment of a generated narrative with evidence
 // drawn from supporting files. It runs AFTER the base narrative is produced and
-// only EXPLAINS it: for each flagged (threshold-triggered) variance note, it
+// adds CONTEXT to it: for each flagged (threshold-triggered) variance note, it
 // looks for matching account detail in the supporting extractions and, when a
-// confident deterministic match exists, MERGES an owner-facing explanation clause
-// into the note's sentence and records the structured evidence on the note.
+// confident deterministic match exists, attaches owner-facing supporting language
+// and records the structured evidence on the note.
 //
-// Phase 16: the merged clause reads like a property manager wrote it — it never
-// renders a file name, "Supporting file", or debug/source language. It states a
-// cause only when GL evidence is "thick" (a real amount/description was matched),
-// is period-aware ("current-period" vs "year-to-date"), and never invents or
-// quotes a figure from a supporting file.
+// Phase 17.1 — accounting rule: the COMPARATIVE REPORT determines the variance;
+// supporting files provide CONTEXT ONLY. So the language never asserts or implies
+// causation. GL evidence renders as a STANDALONE evidence sentence (e.g. "GL
+// detail shows approximately $17,400 of related electric activity during the
+// period."); non-GL evidence stays a short conservative clause. It never renders
+// a file name or "Supporting file" language, is period-aware (current vs
+// year-to-date), and never invents or quotes a figure from a supporting file.
 //
 // Hard boundaries: pure and deterministic. NO AI/LLM, NO embeddings, NO vector
 // DB, NO OCR, NO server, NO persistence, NO network. It never invents a figure
@@ -27,15 +29,17 @@
 //         revenueNotes, expenseNotes, sourceRows }, ... ] }
 
 import { buildEvidenceIndex, matchAccount, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
-import { explanationClause } from './templates.js'
+import { explanationClause, glEvidenceSentence } from './templates.js'
 
 // Only these sections hold flagged variance notes — they are the only ones we
 // enrich. Executive Summary (a roll-up) and Missing Data (no comparison) are
 // never annotated with evidence.
 const ENRICHABLE_SECTIONS = ['highVariances', 'revenueNotes', 'expenseNotes']
 
-// Evidence priority for phrasing the merged clause: GL first (it may explain a
-// cause), then budget, prior, variance, then any other supporting document.
+// Evidence priority for phrasing the supporting line: GL first (it carries the
+// richest deterministic detail), then budget, prior, variance, then any other
+// supporting document. This selects which match phrases the supporting language;
+// it implies no causation.
 function evidenceRank(classificationType = '') {
   const t = String(classificationType)
   if (/general\s*ledger|\bgl\b/i.test(t)) return 0
@@ -45,13 +49,22 @@ function evidenceRank(classificationType = '') {
   return 4
 }
 
-// Merge an explanation clause into the base variance sentence: drop the base
-// sentence's trailing period and append ", <clause>." This keeps ONE owner-ready
-// sentence (preferred over a second citation sentence) and preserves the original
-// dollar and percent untouched.
+function isGL(classificationType = '') {
+  return /general\s*ledger|\bgl\b/i.test(String(classificationType))
+}
+
+// Merge a non-GL evidence clause into the variance sentence: drop the trailing
+// period and append ", <clause>." Preserves the original dollar and percent.
 function mergeClause(base, clause) {
   const trimmed = String(base).replace(/\s*\.\s*$/, '')
   return `${trimmed}, ${clause}.`
+}
+
+// Append a standalone GL evidence sentence (Phase 17.1) after the variance
+// sentence, separated by a space, so the GL context never reads as a causal
+// clause of the variance.
+function appendSentence(base, sentence) {
+  return `${String(base).replace(/\s+$/, '')} ${sentence}`
 }
 
 // Enrich one note in place-free fashion: returns the same note when there is no
@@ -74,21 +87,20 @@ function enrichNote(note, index, options, period) {
     detail: c.detail
   }))
 
-  // Phrase the explanation from the single highest-priority match; all matches
-  // stay in `support`. Stable sort keeps the existing file-name/source-row order
-  // as the tie-break within a rank.
+  // Phrase the supporting language from the single highest-priority match; all
+  // matches stay in `support`. Stable sort keeps the existing file-name/source-row
+  // order as the tie-break within a rank. GL renders as a STANDALONE evidence
+  // sentence (Phase 17.1); non-GL stays a conservative merged clause.
   const primary = [...support].sort((a, b) => evidenceRank(a.classificationType) - evidenceRank(b.classificationType))[0]
-  const clause = explanationClause({
-    classificationType: primary.classificationType,
-    accountType: note.accountType,
-    varianceAmount: note.varianceAmount,
-    account: note.account,
-    period,
-    thick: primary.thick,
-    detail: primary.detail
-  })
 
-  const text = clause ? mergeClause(note.text, clause) : note.text
+  let text = note.text
+  if (isGL(primary.classificationType)) {
+    const sentence = glEvidenceSentence({ account: note.account, thick: primary.thick, detail: primary.detail, period })
+    if (sentence) text = appendSentence(note.text, sentence)
+  } else {
+    const clause = explanationClause({ classificationType: primary.classificationType })
+    if (clause) text = mergeClause(note.text, clause)
+  }
   return { ...note, text, support, enriched: true }
 }
 
@@ -124,4 +136,4 @@ export function enrichNarrative(narrative, { supporting = [], floor = CONFIDENCE
 }
 
 export { buildEvidenceIndex, matchAccount, scoreMatch, normalizeName, accountCode, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
-export { explanationClause, displayAccount, descriptorFor, glDetailFragment, approxMoney } from './templates.js'
+export { explanationClause, glEvidenceSentence, displayAccount, descriptorFor, approxMoney } from './templates.js'
