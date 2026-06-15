@@ -41,3 +41,12 @@ export function exportFileName(narrative) {
   const slug = typeof raw === 'string' ? slugify(raw) : ''
   return slug ? `${slug}-variance-narrative.md` : 'variance-narrative.md'
 }
+
+// Deterministic .docx download filename (Phase 11). Mirrors exportFileName but
+// for the Word export, with the spec's stable fallback when no usable source
+// filename is present.
+export function docxFileName(narrative) {
+  const raw = narrative?.fileName
+  const slug = typeof raw === 'string' ? slugify(raw) : ''
+  return slug ? `${slug}-variance-narrative-summary.docx` : 'variance-narrative-summary.docx'
+}
