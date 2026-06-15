@@ -120,10 +120,11 @@ test('GL thick evidence merges an owner-facing explanation into the sentence', (
   assert.equal(note.support[0].fileName, 'General Ledger.pdf')
   assert.equal(note.support[0].thick, true, 'GL row with an Amount column is thick')
   // The original variance amount + percent are preserved, and the explanation is
-  // merged into the SAME sentence (single period at the end).
+  // merged into the SAME sentence (single period at the end), now including the
+  // Phase 17 GL-detail summary.
   assert.match(
     note.text,
-    /^Utility Expense Recovery exceeded budget by \$7,366 \(138\.1%\), primarily due to higher current-period .*charges shown in the GL detail\.$/
+    /^Utility Expense Recovery exceeded budget by \$7,366 \(138\.1%\), primarily due to higher current-period .*charges shown in the GL detail, including 1 matching entry totaling approximately \$7,400\.$/
   )
   // No citation / file-name / debug language leaks into the owner text.
   assert.doesNotMatch(note.text, /Supporting file/)
@@ -200,7 +201,7 @@ test('multiple matching files: support keeps stable file-name order, GL phrases 
   // All matches retained in metadata, stable order.
   assert.deepEqual(note.support.map((s) => s.fileName), ['Budget Detail.xlsx', 'General Ledger.pdf'])
   // GL outranks budget, so the merged owner clause is the GL explanation.
-  assert.match(note.text, /shown in the GL detail\.$/)
+  assert.match(note.text, /shown in the GL detail, including 1 matching entry totaling approximately \$7,400\.$/)
   assert.doesNotMatch(note.text, /budget assumptions/)
   assert.doesNotMatch(note.text, /Budget Detail\.xlsx|General Ledger\.pdf|Supporting file/)
 })
@@ -222,17 +223,80 @@ test('repeated rows in one file collapse to a single citation with all source ro
   assert.deepEqual(note.support[0].sourceRows, [0, 2])
 })
 
-// --- owner-facing text: no invented figures, no file names, no debug ----------
+// --- owner-facing text: base figure preserved, only a rounded GL aggregate added
 
-test('explanation invents no supporting-file figures and preserves the base amount/percent', () => {
+test('explanation preserves the base amount/percent and adds only a rounded GL aggregate', () => {
   const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [GL('General Ledger.pdf')] })
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
-  // The base figure is preserved verbatim, and it is the ONLY money/number in the text.
-  assert.ok(note.text.includes('$7,366 (138.1%)'))
+  // The base variance figure is preserved verbatim.
+  assert.ok(note.text.includes('$7,366 (138.1%)'), 'base variance figure preserved')
+  // The only additional money is the rounded GL aggregate, flagged "approximately"
+  // so it never reads as a fabricated exact figure.
+  assert.match(note.text, /approximately \$7,400\b/)
   const monies = note.text.match(/\$[\d,]+(?:\.\d+)?/g) || []
-  assert.deepEqual(monies, ['$7,366'], 'no supporting-file dollar amount is introduced')
-  // The GL row value (7366) must not be re-quoted as its own figure.
+  assert.deepEqual(monies, ['$7,366', '$7,400'], 'base figure + one rounded GL aggregate only')
+  // The raw matched amount (7366) is never re-quoted verbatim as its own figure.
   assert.doesNotMatch(note.text.replace('$7,366', ''), /7366/)
+})
+
+// --- Phase 17: GL detail summaries -----------------------------------------
+
+test('GL detail names a recurring vendor and a reliable total', () => {
+  const gl = supporting({
+    fileName: 'General Ledger.pdf',
+    type: 'General Ledger (GL)',
+    columns: ['Account', 'Vendor', 'Amount'],
+    rows: [
+      ['Utility Expense Recovery', 'PG&E', '4000'],
+      ['Utility Expense Recovery', 'PG&E', '3400'],
+      ['Office Supplies', 'Staples', '10']
+    ]
+  })
+  const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [gl] })
+  const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
+  const detail = note.support[0].detail
+  assert.equal(detail.count, 2)
+  assert.equal(detail.total, 7400)
+  assert.equal(detail.topVendor, 'PG&E')
+  assert.equal(detail.topVendorCount, 2)
+  assert.match(note.text, /including PG&E activity totaling approximately \$7,400\./)
+})
+
+test('GL total is omitted when amounts are ambiguous (Debit + Credit columns)', () => {
+  const gl = supporting({
+    fileName: 'General Ledger.pdf',
+    type: 'General Ledger (GL)',
+    columns: ['Account', 'Debit', 'Credit'],
+    rows: [
+      ['Utility Expense Recovery', '4000', ''],
+      ['Utility Expense Recovery', '3366', '']
+    ]
+  })
+  const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [gl] })
+  const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
+  const detail = note.support[0].detail
+  assert.equal(detail.count, 2)
+  assert.equal(detail.total, null, 'two amount columns are ambiguous → no total')
+  // Count wording, but NO "totaling approximately" since the total is unreliable.
+  assert.match(note.text, /including 2 matching entries\./)
+  assert.doesNotMatch(note.text, /totaling approximately/)
+})
+
+test('a single stray vendor is not asserted as the vendor (no invention)', () => {
+  const gl = supporting({
+    fileName: 'General Ledger.pdf',
+    type: 'General Ledger (GL)',
+    columns: ['Account', 'Description', 'Amount'],
+    rows: [
+      ['Utility Expense Recovery', 'PG&E', '4000'],
+      ['Utility Expense Recovery', 'City Water', '3400']
+    ]
+  })
+  const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [gl] })
+  const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
+  // No vendor recurs, so wording falls back to entry count — no name is asserted.
+  assert.doesNotMatch(note.text, /PG&E|City Water/)
+  assert.match(note.text, /including 2 matching entries totaling approximately \$7,400\./)
 })
 
 test('no enriched owner text contains "Supporting file" or an uploaded file name', () => {
@@ -308,7 +372,7 @@ test('Markdown and DOCX carry the enriched note text identically', () => {
   const dx = narrativeToDocxBlocks(enriched).filter((b) => b.kind === 'bullet').map((b) => b.text)
   assert.deepEqual(md, dx)
   // And the merged explanation actually made it into both renderers.
-  assert.ok(md.some((t) => /shown in the GL detail\./.test(t)))
+  assert.ok(md.some((t) => /shown in the GL detail, including/.test(t)))
 })
 
 // --- internal support metadata ----------------------------------------------

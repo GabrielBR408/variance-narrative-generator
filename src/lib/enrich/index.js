@@ -63,13 +63,15 @@ function enrichNote(note, index, options, period) {
   const citations = matchAccount(note.account, index, options)
   if (citations.length === 0) return note
 
-  // Structured metadata for tooling/tests — never rendered as final owner text.
+  // Structured metadata for tooling/tests and the Excel export — never rendered
+  // as final owner narrative text. `detail` carries the GL-detail summary.
   const support = citations.map((c) => ({
     fileName: c.fileName,
     classificationType: c.classificationType,
     confidence: c.confidence,
     sourceRows: c.sourceRows,
-    thick: c.thick
+    thick: c.thick,
+    detail: c.detail
   }))
 
   // Phrase the explanation from the single highest-priority match; all matches
@@ -82,7 +84,8 @@ function enrichNote(note, index, options, period) {
     varianceAmount: note.varianceAmount,
     account: note.account,
     period,
-    thick: primary.thick
+    thick: primary.thick,
+    detail: primary.detail
   })
 
   const text = clause ? mergeClause(note.text, clause) : note.text
@@ -121,4 +124,4 @@ export function enrichNarrative(narrative, { supporting = [], floor = CONFIDENCE
 }
 
 export { buildEvidenceIndex, matchAccount, scoreMatch, normalizeName, accountCode, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
-export { explanationClause, displayAccount, descriptorFor } from './templates.js'
+export { explanationClause, displayAccount, descriptorFor, glDetailFragment } from './templates.js'

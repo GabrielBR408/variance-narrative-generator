@@ -77,6 +77,49 @@ function join(...parts) {
   return parts.filter(Boolean).join(' ')
 }
 
+// Round a GL total to a sensible "approximately" magnitude so it reads as an
+// aggregate, never a fabricated exact figure: nearest 100 at/above $1,000, else
+// nearest 10. Formatted with thousands separators and no decimals.
+function approxMoney(total) {
+  const abs = Math.abs(total)
+  const step = abs >= 1000 ? 100 : 10
+  const rounded = Math.round(abs / step) * step
+  return `$${rounded.toLocaleString('en-US')}`
+}
+
+// A short, owner-facing description of a vendor/description string: collapse
+// whitespace and cap length so a long memo cannot bloat the sentence. Returns ''
+// for anything that is empty or reads like a pure number/code.
+function tidyVendor(text = '') {
+  const t = String(text).replace(/\s+/g, ' ').trim()
+  if (!t || /^[\s0-9.,$()%\-]+$/.test(t)) return ''
+  return t.length > 40 ? `${t.slice(0, 39).trimEnd()}…` : t
+}
+
+// Build the optional GL-detail fragment that follows the GL clause, e.g.
+// "including PG&E activity totaling approximately $17,400" or
+// "including 3 matching entries totaling approximately $17,400". Returns '' when
+// there is nothing reliable to add, so the base GL clause stands alone. Never
+// invents a vendor or a figure — only summarizes what was deterministically
+// matched, and omits the total when it could not be reliably parsed.
+export function glDetailFragment(detail) {
+  if (!detail || typeof detail !== 'object') return ''
+  const count = Number(detail.count) || 0
+  if (count <= 0) return ''
+
+  // A vendor/description is only surfaced when it recurs (appears on more than
+  // one matched row), so a single stray memo is never asserted as "the" vendor.
+  const vendor = detail.topVendorCount > 1 ? tidyVendor(detail.topVendor) : ''
+  const subject = vendor
+    ? `${vendor} activity`
+    : `${count} matching ${count === 1 ? 'entry' : 'entries'}`
+
+  const totalIsReliable = typeof detail.total === 'number' && Number.isFinite(detail.total) && detail.total !== 0
+  const totalClause = totalIsReliable ? ` totaling approximately ${approxMoney(detail.total)}` : ''
+
+  return `including ${subject}${totalClause}`
+}
+
 // Build the owner-facing explanation CLAUSE (no leading comma, no trailing
 // period — the caller merges it into the base sentence). Returns '' when no
 // safe clause applies, leaving the base sentence untouched.
@@ -86,7 +129,8 @@ export function explanationClause({
   varianceAmount,
   account,
   period,
-  thick
+  thick,
+  detail
 } = {}) {
   const type = String(classificationType)
   const pw = periodWord(period)
@@ -98,7 +142,10 @@ export function explanationClause({
       const direction = directionWord(varianceAmount)
       const descriptor = descriptorFor(account)
       const noun = activityNoun(accountType)
-      return join('primarily due to', direction, pw, descriptor, noun, 'shown in the GL detail')
+      const base = join('primarily due to', direction, pw, descriptor, noun, 'shown in the GL detail')
+      // Phase 17: append the deterministic GL-detail summary when available.
+      const fragment = glDetailFragment(detail)
+      return fragment ? `${base}, ${fragment}` : base
     }
     // Thin: a name match only — confirm the line is in the ledger, claim no cause.
     return 'with matching GL activity supporting the variance'

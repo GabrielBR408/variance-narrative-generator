@@ -51,6 +51,11 @@ function byOwnerPriority(a, b) {
 }
 
 function toNote(c) {
+  // Phase 17: carry the raw actual and comparison (budget or prior) figures as
+  // structured metadata so the Excel export can populate Actual / Budget-Prior
+  // columns. Additive only — it changes no wording, no variance math, and no
+  // existing field, so Markdown/DOCX output stays byte-identical.
+  const comparison = c.comparisonType === 'prior' ? c.prior : c.budget
   return {
     text: varianceSentence({
       account: c.account,
@@ -64,7 +69,9 @@ function toNote(c) {
     accountType: c.accountType,
     comparisonType: c.comparisonType,
     varianceAmount: c.varianceAmount,
-    variancePercent: c.variancePercent
+    variancePercent: c.variancePercent,
+    actual: c.actual ?? null,
+    comparison: comparison ?? null
   }
 }
 

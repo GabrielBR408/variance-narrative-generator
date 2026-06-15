@@ -50,3 +50,12 @@ export function docxFileName(narrative) {
   const slug = typeof raw === 'string' ? slugify(raw) : ''
   return slug ? `${slug}-variance-narrative-summary.docx` : 'variance-narrative-summary.docx'
 }
+
+// Deterministic .xlsx download filename (Phase 17). Mirrors the other export
+// filename helpers, with a stable fallback when no usable source filename is
+// present.
+export function excelFileName(narrative) {
+  const raw = narrative?.fileName
+  const slug = typeof raw === 'string' ? slugify(raw) : ''
+  return slug ? `${slug}-variance-narrative.xlsx` : 'variance-narrative.xlsx'
+}

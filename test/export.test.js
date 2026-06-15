@@ -12,7 +12,7 @@ import {
   narrativeToMarkdown,
   narrativeToClipboardText
 } from '../src/lib/export/markdown.js'
-import { canExport, exportFileName, hasNarrative } from '../src/lib/export/exportState.js'
+import { canExport, exportFileName, excelFileName, hasNarrative } from '../src/lib/export/exportState.js'
 
 // --- helpers ---------------------------------------------------------------
 
@@ -220,4 +220,11 @@ test('exportFileName slugs the source filename deterministically and ends in .md
   assert.equal(exportFileName({ fileName: 'Q2 2026 — Building #4.xlsx' }), 'q2-2026-building-4-variance-narrative.md')
   assert.equal(exportFileName({}), 'variance-narrative.md')
   assert.equal(exportFileName(null), 'variance-narrative.md')
+})
+
+test('excelFileName slugs the source filename deterministically and ends in .xlsx', () => {
+  assert.equal(excelFileName({ fileName: 'June Statement.pdf' }), 'june-statement-variance-narrative.xlsx')
+  assert.equal(excelFileName({ fileName: 'Q2 2026 — Building #4.xlsx' }), 'q2-2026-building-4-variance-narrative.xlsx')
+  assert.equal(excelFileName({}), 'variance-narrative.xlsx')
+  assert.equal(excelFileName(null), 'variance-narrative.xlsx')
 })

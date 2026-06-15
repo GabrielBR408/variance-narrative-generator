@@ -184,8 +184,9 @@ test('supporting-file enrichment still applies after scope filtering', () => {
   const note = scoped.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
   assert.ok(note.enriched, 'enriched explanation must survive the scope filter')
   assert.equal(note.support[0].fileName, 'General Ledger.pdf')
-  // Phase 16: an owner-facing explanation merged into the sentence — no file name.
-  assert.match(note.text, /shown in the GL detail\.$/)
+  // Phase 16/17: an owner-facing explanation merged into the sentence — no file
+  // name, and now carrying the GL-detail summary.
+  assert.match(note.text, /shown in the GL detail, including .+\.$/)
   assert.doesNotMatch(note.text, /Supporting file|General Ledger\.pdf/)
 })
 
