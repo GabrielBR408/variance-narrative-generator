@@ -283,7 +283,9 @@ test('reconstructed GL drives the existing thick sentence — no filename, no ca
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility-Elect-Building')
   assert.ok(note.enriched)
   assert.equal(note.support[0].thick, true)
-  assert.match(note.text, /GL detail shows approximately \$300 of related electric activity during the current period\./)
+  // Phase 19A: two transactions ($100 + $200), the larger ≈ 0.67 of the total →
+  // concentrated activity (Category I).
+  assert.match(note.text, /GL detail shows approximately \$300 across two related transactions during the current period\./)
   assert.doesNotMatch(note.text, /Detailed account activity was available for review/)
   assert.doesNotMatch(note.text, /General Ledger\.pdf|Supporting file/)
   assert.doesNotMatch(note.text, /due to|driven by|caused by|because of|explains|resulting from/)
