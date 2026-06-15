@@ -105,7 +105,11 @@ export function buildEvidenceIndex(supporting = []) {
         // Thick = this matched row carries a usable amount or description/reference.
         // When no headers identify amount columns (e.g. a positional PDF table),
         // fall back to "any non-account cell parses as a number".
-        hasDetail: rowHasDetail(row, col, amountCols, detailCols)
+        hasDetail: rowHasDetail(row, col, amountCols, detailCols),
+        // Phase 17: the row's reliably-parsed amount (or null when ambiguous) and
+        // its description/vendor text, for deterministic GL-detail summaries.
+        amount: reliableAmount(row, col, amountCols),
+        detailText: firstDetailText(row, detailCols)
       })
     }
   }
@@ -126,6 +130,86 @@ function rowHasDetail(row, accountCol, amountCols, detailCols) {
     return t !== '' && toNumber(t) === null
   })
   return hasAmount || hasDescription
+}
+
+// The row's amount, but ONLY when it can be read unambiguously — so a total we
+// later sum is trustworthy. Reliable when there is exactly one typed amount
+// column, or (for a positional table with no typed headers) exactly one numeric
+// cell outside the account column. A Debit+Credit pair, a Balance column, or any
+// multi-amount layout is ambiguous → null, and totals are omitted downstream.
+function reliableAmount(row, accountCol, amountCols) {
+  if (amountCols.length === 1) return toNumber(row[amountCols[0]])
+  if (amountCols.length === 0) {
+    let found = null
+    let count = 0
+    row.forEach((cell, i) => {
+      if (i === accountCol) return
+      const n = toNumber(cell)
+      if (n !== null) {
+        count++
+        found = n
+      }
+    })
+    return count === 1 ? found : null
+  }
+  return null
+}
+
+// The first non-empty, non-numeric description/reference/vendor cell, trimmed.
+// '' when none — never a number, never an account label.
+function firstDetailText(row, detailCols) {
+  for (const i of detailCols) {
+    const t = String(row[i] ?? '').trim()
+    if (t !== '' && toNumber(t) === null) return t
+  }
+  return ''
+}
+
+// Aggregate the matched rows of ONE file into a deterministic GL-detail summary:
+//   { count, total, maxTxn, topVendor, topVendorCount }
+// total is the summed amount ONLY when every matched row contributed a reliable
+// amount (otherwise null, so we never present a partial/ambiguous total).
+// topVendor is the most frequent description/vendor across matched rows (ties
+// broken by first appearance), or null when none carries text.
+function summarizeDetail(rows) {
+  const count = rows.length
+  let total = 0
+  let amountsSeen = 0
+  let maxTxn = null
+  const vendorOrder = []
+  const vendorCounts = new Map()
+
+  for (const row of rows) {
+    if (typeof row.amount === 'number' && Number.isFinite(row.amount)) {
+      total += row.amount
+      amountsSeen++
+      const mag = Math.abs(row.amount)
+      if (maxTxn === null || mag > maxTxn) maxTxn = mag
+    }
+    const v = (row.detailText || '').trim()
+    if (v) {
+      if (!vendorCounts.has(v)) vendorOrder.push(v)
+      vendorCounts.set(v, (vendorCounts.get(v) || 0) + 1)
+    }
+  }
+
+  let topVendor = null
+  let topVendorCount = 0
+  for (const v of vendorOrder) {
+    const c = vendorCounts.get(v)
+    if (c > topVendorCount) {
+      topVendor = v
+      topVendorCount = c
+    }
+  }
+
+  return {
+    count,
+    total: amountsSeen === count && count > 0 ? total : null,
+    maxTxn,
+    topVendor,
+    topVendorCount
+  }
 }
 
 // Score one base account against one index entry. Returns 0..1.
@@ -161,10 +245,11 @@ export function scoreMatch(baseAccount, entry) {
 
 // Match one flagged account to supporting evidence. Returns a deterministic,
 // deduped, capped list of citations:
-//   [{ fileName, classificationType, confidence, sourceRows, thick }]
+//   [{ fileName, classificationType, confidence, sourceRows, thick, detail }]
 // One citation per file (best score, all matching rows collected), ordered by
 // file name then first source row. `thick` is true when ANY matched row in the
-// file carried usable amount/description detail.
+// file carried usable amount/description detail. `detail` is the Phase 17
+// GL-detail summary over that file's matched rows.
 export function matchAccount(account, index = [], options = {}) {
   const floor = Number.isFinite(options.floor) ? options.floor : CONFIDENCE_FLOOR
   const cap = Number.isFinite(options.cap) ? options.cap : MAX_CITATIONS_PER_NOTE
@@ -174,30 +259,39 @@ export function matchAccount(account, index = [], options = {}) {
   for (const entry of index) {
     const score = scoreMatch(account, entry)
     if (score < floor) continue
-    const existing = byFile.get(entry.fileName)
+    let existing = byFile.get(entry.fileName)
     if (!existing) {
-      byFile.set(entry.fileName, {
+      existing = {
         fileName: entry.fileName,
         classificationType: entry.classificationType,
         confidence: score,
-        sourceRows: new Set([entry.sourceRow]),
-        thick: !!entry.hasDetail
-      })
-    } else {
-      existing.confidence = Math.max(existing.confidence, score)
-      existing.sourceRows.add(entry.sourceRow)
-      existing.thick = existing.thick || !!entry.hasDetail
+        thick: false,
+        // Dedupe matched rows by source-row index, so a repeated identical row
+        // can never inflate the count or total.
+        rows: new Map()
+      }
+      byFile.set(entry.fileName, existing)
+    }
+    existing.confidence = Math.max(existing.confidence, score)
+    existing.thick = existing.thick || !!entry.hasDetail
+    if (!existing.rows.has(entry.sourceRow)) {
+      existing.rows.set(entry.sourceRow, { amount: entry.amount, detailText: entry.detailText })
     }
   }
 
   return [...byFile.values()]
-    .map((c) => ({
-      fileName: c.fileName,
-      classificationType: c.classificationType,
-      confidence: c.confidence,
-      sourceRows: [...c.sourceRows].sort((a, b) => a - b),
-      thick: c.thick
-    }))
+    .map((c) => {
+      const sourceRows = [...c.rows.keys()].sort((a, b) => a - b)
+      const orderedRows = sourceRows.map((r) => c.rows.get(r))
+      return {
+        fileName: c.fileName,
+        classificationType: c.classificationType,
+        confidence: c.confidence,
+        sourceRows,
+        thick: c.thick,
+        detail: summarizeDetail(orderedRows)
+      }
+    })
     .sort((a, b) => {
       const byName = a.fileName.localeCompare(b.fileName)
       if (byName !== 0) return byName

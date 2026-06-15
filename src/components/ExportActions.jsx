@@ -1,15 +1,16 @@
 import React, { useState } from 'react'
 import { narrativeToMarkdown, narrativeToClipboardText } from '../lib/export/markdown.js'
 import { narrativeToDocxBlob } from '../lib/export/docx.js'
-import { exportFileName, docxFileName } from '../lib/export/exportState.js'
+import { exportFileName, docxFileName, excelFileName } from '../lib/export/exportState.js'
 
-// --- Export actions — Phase 10A (Copy + Markdown) / Phase 11 (DOCX) --------
-// Presentation only. Renders "Copy Narrative", "Download Markdown", and
-// "Download DOCX" for a generated narrative. The exported text/structure is
-// built by the pure, tested src/lib/export/{markdown,docx}.js — this component
-// never authors or reformats prose. It only appears once a generation has
-// succeeded (the parent gates on canExport), and degrades safely: a failed
-// copy or DOCX build shows a retry-friendly note, never throws.
+// --- Export actions — Phase 10A (Copy + Markdown) / 11 (DOCX) / 17 (Excel) --
+// Presentation only. Renders "Copy Narrative", "Download Markdown", "Download
+// DOCX", and "Download Excel" for a generated narrative. The exported
+// text/structure is built by the pure, tested src/lib/export/{markdown,docx,
+// excel}.js — this component never authors or reformats prose. It only appears
+// once a generation has succeeded (the parent gates on canExport), and degrades
+// safely: a failed copy or document build shows a retry-friendly note, never
+// throws.
 //
 // Boundaries: browser-only. No storage, no server-side document generation, no
 // network, no AI/LLM. Both downloads are in-memory Blobs the browser saves
@@ -67,6 +68,16 @@ async function downloadDocx(narrative) {
   downloadBlob(blob, docxFileName(narrative))
 }
 
+// Build the .xlsx in the browser and trigger a local download. The generated
+// date is stamped at click time. The Excel builder (and its ExcelJS dependency)
+// is loaded lazily on first use, so the bundled ExcelJS is kept out of the
+// initial PWA payload and only fetched when the owner actually exports Excel.
+async function downloadExcel(narrative) {
+  const { narrativeToExcelBlob } = await import('../lib/export/excel.js')
+  const blob = await narrativeToExcelBlob(narrative, { generatedDate: new Date() })
+  downloadBlob(blob, excelFileName(narrative))
+}
+
 const COPY_LABEL = {
   idle: 'Copy Narrative',
   copied: 'Copied ✓',
@@ -80,9 +91,17 @@ const DOCX_LABEL = {
   error: 'DOCX failed — try again'
 }
 
+const EXCEL_LABEL = {
+  idle: 'Download Excel',
+  working: 'Preparing Excel…',
+  done: 'Excel downloaded ✓',
+  error: 'Excel failed — try again'
+}
+
 export default function ExportActions({ narrative }) {
   const [copyState, setCopyState] = useState('idle') // idle | copied | error
   const [docxState, setDocxState] = useState('idle') // idle | working | done | error
+  const [excelState, setExcelState] = useState('idle') // idle | working | done | error
 
   async function handleCopy() {
     try {
@@ -100,6 +119,16 @@ export default function ExportActions({ narrative }) {
       setDocxState('done')
     } catch {
       setDocxState('error')
+    }
+  }
+
+  async function handleExcel() {
+    setExcelState('working')
+    try {
+      await downloadExcel(narrative)
+      setExcelState('done')
+    } catch {
+      setExcelState('error')
     }
   }
 
@@ -131,6 +160,15 @@ export default function ExportActions({ narrative }) {
         >
           {DOCX_LABEL[docxState]}
         </button>
+        <button
+          type="button"
+          className="export-btn export-btn--secondary"
+          onClick={handleExcel}
+          disabled={excelState === 'working'}
+          onMouseEnter={() => (excelState === 'done' || excelState === 'error') && setExcelState('idle')}
+        >
+          {EXCEL_LABEL[excelState]}
+        </button>
       </div>
       {copyState !== 'idle' && (
         <p
@@ -150,6 +188,16 @@ export default function ExportActions({ narrative }) {
           {docxState === 'error'
             ? 'Could not build the Word document. You can still copy or download the Markdown.'
             : 'Word document downloaded.'}
+        </p>
+      )}
+      {(excelState === 'done' || excelState === 'error') && (
+        <p
+          className={`export-msg export-msg--${excelState === 'error' ? 'error' : 'ok'}`}
+          role={excelState === 'error' ? 'alert' : 'status'}
+        >
+          {excelState === 'error'
+            ? 'Could not build the Excel workbook. You can still copy or download the Markdown.'
+            : 'Excel workbook downloaded.'}
         </p>
       )}
     </div>
