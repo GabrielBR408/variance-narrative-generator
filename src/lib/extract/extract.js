@@ -92,7 +92,7 @@ export async function extractFile({ file, fileId, classification } = {}) {
     let extracted
     if (kind === 'pdf') {
       const { extractPdf } = await import('./pdf.js')
-      extracted = await withTimeout(extractPdf(file, MAX_PAGES), EXTRACTION_TIMEOUT_MS)
+      extracted = await withTimeout(extractPdf(file, MAX_PAGES, klass), EXTRACTION_TIMEOUT_MS)
     } else if (kind === 'spreadsheet') {
       const { extractSpreadsheet } = await import('./spreadsheet.js')
       extracted = await withTimeout(extractSpreadsheet(file, MAX_ROWS), EXTRACTION_TIMEOUT_MS)
