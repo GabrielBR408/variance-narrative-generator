@@ -1,6 +1,7 @@
 import React, { useRef } from 'react'
 import { classifyFile, confidenceTier } from '../lib/classify.js'
 import ExtractionPreview from './ExtractionPreview.jsx'
+import VariancePreview from './VariancePreview.jsx'
 
 const ACCEPT = '.pdf,.xlsx,.xls,.csv,.docx'
 const CATEGORIES = [
@@ -120,6 +121,7 @@ export default function SourceFiles({
       </div>
 
       <ExtractionPreview items={previewItems} />
+      <VariancePreview items={previewItems} />
     </section>
   )
 }
