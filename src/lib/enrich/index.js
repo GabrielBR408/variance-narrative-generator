@@ -31,6 +31,7 @@
 import { buildEvidenceIndex, matchAccount, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
 import { explanationClause, glEvidenceSentence, commentarySentence } from './templates.js'
 import { classifyGLCommentary } from './classify.js'
+import { rankContribution } from './contribution.js'
 
 // Only these sections hold flagged variance notes — they are the only ones we
 // enrich. Executive Summary (a roll-up) and Missing Data (no comparison) are
@@ -96,17 +97,28 @@ function enrichNote(note, index, options, period) {
 
   let text = note.text
   if (isGL(primary.classificationType)) {
-    // Phase 19A: classify the GL evidence into one owner commentary category,
-    // then render it. The variance sentence is preserved verbatim; the classified
-    // GL sentence is appended as standalone context (never a causal clause).
+    // Phase 19B: rank the GL evidence by contribution relevance to THIS variance
+    // (match.js stays matching-only — the ranking lives in contribution.js). The
+    // citation's match score is the only confidence; it rides on `detail` as the
+    // approved contribution input. Then classify (contribution-gated) and render.
+    const detail = { ...primary.detail, confidence: primary.confidence }
+    const contribution = rankContribution({
+      varianceAmount: note.varianceAmount,
+      comparisonType: note.comparisonType,
+      accountType: note.accountType,
+      category: note.category,
+      detail
+    })
     const { type } = classifyGLCommentary({
-      detail: primary.detail,
+      detail,
       comparison: note.comparison,
       comparisonType: note.comparisonType,
       confidence: primary.confidence,
-      thick: primary.thick
+      thick: primary.thick,
+      accountType: note.accountType,
+      contribution
     })
-    const sentence = commentarySentence({ type, account: note.account, detail: primary.detail, period })
+    const sentence = commentarySentence({ type, account: note.account, detail, period, contribution })
     if (sentence) text = appendSentence(note.text, sentence)
   } else {
     const clause = explanationClause({ classificationType: primary.classificationType })
@@ -158,3 +170,13 @@ export {
   RECURRING_MIN_COUNT,
   RECURRING_MAX_COUNT
 } from './classify.js'
+export {
+  rankContribution,
+  ALIGN_LOW,
+  ALIGN_HIGH,
+  SUPPRESS_RATIO,
+  VENDOR_CONFIDENCE_MIN,
+  VENDOR_MAX_LEN,
+  VENDOR_MAX_COUNT,
+  DESCRIPTION_MAX_LEN
+} from './contribution.js'

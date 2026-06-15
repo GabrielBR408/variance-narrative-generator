@@ -118,7 +118,7 @@ export function glEvidenceSentence({ account, thick, detail, period } = {}) {
 // a reference/invoice ID, or a file name, and carries no causal language.
 // Amounts are always passed through approxMoney() so a raw row figure is never
 // re-quoted as an exact value.
-export function commentarySentence({ type, account, detail, period } = {}) {
+export function commentarySentence({ type, account, detail, period, contribution } = {}) {
   const d = detail || {}
   const count = Number(d.count) || 0
   const total = d.total
@@ -126,6 +126,56 @@ export function commentarySentence({ type, account, detail, period } = {}) {
   const maxTxn = typeof d.maxTxn === 'number' && Number.isFinite(d.maxTxn) ? Math.abs(d.maxTxn) : null
   const during = periodSuffix(period, 'during')
 
+  // Phase 19B: contribution categories. These never render a single transaction
+  // larger than the net total, and suppress the dollar entirely when the GL
+  // activity is more than ~10× the variance (ratio > SUPPRESS_RATIO).
+  const ratio = contribution && typeof contribution.ratio === 'number' ? contribution.ratio : null
+  const suppress = ratio === null || ratio > 10
+
+  switch (type) {
+    case 'DC': // Direction conflict — GL net sign opposes the variance direction.
+      if (suppress) {
+        return `GL detail reflects a large net credit that runs counter to the variance direction and warrants review.`
+      }
+      return total < 0
+        ? `GL detail shows a net credit of approximately ${approxMoney(Math.abs(total))} ${during}, which runs counter to the variance direction and warrants review.`
+        : `GL detail shows net activity of approximately ${approxMoney(total)} ${during}, which runs counter to the variance direction and warrants review.`
+
+    case 'OH': // Offset-heavy — a single line exceeds the net total; never show it.
+      return suppress
+        ? `GL detail reflects substantially larger related activity ${during}, including offsetting entries.`
+        : `GL detail shows approximately ${approxMoney(total)} of related activity ${during}, including offsetting entries.`
+
+    case 'DP': // Disproportionate — GL activity far larger than the variance.
+      return suppress
+        ? `GL detail reflects substantially larger related activity ${during}; only a portion is reflected in this variance.`
+        : `GL detail shows approximately ${approxMoney(total)} of related activity ${during}, which is broader than this variance.`
+
+    case 'PA': // Partial — GL activity far smaller than the variance.
+      return `GL detail shows approximately ${approxMoney(total)} of related activity ${during}, a portion of the total movement.`
+  }
+
+  // Phase 19B: on an aligned, quantified shape, optionally embed a clean vendor
+  // (replacing the descriptor) or append a clean short description. Mutually
+  // exclusive (the contribution stage already cleared description when vendor
+  // is renderable). Both are context only — never causal.
+  const ALIGNED_QUANTIFIED = new Set(['A', 'B', 'C', 'I', 'F'])
+  if (reliableTotal && contribution && ALIGNED_QUANTIFIED.has(type)) {
+    if (contribution.vendorRenderable && d.vendor) {
+      return `GL detail shows approximately ${approxMoney(total)} of related ${d.vendor} activity ${during}.`
+    }
+    if (contribution.descriptionRenderable && d.description) {
+      const base = shapeSentence({ type, account, count, total, reliableTotal, maxTxn, during })
+      return `${base.replace(/\.\s*$/, '')} (${d.description}).`
+    }
+  }
+
+  return shapeSentence({ type, account, count, total, reliableTotal, maxTxn, during })
+}
+
+// The Phase 19A shape sentence (A–I). Factored out so Phase 19B can embed a
+// vendor/description around it without duplicating the per-shape wording.
+function shapeSentence({ type, account, count, total, reliableTotal, maxTxn, during }) {
   switch (type) {
     case 'A': // One-time
       return reliableTotal

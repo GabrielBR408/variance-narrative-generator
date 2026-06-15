@@ -50,7 +50,9 @@ export function classifyGLCommentary({
   comparison,
   comparisonType,
   confidence = 0,
-  thick = false
+  thick = false,
+  accountType,
+  contribution
 } = {}) {
   // 0. Thin (name-only) evidence can never support a specific claim.
   if (!thick) return { type: 'G' }
@@ -69,16 +71,42 @@ export function classifyGLCommentary({
     return reliableTotal ? { type: 'F' } : { type: 'G' }
   }
 
-  // 3. High confidence (≥ 0.85): specific categories are eligible. Evaluate in a
-  // fixed precedence so exactly one category wins.
+  // 3. High confidence (≥ 0.85): specific categories are eligible.
+
+  // Phase 19B: contribution gating. When the GL evidence does not plausibly size
+  // the variance (or its direction conflicts, or its total is offset-distorted),
+  // a contribution category overrides the Phase 19A shape so the owner is never
+  // shown a technically-true-but-misleading figure. `aligned` and
+  // `no-reliable-amount` fall through to the shape logic below; `unquantified`
+  // degrades to low-confidence. When `contribution` is absent (e.g. direct unit
+  // calls), behaviour is exactly Phase 19A.
+  if (contribution) {
+    switch (contribution.contributionType) {
+      case 'direction-conflict':
+        return { type: 'DC' }
+      case 'offset-heavy':
+        return { type: 'OH' }
+      case 'disproportionate':
+        return { type: 'DP' }
+      case 'partial':
+        return { type: 'PA' }
+      case 'unquantified':
+        return { type: 'G' }
+      // 'aligned' and 'no-reliable-amount' continue to the shape logic.
+    }
+  }
+
+  // Evaluate the shape categories in a fixed precedence so exactly one wins.
 
   // a. Unbudgeted — a structural fact about the variance (budget basis only).
   const unbudgeted =
     comparisonType !== 'prior' && (comparison === 0 || comparison === null || comparison === undefined)
   if (unbudgeted) return { type: 'D' }
 
-  // b. Credit / true-up — a sign surprise; flag before counting.
-  if (reliableTotal && total < 0) return { type: 'E' }
+  // b. Credit / true-up — a sign surprise; flag before counting. For a REVENUE
+  //    account a net credit is normal income (not a true-up), so E is expense-only;
+  //    revenue credits fall through to the shape categories.
+  if (reliableTotal && total < 0 && accountType !== 'revenue') return { type: 'E' }
 
   // c. One-time.
   if (count === 1) return { type: 'A' }
