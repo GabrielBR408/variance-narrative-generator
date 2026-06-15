@@ -249,7 +249,7 @@ test('GL reliable total renders the evidence sentence; vendor stays in metadata 
     columns: ['Account', 'Vendor', 'Amount'],
     rows: [
       ['Utility Expense Recovery', 'PG&E', '4000'],
-      ['Utility Expense Recovery', 'PG&E', '3400'],
+      ['Utility Expense Recovery', 'PG&E', '3000'],
       ['Office Supplies', 'Staples', '10']
     ]
   })
@@ -258,14 +258,13 @@ test('GL reliable total renders the evidence sentence; vendor stays in metadata 
   // Raw totals + vendor remain in the structured metadata (for Excel/support).
   const detail = note.support[0].detail
   assert.equal(detail.count, 2)
-  assert.equal(detail.total, 7400)
+  assert.equal(detail.total, 7000)
   assert.equal(detail.topVendor, 'PG&E')
   assert.equal(detail.topVendorCount, 2)
-  // The owner narrative states context only — the vendor name is NOT rendered.
-  // Two transactions, neither dominating nor concentrated (ratio ≈ 0.54) →
-  // quantified fallback (Category F) with the transaction count.
-  assert.match(note.text, /\. GL detail shows approximately \$7,400 across 2 related utility transactions during the current period\.$/)
-  assert.doesNotMatch(note.text, /PG&E/)
+  // Phase 19B: the GL total ($7,000) is within the variance ($7,366, ratio
+  // ≈ 0.95) and the Vendor column carries a clean, dominant vendor at a 0.9 name
+  // match across 2 rows (≤ 3) — so the vendor IS rendered as context.
+  assert.match(note.text, /\. GL detail shows approximately \$7,000 of related PG&E activity during the current period\.$/)
 })
 
 test('GL total is omitted when amounts are ambiguous (Debit + Credit columns)', () => {
@@ -407,7 +406,8 @@ test('Category B: one transaction dominates a multi-transaction total', () => {
 })
 
 test('Category C: several evenly-spread recurring transactions', () => {
-  const note = enrichedNote({ account: 'Landscaping Expense', actual: 4000, budget: 2000, amounts: [1000, 1000, 1000, 1000] })
+  // Total ($4,000) equals the variance, so the aligned render guard does not trip.
+  const note = enrichedNote({ account: 'Landscaping Expense', actual: 9000, budget: 5000, amounts: [1000, 1000, 1000, 1000] })
   assert.match(note.text, /\. GL detail shows approximately \$4,000 across 4 recurring transactions during the current period\.$/)
 })
 
@@ -423,8 +423,117 @@ test('Category E: a net credit reads as a credit, not new spend', () => {
 })
 
 test('Category I: exactly two concentrated transactions', () => {
-  const note = enrichedNote({ account: 'Marketing Expense', actual: 9000, budget: 4000, amounts: [6000, 3000] })
+  // Total ($9,000) equals the variance, so the aligned render guard does not trip.
+  const note = enrichedNote({ account: 'Marketing Expense', actual: 13000, budget: 4000, amounts: [6000, 3000] })
   assert.match(note.text, /\. GL detail shows approximately \$9,000 across two related transactions during the current period\.$/)
+})
+
+// --- Phase 19B: contribution-aware commentary ------------------------------
+
+// Enrich one account with explicit GL columns/rows and account semantics.
+function enrichedWith({ account, actual, budget, accountType = 'expense', category = 'unfavorable', columns, rows }) {
+  const n = baseNarrative([rec({ account, actual, budget, accountType, category, sourceRows: [4] })])
+  const gl = supporting({ fileName: 'General Ledger.pdf', type: 'General Ledger (GL)', columns, rows })
+  const enriched = enrichNarrative(n, { supporting: [gl] })
+  return enriched.periods[0].highVariances.find((x) => x.account === account)
+}
+
+test('Contribution: disproportionate GL (ratio > 10) suppresses the dollar figure', () => {
+  // $2,189 variance, $265,000 of GL activity — the headline failure case.
+  const note = enrichedWith({
+    account: 'Repairs Expense', actual: 7189, budget: 5000,
+    columns: ['Account', 'Amount'], rows: [['Repairs Expense', '265000']]
+  })
+  assert.match(note.text, /\. GL detail reflects related activity that appears materially larger than the reported variance during the current period\.$/)
+  assert.doesNotMatch(note.text, /265|\$265,000/)
+})
+
+test('Contribution: offset-heavy GL never renders a transaction larger than the total', () => {
+  // $7,186 variance, $10,700 net, a single $23,200 line offset by a credit.
+  const note = enrichedWith({
+    account: 'Fire Sprinkler Expense', actual: 12186, budget: 5000,
+    columns: ['Account', 'Amount'], rows: [['Fire Sprinkler Expense', '23200'], ['Fire Sprinkler Expense', '-12500']]
+  })
+  assert.match(note.text, /\. GL detail shows approximately \$10,700 of related activity during the current period, including offsetting entries\.$/)
+  assert.doesNotMatch(note.text, /23,200|one of about/)
+})
+
+test('Contribution: partial GL is framed as only a portion of the movement', () => {
+  const note = enrichedWith({
+    account: 'Repairs Expense', actual: 45000, budget: 5000,
+    columns: ['Account', 'Amount'], rows: [['Repairs Expense', '1800']]
+  })
+  assert.match(note.text, /\. GL detail shows approximately \$1,800 of related activity during the current period, a portion of the total movement\.$/)
+})
+
+test('Contribution: direction conflict (unfavorable expense, net credit) is flagged', () => {
+  const note = enrichedWith({
+    account: 'Repairs Expense', actual: 8000, budget: 5000,
+    columns: ['Account', 'Amount'], rows: [['Repairs Expense', '-5000']]
+  })
+  assert.match(note.text, /\. GL detail shows a net credit of approximately \$5,000 during the current period, which runs counter to the variance direction and warrants review\.$/)
+})
+
+test('Contribution: a clean, dominant vendor is rendered on an aligned line', () => {
+  const note = enrichedWith({
+    account: 'Utility-Building Water', actual: 3100, budget: 1000,
+    columns: ['Account', 'Vendor', 'Amount'], rows: [['Utility-Building Water', 'City Water', '2100']]
+  })
+  assert.match(note.text, /\. GL detail shows approximately \$2,100 of related City Water activity during the current period\.$/)
+})
+
+test('Contribution: a clean short description is appended on an aligned line', () => {
+  const note = enrichedWith({
+    account: 'Repairs Expense', actual: 1500, budget: 1000,
+    columns: ['Account', 'Description', 'Amount'], rows: [['Repairs Expense', 'HVAC repair', '500']]
+  })
+  assert.match(note.text, /\. GL detail shows a single transaction of approximately \$500 during the current period \(HVAC repair\)\.$/)
+})
+
+test('Contribution: a reference-like vendor is never rendered', () => {
+  const note = enrichedWith({
+    account: 'Repairs Expense', actual: 1600, budget: 1000,
+    columns: ['Account', 'Vendor', 'Amount'], rows: [['Repairs Expense', 'AP 064697', '600']]
+  })
+  assert.doesNotMatch(note.text, /AP 064697|064697/)
+})
+
+test('Render guard: an aligned GL total larger than the variance suppresses the dollar', () => {
+  // ratio 2.0 (still aligned), but the $2,000 total exceeds the $1,000 variance.
+  const note = enrichedWith({
+    account: 'Repairs Expense', actual: 6000, budget: 5000,
+    columns: ['Account', 'Amount'], rows: [['Repairs Expense', '2000']]
+  })
+  assert.match(note.text, /\. Related activity appears larger than the reported variance during the current period\.$/)
+  assert.doesNotMatch(note.text, /\$2,000|GL detail shows a single transaction/)
+})
+
+test('Render guard does NOT trip when the GL total is within the variance', () => {
+  const note = enrichedWith({
+    account: 'Repairs Expense', actual: 7000, budget: 5000,
+    columns: ['Account', 'Amount'], rows: [['Repairs Expense', '1800']]
+  })
+  assert.match(note.text, /\. GL detail shows a single transaction of approximately \$1,800 during the current period\.$/)
+})
+
+test('Revenue credit softening: a non-expense credit reads as related credit activity', () => {
+  // An income-like line typed "unknown" reaches the credit category; it should
+  // not read as a "single credit" of spend.
+  const note = enrichedWith({
+    account: 'Rental Inc-Parking', actual: 4000, budget: 5000,
+    accountType: 'unknown', category: 'neutral',
+    columns: ['Account', 'Amount'], rows: [['Rental Inc-Parking', '-1000']]
+  })
+  assert.match(note.text, /\. GL detail shows related credit activity of approximately \$1,000 during the current period\.$/)
+  assert.doesNotMatch(note.text, /single credit|net credits/)
+})
+
+test('Expense credit still reads as a credit / true-up (softening is non-expense only)', () => {
+  const note = enrichedWith({
+    account: 'Insurance Expense', actual: 1000, budget: 4000, category: 'favorable',
+    columns: ['Account', 'Amount'], rows: [['Insurance Expense', '-3000']]
+  })
+  assert.match(note.text, /\. GL detail shows a single credit of approximately \$3,000 during the current period\.$/)
 })
 
 // --- Phase 17.1: no causation / implied-causation language -----------------

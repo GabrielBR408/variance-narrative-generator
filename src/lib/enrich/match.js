@@ -28,6 +28,14 @@ const ACCOUNT_COL_RE = /account|acct|description|\bgl\b|\bname\b|item|line|categ
 const AMOUNT_COL_RE = /amount|debit|credit|balance|charge|total|\bvalue\b|\bnet\b|cost|\$/i
 const DETAIL_COL_RE = /description|memo|detail|narrative|note|particular|reference|\bref\b|vendor|payee|invoice|\bdoc\b|check/i
 
+// Phase 19B: column-typed detail. To let the contribution stage render a clean
+// vendor OR a clean description (never a reference/invoice ID), split the detail
+// columns by kind. Vendor/payee/name carry a counterparty; description/memo a
+// short narrative; reference/invoice/check/doc carry IDs that are NEVER rendered.
+// (DETAIL_COL_RE above stays the thickness signal — it spans all three kinds.)
+const VENDOR_COL_RE = /vendor|payee|\bname\b/i
+const DESC_COL_RE = /description|memo|detail|narrative|note|particular/i
+
 // A leading numeric token used as an account code: "5100", "5100-10", "51.00".
 const CODE_RE = /^\s*([0-9][0-9.\-]*[0-9]|[0-9])/
 
@@ -77,11 +85,15 @@ export function buildEvidenceIndex(supporting = []) {
     // or a description/reference, so per-row thickness is a cheap lookup.
     const amountCols = []
     const detailCols = []
+    const vendorCols = []
+    const descCols = []
     for (let i = 0; i < columns.length; i++) {
       if (i === col) continue
       const h = String(columns[i])
       if (AMOUNT_COL_RE.test(h)) amountCols.push(i)
       if (DETAIL_COL_RE.test(h)) detailCols.push(i)
+      if (VENDOR_COL_RE.test(h)) vendorCols.push(i)
+      if (DESC_COL_RE.test(h)) descCols.push(i)
     }
 
     const fileName = ex.fileName || ''
@@ -109,7 +121,11 @@ export function buildEvidenceIndex(supporting = []) {
         // Phase 17: the row's reliably-parsed amount (or null when ambiguous) and
         // its description/vendor text, for deterministic GL-detail summaries.
         amount: reliableAmount(row, col, amountCols),
-        detailText: firstDetailText(row, detailCols)
+        detailText: firstDetailText(row, detailCols),
+        // Phase 19B: column-typed text, kept separate so a reference/invoice ID
+        // can never surface where a vendor or description is expected.
+        vendorText: firstDetailText(row, vendorCols),
+        descText: firstDetailText(row, descCols)
       })
     }
   }
@@ -176,8 +192,6 @@ function summarizeDetail(rows) {
   let total = 0
   let amountsSeen = 0
   let maxTxn = null
-  const vendorOrder = []
-  const vendorCounts = new Map()
 
   for (const row of rows) {
     if (typeof row.amount === 'number' && Number.isFinite(row.amount)) {
@@ -186,30 +200,48 @@ function summarizeDetail(rows) {
       const mag = Math.abs(row.amount)
       if (maxTxn === null || mag > maxTxn) maxTxn = mag
     }
-    const v = (row.detailText || '').trim()
-    if (v) {
-      if (!vendorCounts.has(v)) vendorOrder.push(v)
-      vendorCounts.set(v, (vendorCounts.get(v) || 0) + 1)
-    }
   }
 
-  let topVendor = null
-  let topVendorCount = 0
-  for (const v of vendorOrder) {
-    const c = vendorCounts.get(v)
-    if (c > topVendorCount) {
-      topVendor = v
-      topVendorCount = c
-    }
-  }
+  // Legacy (Phase 17): topVendor/topVendorCount from the collapsed detailText —
+  // retained for the Excel export and existing metadata tests.
+  const top = mostFrequent(rows, 'detailText')
+  // Phase 19B: column-typed vendor/description candidates. These are raw strings;
+  // the contribution stage decides whether either is clean enough to render.
+  const vendor = mostFrequent(rows, 'vendorText').value
+  const description = mostFrequent(rows, 'descText').value
 
   return {
     count,
     total: amountsSeen === count && count > 0 ? total : null,
     maxTxn,
-    topVendor,
-    topVendorCount
+    topVendor: top.value,
+    topVendorCount: top.count,
+    vendor,
+    description
   }
+}
+
+// The most frequent non-empty value of `field` across rows (ties broken by first
+// appearance). Returns { value: string|null, count: number }.
+function mostFrequent(rows, field) {
+  const order = []
+  const counts = new Map()
+  for (const row of rows) {
+    const v = (row[field] || '').trim()
+    if (!v) continue
+    if (!counts.has(v)) order.push(v)
+    counts.set(v, (counts.get(v) || 0) + 1)
+  }
+  let value = null
+  let count = 0
+  for (const v of order) {
+    const c = counts.get(v)
+    if (c > count) {
+      value = v
+      count = c
+    }
+  }
+  return { value, count }
 }
 
 // Score one base account against one index entry. Returns 0..1.
@@ -275,7 +307,12 @@ export function matchAccount(account, index = [], options = {}) {
     existing.confidence = Math.max(existing.confidence, score)
     existing.thick = existing.thick || !!entry.hasDetail
     if (!existing.rows.has(entry.sourceRow)) {
-      existing.rows.set(entry.sourceRow, { amount: entry.amount, detailText: entry.detailText })
+      existing.rows.set(entry.sourceRow, {
+        amount: entry.amount,
+        detailText: entry.detailText,
+        vendorText: entry.vendorText,
+        descText: entry.descText
+      })
     }
   }
 

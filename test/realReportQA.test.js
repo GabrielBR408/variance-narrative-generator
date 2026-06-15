@@ -275,3 +275,112 @@ test('no classified GL commentary leaks a vendor, file name, date, or causal phr
   assert.doesNotMatch(md, /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/) // no dates
   assert.doesNotMatch(md, /due to|driven by|caused by|because of|explains|resulting from/i)
 })
+
+// --- Phase 19B: real-MRI contribution smoke --------------------------------
+// The five rough real-output accounts ChatGPT flagged, each paired with GL
+// detail that exercises a different contribution type. A Reference/invoice/date
+// column is included to prove IDs never leak. Asserts the owner-facing wording
+// AND the misleading-dollar suppression behaviour end-to-end.
+
+function mriRec({ account, actual, budget, accountType, category }) {
+  const varianceAmount = actual - budget
+  const variancePercent = budget === 0 ? null : (varianceAmount / Math.abs(budget)) * 100
+  return {
+    account, actual, budget, prior: null, varianceAmount, variancePercent,
+    comparisonType: 'budget',
+    thresholdTriggered: true,
+    category, accountType, missingData: false, confidence: 90, sourceRows: [0]
+  }
+}
+
+function buildMRISmoke() {
+  const comparisons = [
+    // Utility-Elect-Building — $7,366 variance vs $300 of GL → partial.
+    mriRec({ account: 'Utility-Elect-Building', actual: 12366, budget: 5000, accountType: 'expense', category: 'unfavorable' }),
+    // Utility-Building Water — $2,100 variance vs one clean $2,100 vendor → aligned + vendor.
+    mriRec({ account: 'Utility-Building Water', actual: 3100, budget: 1000, accountType: 'expense', category: 'unfavorable' }),
+    // Rental Inc-Parking Gar — $5,000 variance vs $4,800 across 4 even charges → recurring.
+    mriRec({ account: 'Rental Inc-Parking Gar', actual: 10000, budget: 5000, accountType: 'unknown', category: 'neutral' }),
+    // Rental Inc. - Commercial — $2,189 variance vs $265,000 credit → disproportionate (suppressed).
+    mriRec({ account: 'Rental Inc. - Commercial', actual: 2189, budget: 0, accountType: 'unknown', category: 'neutral' }),
+    // Fire Sprinkler - Contract — $7,186 variance, $10,700 net, one $23,200 line → offset-heavy.
+    mriRec({ account: 'Fire Sprinkler - Contract', actual: 12186, budget: 5000, accountType: 'unknown', category: 'neutral' })
+  ]
+  const narrative = generateNarrative({
+    fileId: 'base',
+    fileName: 'Comparative Income Statement.xlsx',
+    baseClassification: 'Base Variance Report',
+    thresholds: { amount: 1000, percent: 10 },
+    comparisonSets: [{ period: 'current', comparisons }]
+  })
+
+  const gl = {
+    fileName: '4. General Ledger.pdf',
+    status: 'ok',
+    classification: { type: 'General Ledger (GL)' },
+    normalized: {
+      columns: ['Account', 'Date', 'Reference', 'Vendor', 'Description', 'Amount'],
+      rows: [
+        ['Utility-Elect-Building', '01/05/2026', '101', 'PG&E', 'Electric', '100'],
+        ['Utility-Elect-Building', '01/20/2026', '102', 'PG&E', 'Electric', '200'],
+        ['Utility-Building Water', '01/15/2026', 'AP 5567', 'City Water', 'Monthly water', '2100'],
+        ['Rental Inc-Parking Gar', '01/05/2026', '201', 'Parking Mgmt', 'Parking', '1200'],
+        ['Rental Inc-Parking Gar', '01/12/2026', '202', 'Parking Mgmt', 'Parking', '1200'],
+        ['Rental Inc-Parking Gar', '01/19/2026', '203', 'Parking Mgmt', 'Parking', '1200'],
+        ['Rental Inc-Parking Gar', '01/26/2026', '204', 'Parking Mgmt', 'Parking', '1200'],
+        ['Rental Inc. - Commercial', '01/30/2026', 'JE 7781', 'Tenant Credit', 'Concession', '-265000'],
+        ['Fire Sprinkler - Contract', '01/10/2026', 'GS 00084362', 'Acme Fire', 'Annual contract', '23200'],
+        ['Fire Sprinkler - Contract', '01/22/2026', 'GS 00084999', 'Acme Fire', 'Credit', '-12500']
+      ]
+    }
+  }
+  return enrichNarrative(narrative, { supporting: [gl] })
+}
+
+function mriNote(enriched, account) {
+  return enriched.periods[0].highVariances.find((n) => n.account === account)
+}
+
+test('MRI smoke: each account renders its contribution-appropriate wording', () => {
+  const enriched = buildMRISmoke()
+
+  assert.match(
+    mriNote(enriched, 'Utility-Elect-Building').text,
+    /GL detail shows approximately \$300 of related activity during the current period, a portion of the total movement\.$/
+  )
+  assert.match(
+    mriNote(enriched, 'Utility-Building Water').text,
+    /GL detail shows approximately \$2,100 of related City Water activity during the current period\.$/
+  )
+  assert.match(
+    mriNote(enriched, 'Rental Inc-Parking Gar').text,
+    /GL detail shows approximately \$4,800 across 4 recurring transactions during the current period \(Parking\)\.$/
+  )
+  assert.match(
+    mriNote(enriched, 'Rental Inc. - Commercial').text,
+    /GL detail reflects related activity that appears materially larger than the reported variance during the current period\.$/
+  )
+  assert.match(
+    mriNote(enriched, 'Fire Sprinkler - Contract').text,
+    /GL detail shows approximately \$10,700 of related activity during the current period, including offsetting entries\.$/
+  )
+})
+
+test('MRI smoke: misleading dollars are suppressed and no IDs/dates/filenames leak', () => {
+  const enriched = buildMRISmoke()
+  const md = narrativeToMarkdown(enriched)
+
+  // The two headline misleading figures never reach the owner.
+  assert.doesNotMatch(md, /265,000|\$265/) // disproportionate credit suppressed
+  assert.doesNotMatch(md, /23,200|one of about/) // offset single line suppressed
+
+  // No reference / invoice / journal IDs, no dates, no filename, no causation.
+  assert.doesNotMatch(md, /AP 5567|GS 0008|JE 7781|\b10[1-4]\b|20[1-4]\b/)
+  assert.doesNotMatch(md, /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/)
+  assert.doesNotMatch(md, /General Ledger\.pdf|Supporting file/)
+  assert.doesNotMatch(md, /due to|driven by|caused by|because of|explains|resulting from/i)
+
+  // No rendered single transaction amount exceeds its rendered net total, and
+  // exactly the expected aligned figures survive.
+  assert.ok(md.includes('$10,700') && md.includes('$2,100') && md.includes('$4,800') && md.includes('$300'))
+})

@@ -283,9 +283,11 @@ test('reconstructed GL drives the existing thick sentence — no filename, no ca
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility-Elect-Building')
   assert.ok(note.enriched)
   assert.equal(note.support[0].thick, true)
-  // Phase 19A: two transactions ($100 + $200), the larger ≈ 0.67 of the total →
-  // concentrated activity (Category I).
-  assert.match(note.text, /GL detail shows approximately \$300 across two related transactions during the current period\./)
+  // Phase 19B: the GL total ($300) is a tiny fraction of the $7,366 variance
+  // (ratio ≈ 0.04 < 0.25) → contribution is "partial", so the owner sees the
+  // figure framed as only a portion of the movement — not as concentrated
+  // activity that explains the swing.
+  assert.match(note.text, /GL detail shows approximately \$300 of related activity during the current period, a portion of the total movement\./)
   assert.doesNotMatch(note.text, /Detailed account activity was available for review/)
   assert.doesNotMatch(note.text, /General Ledger\.pdf|Supporting file/)
   assert.doesNotMatch(note.text, /due to|driven by|caused by|because of|explains|resulting from/)
