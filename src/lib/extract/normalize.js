@@ -39,24 +39,32 @@ export function toNumber(value) {
   return negative ? -Math.abs(n) : n
 }
 
-// --- Grouped / multi-row header support -----------------------------------
+// --- Grouped / multi-row header support (Phase 13 + 13B) -------------------
 // Some statements (e.g. a Comparative Income Statement) carry a TWO-row header:
 // a group/period band ("Current Period", "Year-To-Date") sitting above repeated
 // value sub-headers ("Actual | Budget | Variance"). Spreadsheet exports merge
 // the group cells, which SheetJS emits as the value in the top-left cell and
-// blanks across the rest of the merge. If we keep only the first row as the
-// header, the real sub-headers fall into the data and column detection fails.
+// blanks across the rest of the merge.
 //
-// These helpers detect that shape and fold the two rows into one combined
-// header ("Current Period Actual", …) so the existing detection works unchanged.
-// They are deliberately conservative: a flat header followed by numeric data
-// never trips the detector, so simple CSV/single-row tables are untouched.
+// Phase 13B: real exports also print several REPORT METADATA rows before the
+// table (database, property, "Accrual", page/date stamps). So we cannot assume
+// the header is the first row — we SCAN past the leading metadata for the first
+// row that reads as a value sub-header, then fold a group band sitting directly
+// above it. Everything before that block is metadata and is dropped.
+//
+// Detection is deliberately conservative: the value-header row must carry two or
+// more value-type keywords and be non-numeric, so a flat header + numeric data,
+// a PDF reconstruction, and a metadata-only sheet are all left untouched.
 
 // Value-column keywords that mark a row as the value sub-header row.
 const VALUE_HEADER_RE = /\b(actuals?|budget|forecast|planned?|prior|previous|prev|variance|act|bud)\b/i
 // Group/period keywords that mark a row as the band sitting above the values.
 const GROUP_HEADER_RE =
   /\b(current|ytd|year[-\s]*to[-\s]*date|y[-.\s]*t[-.\s]*d|prior|previous|month|mtd|qtd|quarter|period|this\s*year|last\s*year)\b/i
+
+// Headers appear near the top even after metadata; bound the scan so we never
+// mistake a stray text row deep in the data for a header.
+const HEADER_SCAN_LIMIT = 30
 
 function cellText(c) {
   return c === null || c === undefined ? '' : String(c).trim()
@@ -78,23 +86,33 @@ function countValueHeaders(row) {
   return n
 }
 
-function hasBlankCell(row) {
-  return row.some((c) => cellText(c) === '')
-}
-
 function hasGroupKeyword(row) {
   return row.some((c) => GROUP_HEADER_RE.test(cellText(c)))
 }
 
-// True when the grid opens with a group band over a repeated value sub-header.
-// Requires a data row to exist so a two-row table (header + one data row) is
-// never mistaken for a header band.
-function hasGroupedHeader(grid) {
-  if (grid.length < 3) return false
-  const [row0, row1] = grid
-  const subHeaderLike = isNonNumericRow(row1) && countValueHeaders(row1) >= 2
-  const groupLike = isNonNumericRow(row0) && (hasBlankCell(row0) || hasGroupKeyword(row0))
-  return subHeaderLike && groupLike
+// The signature of a value sub-header row: non-numeric and carrying at least two
+// value-type keywords (e.g. "Actual | Budget" or the doubled set under grouped
+// Current/YTD periods). Two keywords keeps single-value or metadata rows out.
+function isValueHeaderRow(row) {
+  return isNonNumericRow(row) && countValueHeaders(row) >= 2
+}
+
+// Locate the header block, skipping any leading report-metadata rows. Returns
+// { headerIdx, groupIdx } where groupIdx is the row of the group/period band
+// directly above the value header (or -1 when the header is flat), or null when
+// no value-header row exists (e.g. a metadata-only sheet) so the caller falls
+// back to the original first-row behavior.
+function findHeaderBlock(grid) {
+  const limit = Math.min(grid.length, HEADER_SCAN_LIMIT)
+  for (let i = 0; i < limit; i++) {
+    if (!isValueHeaderRow(grid[i])) continue
+    const above = i - 1
+    // A group band qualifies only when it names periods/groups — never merely by
+    // being blank-heavy — so a metadata row above a flat header is not folded in.
+    const grouped = above >= 0 && isNonNumericRow(grid[above]) && hasGroupKeyword(grid[above])
+    return { headerIdx: i, groupIdx: grouped ? above : -1 }
+  }
+  return null
 }
 
 // Carry each group label rightward across the blank cells a horizontal merge
@@ -119,16 +137,23 @@ function combineHeader(group, sub) {
   return s || g
 }
 
-// Resolve the grid into { columns, rows }: a combined two-row header when a
-// grouped band is detected, otherwise the first row as a flat header.
+// Resolve the grid into { columns, rows }: skip leading metadata to the header
+// block, folding a group band into the value sub-headers when present. Falls
+// back to the original first-row-as-header behavior when no value-header row is
+// found, so flat/generic tables and PDF reconstructions are unchanged.
 function resolveHeader(grid) {
-  if (hasGroupedHeader(grid)) {
-    const width = Math.max(grid[0].length, grid[1].length)
-    const groups = forwardFill(grid[0], width)
-    const subs = grid[1]
-    const columns = []
-    for (let i = 0; i < width; i++) columns.push(combineHeader(groups[i], subs[i]))
-    return { columns, rows: grid.slice(2) }
+  const block = findHeaderBlock(grid)
+  if (block) {
+    const { headerIdx, groupIdx } = block
+    const valueRow = grid[headerIdx]
+    if (groupIdx >= 0) {
+      const width = Math.max(grid[groupIdx].length, valueRow.length)
+      const groups = forwardFill(grid[groupIdx], width)
+      const columns = []
+      for (let i = 0; i < width; i++) columns.push(combineHeader(groups[i], valueRow[i]))
+      return { columns, rows: grid.slice(headerIdx + 1) }
+    }
+    return { columns: valueRow.map((c) => String(c)), rows: grid.slice(headerIdx + 1) }
   }
   return { columns: grid[0].map((c) => String(c)), rows: grid.length > 1 ? grid.slice(1) : [] }
 }
