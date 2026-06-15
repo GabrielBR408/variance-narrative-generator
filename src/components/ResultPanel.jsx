@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { classifyFile, confidenceTier } from '../lib/classify.js'
 import { canExport } from '../lib/export/exportState.js'
+import { scopeNarrative, DEFAULT_PERIOD_SCOPE } from '../lib/narrative/periodScope.js'
 import ExportActions from './ExportActions.jsx'
 
 const STATUS_TEXT = {
@@ -23,9 +24,14 @@ function prettySize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export default function ResultPanel({ status, result }) {
+export default function ResultPanel({ status, result, periodScope = DEFAULT_PERIOD_SCOPE }) {
   const showResult = status === 'success' && result
   const files = (showResult && Array.isArray(result.files)) ? result.files : []
+  // Phase 15.1: apply the selected period scope as a pure view transform over the
+  // (already enriched) generated narrative. This is identity unless the report
+  // carries both Current and YTD periods, so it both renders and exports exactly
+  // what the live preview showed for the same selection.
+  const scopedNarrative = showResult ? scopeNarrative(result.narrative, periodScope) : null
 
   return (
     <section className="step step--result" aria-live="polite">
@@ -80,10 +86,10 @@ export default function ResultPanel({ status, result }) {
             </ul>
           )}
 
-          <ResultNarrative narrative={result.narrative} />
+          <ResultNarrative narrative={scopedNarrative} />
 
-          {canExport({ status, narrative: result.narrative }) && (
-            <ExportActions narrative={result.narrative} />
+          {canExport({ status, narrative: scopedNarrative }) && (
+            <ExportActions narrative={scopedNarrative} />
           )}
         </>
       )}

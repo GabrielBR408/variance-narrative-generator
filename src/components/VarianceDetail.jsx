@@ -11,7 +11,13 @@ const IGNORE = [
   { key: 'smallRepeatItems', label: 'Small Repeat Items' }
 ]
 
-export default function VarianceDetail({ variance, setVariance }) {
+export default function VarianceDetail({
+  variance,
+  setVariance,
+  periodScope,
+  setPeriodScope,
+  periodScopeOffered = false
+}) {
   const set = (key, value) => setVariance((prev) => ({ ...prev, [key]: value }))
   const toggle = (group, key) =>
     setVariance((prev) => ({ ...prev, [group]: { ...prev[group], [key]: !prev[group][key] } }))
@@ -53,6 +59,26 @@ export default function VarianceDetail({ variance, setVariance }) {
             onChange={(e) => set('percentThreshold', e.target.value)}
           />
         </label>
+
+        {periodScopeOffered && (
+          <>
+            <label className="field">
+              <span className="field-label">Period Scope</span>
+              <select
+                className="field-control"
+                value={periodScope}
+                onChange={(e) => setPeriodScope(e.target.value)}
+              >
+                <option value="both">Both (Current &amp; YTD)</option>
+                <option value="current">Current Period</option>
+                <option value="ytd">YTD</option>
+              </select>
+            </label>
+            <p className="panel-note">
+              This report carries both Current and Year-to-Date columns. Choose which to narrate and export.
+            </p>
+          </>
+        )}
 
         <label className="field">
           <span className="field-label">Narrative Detail</span>
