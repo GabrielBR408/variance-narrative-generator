@@ -13,6 +13,21 @@ function fileKey(file) {
   return `${file.name}::${file.size}::${file.lastModified}`
 }
 
+// Compact, faithful view of a browser extraction to ship to /generate. We send
+// only the normalized shape the variance engine reads — never the raw text or
+// parser internals. Returns null when the file hasn't been extracted yet.
+function slimExtraction(ex) {
+  if (!ex) return null
+  return {
+    fileId: ex.fileId,
+    fileName: ex.fileName,
+    status: ex.status,
+    confidence: ex.confidence,
+    classification: ex.classification ? { type: ex.classification.type } : null,
+    normalized: ex.normalized || { rows: [], columns: [], accounts: [], dates: [], values: [] }
+  }
+}
+
 const DEFAULT_STYLE = {
   audience: 'Owner',
   reportStyle: 'Executive',
@@ -123,6 +138,18 @@ export default function App() {
     form.append('variance', JSON.stringify(variance))
     form.append('notes', notes || '')
 
+    // Phase 9B: extraction is browser-first, so the normalized result the
+    // browser already computed travels with the request. The server runs the
+    // deterministic variance + narrative engines on it — no re-parsing.
+    const baseExtraction = slimExtraction(extractions[fileKey(baseReport)])
+    const supportingExtractions = supportingFiles
+      .map((f) => slimExtraction(extractions[fileKey(f)]))
+      .filter(Boolean)
+    form.append(
+      'extractions',
+      JSON.stringify({ base: baseExtraction, supporting: supportingExtractions })
+    )
+
     // Sending. Do not set Content-Type — the browser adds the multipart
     // boundary automatically.
     setStatus('sending')
@@ -145,7 +172,9 @@ export default function App() {
         filesReceived: data.filesReceived,
         settingsReceived: data.settingsReceived,
         files: Array.isArray(data.files) ? data.files : [],
-        summary: data.narrative.summary
+        extraction: data.extraction,
+        variance: data.variance,
+        narrative: data.narrative
       })
       setStatus('success')
     } catch (err) {
