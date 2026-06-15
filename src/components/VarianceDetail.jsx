@@ -1,4 +1,9 @@
 import React from 'react'
+import {
+  PERIOD_SCOPE_LABEL,
+  PERIOD_SCOPE_OPTIONS,
+  PERIOD_SCOPE_HELP
+} from '../lib/narrative/periodScope.js'
 
 const INCLUDE = [
   { key: 'glResearch', label: 'GL Research' },
@@ -63,20 +68,20 @@ export default function VarianceDetail({
         {periodScopeOffered && (
           <>
             <label className="field">
-              <span className="field-label">Period Scope</span>
+              <span className="field-label">{PERIOD_SCOPE_LABEL}</span>
               <select
                 className="field-control"
                 value={periodScope}
                 onChange={(e) => setPeriodScope(e.target.value)}
               >
-                <option value="both">Both (Current &amp; YTD)</option>
-                <option value="current">Current Period</option>
-                <option value="ytd">YTD</option>
+                {PERIOD_SCOPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value} disabled={o.disabled}>
+                    {o.label}
+                  </option>
+                ))}
               </select>
             </label>
-            <p className="panel-note">
-              This report carries both Current and Year-to-Date columns. Choose which to narrate and export.
-            </p>
+            <p className="panel-note">{PERIOD_SCOPE_HELP}</p>
           </>
         )}
 

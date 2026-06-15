@@ -20,7 +20,10 @@ import {
   hasBothPeriods,
   periodKeys,
   PERIOD_SCOPES,
-  DEFAULT_PERIOD_SCOPE
+  DEFAULT_PERIOD_SCOPE,
+  PERIOD_SCOPE_LABEL,
+  PERIOD_SCOPE_OPTIONS,
+  PERIOD_SCOPE_HELP
 } from '../src/lib/narrative/periodScope.js'
 
 // --- helpers ---------------------------------------------------------------
@@ -79,6 +82,45 @@ const GL = (fileName = 'General Ledger.pdf') => ({
   status: 'ok',
   classification: { type: 'General Ledger (GL)' },
   normalized: { columns: ['Account', 'Amount'], rows: [['5100 Utility Expense Recovery', '7366']] }
+})
+
+// --- selector UI wording (single source of truth, tested as data) ----------
+
+test('selector label and helper text read as specified', () => {
+  assert.equal(PERIOD_SCOPE_LABEL, 'Variance Explanation Scope')
+  assert.equal(
+    PERIOD_SCOPE_HELP,
+    'Separate shows Current and YTD independently. Combined will merge duplicate ' +
+      'account explanations across periods in a future release.'
+  )
+})
+
+test('selector options render the right labels, values, and order', () => {
+  assert.deepEqual(
+    PERIOD_SCOPE_OPTIONS.map((o) => [o.value, o.label]),
+    [
+      ['current', 'Current Period'],
+      ['ytd', 'Year-to-Date'],
+      ['both', 'Separate (Current + YTD)'],
+      ['combined', 'Combined (Coming Soon)']
+    ]
+  )
+})
+
+test('Combined is the only disabled option, and is not an implemented scope', () => {
+  const disabled = PERIOD_SCOPE_OPTIONS.filter((o) => o.disabled).map((o) => o.value)
+  assert.deepEqual(disabled, ['combined'])
+  // Combined carries no behavior: it is absent from the implemented scope list…
+  assert.equal(PERIOD_SCOPES.includes('combined'), false)
+  // …and selecting it would be a safe no-op (identity) anyway.
+  const n = twoPeriodNarrative()
+  assert.equal(scopeNarrative(n, 'combined'), n)
+})
+
+test('every selectable (non-disabled) option is an implemented, behavior-backed scope', () => {
+  const selectable = PERIOD_SCOPE_OPTIONS.filter((o) => !o.disabled).map((o) => o.value)
+  assert.deepEqual([...selectable].sort(), [...PERIOD_SCOPES].sort())
+  assert.ok(selectable.includes(DEFAULT_PERIOD_SCOPE))
 })
 
 // --- availability gate (control hidden/disabled when only one period) ------

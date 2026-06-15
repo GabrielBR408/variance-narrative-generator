@@ -20,10 +20,28 @@
 //       { period, periodLabel, executiveSummary, highVariances, missingData,
 //         revenueNotes, expenseNotes, sourceRows }, ... ] }
 
-// Scopes implemented in this phase. 'combined' is intentionally NOT offered yet
-// (it needs period-labeled prose composition — proposed as a follow-up).
+// Scopes with implemented behavior. 'combined' is intentionally NOT here yet
+// (it needs period-labeled prose composition — surfaced in the UI as a disabled
+// "Coming Soon" option only, with no behavior).
 export const PERIOD_SCOPES = ['both', 'current', 'ytd']
 export const DEFAULT_PERIOD_SCOPE = 'both'
+
+// --- UI presentation (single source of truth for the selector) -------------
+// The control's label, ordered options, and helper text live here so the
+// rendered wording is testable as data and can never drift from behavior.
+export const PERIOD_SCOPE_LABEL = 'Variance Explanation Scope'
+
+export const PERIOD_SCOPE_OPTIONS = [
+  { value: 'current', label: 'Current Period' },
+  { value: 'ytd', label: 'Year-to-Date' },
+  { value: 'both', label: 'Separate (Current + YTD)' },
+  // UI-only: Combined is shown but disabled until its logic ships.
+  { value: 'combined', label: 'Combined (Coming Soon)', disabled: true }
+]
+
+export const PERIOD_SCOPE_HELP =
+  'Separate shows Current and YTD independently. Combined will merge duplicate ' +
+  'account explanations across periods in a future release.'
 
 function periodsOf(narrative) {
   return Array.isArray(narrative?.periods) ? narrative.periods : []
