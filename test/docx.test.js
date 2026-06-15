@@ -178,6 +178,35 @@ test('multi-period docx renders Current then YTD, each with full sections', () =
   assert.equal(textOf(blocks, 'section').length, 10)
 })
 
+// --- formatting structure validation (Phase 14) ----------------------------
+
+test('docx blocks form a valid nesting: title first, meta before periods, notes under sections', () => {
+  const blocks = narrativeToDocxBlocks(multiPeriodNarrative())
+  assert.equal(blocks[0].kind, 'title')
+
+  let seenPeriod = false
+  let seenSection = false
+  for (let i = 1; i < blocks.length; i++) {
+    const kind = blocks[i].kind
+    if (kind === 'meta') {
+      assert.ok(!seenPeriod, 'metadata must appear before any period heading')
+    }
+    if (kind === 'period') {
+      seenPeriod = true
+      seenSection = false
+    }
+    if (kind === 'section') {
+      assert.ok(seenPeriod, 'a section must sit under a period heading')
+      seenSection = true
+    }
+    // Bullets and explicit "None." blocks only ever follow a section heading.
+    if (kind === 'bullet' || kind === 'empty') {
+      assert.ok(seenSection, 'a note/empty block must follow a section heading')
+    }
+    assert.ok(typeof blocks[i].text === 'string' && blocks[i].text.length > 0, 'every block carries text')
+  }
+})
+
 // --- filename + fallback ---------------------------------------------------
 
 test('docxFileName slugs the source filename deterministically and ends in .docx', () => {

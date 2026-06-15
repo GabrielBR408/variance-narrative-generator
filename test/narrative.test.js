@@ -76,7 +76,10 @@ test('unfavorable expense reads as exceeding budget and surfaces in expense note
   ])
   const { periods } = generateNarrative(r)
   const note = periods[0].expenseNotes[0]
-  assert.match(note.text, /Operating expense exceeded budget by \$5,000 \(50\.0%\) year-to-date\./)
+  // Phase 14: the line keeps every figure but no longer repeats the period —
+  // that is carried by the YTD section heading and the executive summary.
+  assert.match(note.text, /Operating expense exceeded budget by \$5,000 \(50\.0%\)\./)
+  assert.doesNotMatch(note.text, /year-to-date|current period/)
   assert.equal(note.category, 'unfavorable')
 })
 
@@ -151,8 +154,45 @@ test('current and YTD produce separately-labeled periods with their own wording'
   assert.deepEqual(periods.map((p) => p.period), ['current', 'ytd'])
   assert.equal(periods[0].periodLabel, 'Current')
   assert.equal(periods[1].periodLabel, 'YTD')
-  assert.match(periods[0].highVariances[0].text, /for the current period\.$/)
-  assert.match(periods[1].highVariances[0].text, /year-to-date\.$/)
+  // Phase 14: the period is stated once, up front, in each period's executive
+  // summary — Current and YTD stay clearly separated without repeating the
+  // phrase on every line note.
+  assert.match(periods[0].executiveSummary[0].text, /^For the current period,/)
+  assert.match(periods[1].executiveSummary[0].text, /^Year-to-date,/)
+  // The line notes themselves carry no period clause.
+  assert.doesNotMatch(periods[0].highVariances[0].text, /current period|year-to-date/)
+  assert.doesNotMatch(periods[1].highVariances[0].text, /current period|year-to-date/)
+})
+
+// --- Phase 14: tighter executive summary -----------------------------------
+
+test('executive summary is a single owner-ready sentence with the totals split', () => {
+  const r = result([
+    { period: 'current', comparisons: [
+      rec({ account: 'Revenue', actual: 13000, budget: 10000, accountType: 'revenue', category: 'favorable', sourceRows: [1] }),
+      rec({ account: 'Repairs', actual: 16000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [2] })
+    ] }
+  ])
+  const exec = generateNarrative(r).periods[0].executiveSummary
+  // One sentence only — the old "Of these, N revenue and N expense…" line is gone.
+  assert.equal(exec.length, 1)
+  assert.match(exec[0].text, /^For the current period, 2 variances totaling \$9,000 crossed the \$1,000 or 10% thresholds \(1 unfavorable, 1 favorable\)\.$/)
+  assert.doesNotMatch(exec[0].text, /Of these/)
+})
+
+// --- Phase 14: owner-priority grouping in High Variances -------------------
+
+test('high variances lead with unfavorable rows even when a favorable row is larger', () => {
+  const r = result([
+    // Favorable revenue with the largest dollar movement.
+    { period: 'current', comparisons: [
+      rec({ account: 'Big Favorable', actual: 30000, budget: 10000, accountType: 'revenue', category: 'favorable', sourceRows: [1] }),
+      // Smaller unfavorable expense — must still appear first (owner watch list).
+      rec({ account: 'Small Unfavorable', actual: 12000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [2] })
+    ] }
+  ])
+  const order = generateNarrative(r).periods[0].highVariances.map((n) => n.account)
+  assert.deepEqual(order, ['Small Unfavorable', 'Big Favorable'])
 })
 
 // --- missing data ----------------------------------------------------------
