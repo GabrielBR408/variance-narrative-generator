@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
 import { classifyFile, confidenceTier } from '../lib/classify.js'
+import { canExport } from '../lib/export/exportState.js'
+import ExportActions from './ExportActions.jsx'
 
 const STATUS_TEXT = {
   idle: 'Idle',
@@ -79,6 +81,10 @@ export default function ResultPanel({ status, result }) {
           )}
 
           <ResultNarrative narrative={result.narrative} />
+
+          {canExport({ status, narrative: result.narrative }) && (
+            <ExportActions narrative={result.narrative} />
+          )}
         </>
       )}
     </section>

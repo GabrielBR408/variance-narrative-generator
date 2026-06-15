@@ -232,6 +232,22 @@ body {
 .narrative-body { margin: 0; font-size: 0.92rem; }
 .narrative-note { margin: 0.5rem 0 0; font-size: 0.8rem; color: var(--muted); }
 
+/* Export (Phase 10A) — copy + markdown, shown only after a generation */
+.export { margin-top: 0.9rem; }
+.export-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.export-btn {
+  flex: 1 1 auto; min-width: 10rem; padding: 0.7rem 1rem;
+  border: 1px solid var(--accent); border-radius: 8px;
+  background: var(--accent); color: #fff; font-size: 0.9rem; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+}
+.export-btn:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+.export-btn--secondary { background: #fff; color: var(--accent-ink); }
+.export-btn--secondary:hover { background: #eaf6f1; border-color: var(--accent-ink); }
+.export-msg { font-size: 0.84rem; margin: 0.6rem 0 0; }
+.export-msg--ok { color: var(--accent-ink); }
+.export-msg--error { color: var(--danger); }
+
 /* Extraction preview (Phase 7) — collapsed by default, content-free until opened */
 .extract-card { margin-top: 0.9rem; }
 .extract-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.8rem; }
