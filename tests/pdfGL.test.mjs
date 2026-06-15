@@ -289,6 +289,81 @@ test('reconstructed GL drives the existing thick sentence — no filename, no ca
   assert.doesNotMatch(note.text, /due to|driven by|caused by|because of|explains|resulting from/)
 })
 
+// --- real-world MRI layout regressions (Phase 18A correction) --------------
+// A stacked header (Debit/Credit on one line, Balance on another, Date/Reference
+// elsewhere) with an entity column and a "Balance Forward" account heading —
+// mirroring MRI Software's General Ledger export.
+
+// x-bands taken from the real MRI layout.
+const MX = { entity: 26, period: 70, date: 100, ref: 153, marker: 208, memo: 307, debit: 552, credit: 622, balance: 695 }
+const MRI_HEADER = [
+  [['Description', MX.memo], ['Debit', MX.debit], ['Credit', MX.credit]], // anchor (debit+credit)
+  [['Entity', 34], ['Period', 67]],
+  [['Date', 109], ['Src Reference', MX.ref]],
+  [['Balance', 691]]
+]
+
+function buildMRI(bodyLines) {
+  return buildGL([...MRI_HEADER, ...bodyLines])
+}
+
+test('stacked header: Balance band detected on a separate line → 3-token rows net Debit−Credit', () => {
+  const table = buildMRI([
+    [['54110 Real Estate Taxes', MX.entity], ['Balance Forward', MX.memo], ['0.00', 706]],
+    [['29298', MX.entity], ['04/26', MX.period], ['4/30/2026', MX.date], ['GS 00084362', MX.ref], ['@', MX.marker], ['Accrued RE Tax', MX.memo], ['75242.55', 547], ['0.00', 627], ['75242.55', MX.balance]]
+  ])
+  const r = asMapped(table.rows[1])
+  assert.equal(r.Account, '54110 Real Estate Taxes', 'Balance Forward line sets the account section')
+  assert.equal(r.Amount, '75242.55', '3 money tokens map to Debit/Credit/Balance; amount = debit − credit')
+})
+
+test('entity/account number is absorbed (sink), real Src Reference captured', () => {
+  const table = buildMRI([
+    [['54110 Real Estate Taxes', MX.entity], ['Balance Forward', MX.memo], ['0.00', 706]],
+    [['29298', MX.entity], ['04/26', MX.period], ['4/30/2026', MX.date], ['GS 00084362', MX.ref], ['@', MX.marker], ['Accrued RE Tax', MX.memo], ['75242.55', 547], ['0.00', 627], ['75242.55', MX.balance]]
+  ])
+  const r = asMapped(table.rows[1])
+  assert.equal(r.Reference, 'GS 00084362', 'reference is the Src Reference, not the entity number')
+  assert.doesNotMatch(r.Reference, /29298/, 'entity number must not land in Reference')
+  assert.doesNotMatch(r.Vendor, /29298/)
+  assert.equal(r.Description, 'Accrued RE Tax')
+})
+
+test('"Balance Forward" account headings prevent mis-attribution of short sections', () => {
+  const table = buildMRI([
+    [['51101 Fire Sprinkler - Contract', MX.entity], ['Balance Forward', MX.memo], ['725.00', 697]],
+    [['29298', MX.entity], ['04/26', MX.period], ['4/30/2026', MX.date], ['GS 00084365', MX.ref], ['Accrue Sprinkler', MX.memo], ['483.33', 547], ['0.00', 627], ['966.66', MX.balance]],
+    [['51103 Fire Sprinkler-Inspection', MX.entity], ['Balance Forward', MX.memo], ['0.00', 706]],
+    [['29298', MX.entity], ['04/26', MX.period], ['4/30/2026', MX.date], ['GS 00084368', MX.ref], ['Annual FA testing', MX.memo], ['0.00', 547], ['120.00', 627], ['160.00', MX.balance]]
+  ])
+  const data = table.rows.slice(1).map(asMapped)
+  assert.equal(data[0].Account, '51101 Fire Sprinkler - Contract')
+  assert.equal(data[1].Account, '51103 Fire Sprinkler-Inspection', 'second short section is not attributed to the first')
+  assert.equal(data[0].Amount, '483.33')
+  assert.equal(data[1].Amount, '-120') // 0 − 120
+})
+
+test('"** Account Totals" lines are excluded from transactions', () => {
+  const table = buildMRI([
+    [['54110 Real Estate Taxes', MX.entity], ['Balance Forward', MX.memo], ['0.00', 706]],
+    [['29298', MX.entity], ['4/30/2026', MX.date], ['GS 00084362', MX.ref], ['Accrued RE Tax', MX.memo], ['100.00', 547], ['0.00', 627], ['100.00', MX.balance]],
+    [['** Account Totals', 268], ['100.00', 548], ['0.00', 619], ['100.00', MX.balance]]
+  ])
+  const data = table.rows.slice(1)
+  assert.equal(data.length, 1, 'the ** Account Totals line is not a transaction')
+})
+
+test('a money value leaking into the description suppresses the amount (no skewed total)', () => {
+  const table = buildMRI([
+    [['14811 WIP - Capital Improvements', MX.entity], ['Balance Forward', MX.memo], ['0.00', 706]],
+    // Long vendor name wraps the value into the description region (x≈430), and
+    // the debit/credit columns read 0 — the columnar parse is unreliable.
+    [['29298', MX.entity], ['4/13/2026', MX.date], ['AP 064697', MX.ref], ['Furniture TWO', MX.memo], ['5,652.22', 430], ['ONE WORKPLACE', 470], ['0.00', 547], ['0.00', 627], ['12345.00', MX.balance]]
+  ])
+  const r = asMapped(table.rows[1])
+  assert.equal(r.Amount, '', 'a money token in the description ⇒ amount is suppressed, not 0')
+})
+
 // --- variance reconstruction is unchanged ----------------------------------
 
 test('variance PDF reconstruction is unchanged (GL path not triggered)', () => {

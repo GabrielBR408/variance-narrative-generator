@@ -319,8 +319,9 @@ const GL_MONEY_RE = /^\(?-?\$?\d[\d,]*(?:\.\d+)?\)?$/
 // A transaction date token: m/d/y, m-d-y, or ISO y-m-d.
 const GL_DATE_RE = /^(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{1,2}-\d{1,2})$/
 
-// Subtotal / running-total / balance-summary lines — never transactions.
-const GL_TOTAL_RE = /^(total\b|subtotal\b|beginning balance\b|ending balance\b|net (change|income|loss)\b)/i
+// Subtotal / running-total / balance-summary lines — never transactions. Leading
+// non-alphanumerics (e.g. MRI's "** Account Totals") are tolerated.
+const GL_TOTAL_RE = /^[\s*]*(total\b|subtotal\b|account totals\b|beginning balance\b|ending balance\b|net (change|income|loss)\b|grand total\b)/i
 
 // An account-section heading that leads with a code + separator, e.g.
 // "5100 · Utility-Elect-Building" or "6000: Office Supplies". Used so a heading
@@ -371,30 +372,77 @@ export function looksLikeGL(lines = []) {
   return isGLHeaderText(lines.join(' \n '))
 }
 
-// Locate the GL column header and record each column's x-band from the header
-// cell positions. Returns { idx, bands } or null. Debit and Credit are required
-// (their bands are what make a row's amount reliably attributable).
-function findGLHeader(lineCells) {
+// Locate the GL column header and record each column's x-band. Returns
+// { idx, bands } or null. Debit and Credit are required.
+//
+// Real ledgers (e.g. MRI Software) print a STACKED header spread across several
+// lines interleaved with report metadata: Debit/Credit on one line, Balance on
+// another, Date/Reference/Description elsewhere. So we anchor on the line that
+// carries both Debit and Credit, then collect the remaining column bands from
+// the whole header region (everything before the first transaction line), with
+// position guards so report chrome like "Date:" / "Page:" in the right margin is
+// never mistaken for the Date column.
+function detectGLBands(lineCells) {
   const limit = Math.min(lineCells.length, 40)
+
+  // 1) Anchor: the first line carrying both a Debit and a Credit column label.
+  let anchorIdx = -1
+  let debitX = null
+  let creditX = null
   for (let i = 0; i < limit; i++) {
     const cells = lineCells[i]
     if (!Array.isArray(cells) || cells.length === 0) continue
     if (!isGLHeaderText(cellsToLine(cells))) continue
-
-    const bands = { debitX: null, creditX: null, balanceX: null, dateX: null, nameX: null, memoX: null, numX: null }
+    debitX = creditX = null
     for (const c of cells) {
       const s = c.str.toLowerCase()
-      if (/debit|\bdr\b/.test(s) && bands.debitX == null) bands.debitX = c.x
-      else if (/credit|\bcr\b/.test(s) && bands.creditX == null) bands.creditX = c.x
-      else if (/balance/.test(s) && bands.balanceX == null) bands.balanceX = c.x
-      else if (/date/.test(s) && bands.dateX == null) bands.dateX = c.x
-      else if (/name|payee|vendor/.test(s) && bands.nameX == null) bands.nameX = c.x
-      else if (/memo|description|desc|narrative|split/.test(s) && bands.memoX == null) bands.memoX = c.x
-      else if (/num|ref|reference|type|doc|check/.test(s) && bands.numX == null) bands.numX = c.x
+      if (/debit|\bdr\b/.test(s) && debitX == null) debitX = c.x
+      else if (/credit|\bcr\b/.test(s) && creditX == null) creditX = c.x
     }
-    if (bands.debitX != null && bands.creditX != null) return { idx: i, bands }
+    if (debitX != null && creditX != null) {
+      anchorIdx = i
+      break
+    }
   }
-  return null
+  if (anchorIdx < 0) return null
+
+  // 2) First transaction line — a dated row with a money cell in the value
+  //    region — bounds the header region we scan for labels.
+  const moneyMin = Math.min(debitX, creditX) - 30
+  let firstTxn = lineCells.length
+  for (let i = anchorIdx + 1; i < Math.min(lineCells.length, anchorIdx + 60); i++) {
+    const cells = lineCells[i]
+    if (!Array.isArray(cells) || cells.length === 0) continue
+    const dated = cells.some((c) => GL_DATE_RE.test(c.str))
+    const valued = cells.some((c) => c.x >= moneyMin && parseGLMoney(c.str) !== null)
+    if (dated && valued) {
+      firstTxn = i
+      break
+    }
+  }
+
+  // 3) Collect column bands from the header region. Text-column labels must sit
+  //    left of the Debit column; Balance must sit right of Credit. Exact-word
+  //    tests avoid matching data ("Balance Forward") or chrome ("Database:").
+  const bands = { debitX, creditX, balanceX: null, dateX: null, refX: null, nameX: null, descX: null, entityX: null, periodX: null }
+  const regionEnd = Math.min(firstTxn, anchorIdx + 20)
+  for (let i = 0; i < regionEnd; i++) {
+    const cells = lineCells[i]
+    if (!Array.isArray(cells) || cells.length === 0) continue
+    for (const c of cells) {
+      const s = c.str.toLowerCase().trim()
+      if (/^balance$/.test(s) && c.x > creditX && bands.balanceX == null) bands.balanceX = c.x
+      if (c.x < debitX) {
+        if (/^date$/.test(s) && bands.dateX == null) bands.dateX = c.x
+        else if (/reference|^ref$|^num$|^doc$|^check$/.test(s) && bands.refX == null) bands.refX = c.x
+        else if (/^(name|payee|vendor)$/.test(s) && bands.nameX == null) bands.nameX = c.x
+        else if (/memo|description|desc|narrative|split|particular/.test(s) && bands.descX == null) bands.descX = c.x
+        else if (/entity|account|acct/.test(s) && bands.entityX == null) bands.entityX = c.x
+        else if (/period/.test(s) && bands.periodX == null) bands.periodX = c.x
+      }
+    }
+  }
+  return { idx: anchorIdx, bands }
 }
 
 // Assign each money token on a row to its nearest amount band (Debit / Credit /
@@ -435,12 +483,80 @@ function cleanAccountHeading(text) {
   return String(text).replace(/\s+/g, ' ').replace(/\s*:\s*$/, '').trim()
 }
 
+// A cell that is only punctuation/whitespace (e.g. MRI's "@" column marker) — it
+// carries no field content and is dropped from field assignment.
+function isPunctCell(str) {
+  return /^[^A-Za-z0-9]+$/.test(String(str))
+}
+
+// Is this (date-less) line an account-section heading, and if so what is its
+// label? Headings take three real-world forms:
+//   • carries a "Balance Forward" marker (the account's opening line — note it
+//     also prints a balance figure, so it is NOT gated on "no money");
+//   • ends with "(Continued)" (the per-page repeat);
+//   • a left-margin / code-led text line (the generic / synthetic shape).
+// The label is the leading text up to a "Balance Forward" marker, with money
+// figures and bare punctuation dropped. Returns '' when the line is not a heading.
+function glHeadingLabel(cells, text, moneyStart, headingLeftEdge) {
+  if (!/[A-Za-z]/.test(text)) return ''
+  const hasMoney = cells.some((c) => c.x >= moneyStart && parseGLMoney(c.str) !== null)
+  const isBalFwd = /balance\s+forward/i.test(text)
+  const isContinued = /\(continued\)/i.test(text)
+  const leftMargin = !hasMoney && (cells[0].x <= headingLeftEdge || GL_CODE_HEADING_RE.test(text))
+  if (!isBalFwd && !isContinued && !leftMargin) return ''
+
+  const parts = []
+  for (const c of cells) {
+    if (/balance\s+forward/i.test(c.str)) break
+    if (c.x >= moneyStart && parseGLMoney(c.str) !== null) continue
+    if (isPunctCell(c.str)) continue
+    parts.push(c.str)
+  }
+  return cleanAccountHeading(parts.join(' '))
+}
+
+// Assign a transaction row's text cells to Reference / Vendor / Description by
+// nearest detected column band. Entity and Period bands act as sinks so the
+// entity/account identifier and the period stamp are absorbed (and dropped)
+// rather than polluting the reference or vendor. When no text bands were
+// detected at all, everything falls into the vendor (preserves prior behavior).
+function assignTextFields(textCells, bands) {
+  const targets = []
+  if (bands.entityX != null) targets.push(['_sink', bands.entityX])
+  if (bands.periodX != null) targets.push(['_sink', bands.periodX])
+  if (bands.refX != null) targets.push(['reference', bands.refX])
+  if (bands.nameX != null) targets.push(['vendor', bands.nameX])
+  if (bands.descX != null) targets.push(['description', bands.descX])
+
+  const out = { reference: [], vendor: [], description: [] }
+  if (targets.length === 0) {
+    return { reference: '', vendor: textCells.map((c) => c.str).join(' ').trim(), description: '' }
+  }
+  for (const c of textCells) {
+    let best = null
+    let bestD = Infinity
+    for (const [name, x] of targets) {
+      const d = Math.abs(c.x - x)
+      if (d < bestD) {
+        bestD = d
+        best = name
+      }
+    }
+    if (best && best !== '_sink') out[best].push(c.str)
+  }
+  return {
+    reference: out.reference.join(' ').trim(),
+    vendor: out.vendor.join(' ').trim(),
+    description: out.description.join(' ').trim()
+  }
+}
+
 // Reconstruct a typed GL table from position-aware line cells. Returns null when
 // no GL header (with Debit + Credit columns) is found or no transactions are
 // reconstructed, so the caller can fall back cleanly.
 function reconstructGLTable(lineCells) {
   if (!Array.isArray(lineCells) || lineCells.length === 0) return null
-  const header = findGLHeader(lineCells)
+  const header = detectGLBands(lineCells)
   if (!header) return null
 
   const { idx, bands } = header
@@ -449,13 +565,13 @@ function reconstructGLTable(lineCells) {
     ['credit', bands.creditX],
     ['balance', bands.balanceX]
   ].filter(([, x]) => x != null)
-  // Numeric tokens left of this x are date/reference/name/memo, not money.
+  // Numeric tokens left of this x are entity/date/reference/name/memo, not money.
   const moneyStart = Math.min(...anchors.map(([, x]) => x)) - 25
   // A line starting at/near the left margin is an account-section heading; an
-  // indented text-only line (under the Name/Memo columns) is a wrapped memo. The
-  // left margin is the leftmost data column (Date / Num).
-  const leftCandidates = [bands.dateX, bands.numX].filter((x) => x != null)
-  const headingLeftEdge = (leftCandidates.length ? Math.min(...leftCandidates) : 0) + 10
+  // indented text-only line is a wrapped memo. The left margin is the leftmost
+  // detected data column (entity / date / reference).
+  const leftCandidates = [bands.entityX, bands.dateX, bands.refX].filter((x) => x != null)
+  const headingLeftEdge = (leftCandidates.length ? Math.min(...leftCandidates) : 0) + 12
 
   const dataRows = []
   const sections = []
@@ -469,7 +585,7 @@ function reconstructGLTable(lineCells) {
     const text = cellsToLine(cells)
     if (!text) continue
 
-    // A repeated header at the top of a later page is chrome, not data.
+    // A repeated column header at the top of a later page is chrome, not data.
     if (isGLHeaderText(text)) {
       lastTxn = null
       continue
@@ -477,18 +593,9 @@ function reconstructGLTable(lineCells) {
 
     const dateCell = cells.find((c) => GL_DATE_RE.test(c.str))
 
-    // Subtotal / running-balance lines (no date) close the current run and are
-    // never counted as transactions.
-    if (!dateCell && GL_TOTAL_RE.test(text)) {
-      lastTxn = null
-      lastWasTotal = true
-      continue
-    }
-
-    const moneyCells = cells.filter((c) => c !== dateCell && c.x >= moneyStart && parseGLMoney(c.str) !== null)
-
-    // A transaction needs an active account section and a date.
-    if (currentAccount && dateCell) {
+    // ---- Transaction: an active account section + a date ----
+    if (dateCell && currentAccount) {
+      const moneyCells = cells.filter((c) => c !== dateCell && c.x >= moneyStart && parseGLMoney(c.str) !== null)
       let amount = null
       if (moneyCells.length > 0) {
         const assigned = assignAmountBands(moneyCells, anchors)
@@ -496,30 +603,20 @@ function reconstructGLTable(lineCells) {
           amount = (assigned.debit || 0) - (assigned.credit || 0)
         }
       }
-
-      // Reference = money-like tokens left of the money region (e.g. a "Num").
-      const reference = cells
-        .filter((c) => c !== dateCell && c.x < moneyStart && parseGLMoney(c.str) !== null)
-        .map((c) => c.str)
-        .join(' ')
-        .trim()
-
-      // Vendor / Description = the remaining non-date, non-money text, split by
-      // the name/memo bands when both are known; otherwise all of it is the
-      // vendor (so recurring-vendor detection still works).
+      // Everything left of the money region (other than the date and bare
+      // punctuation) is a text field — including a NUMERIC reference such as a
+      // check number. Band assignment routes it; the entity/period sinks drop the
+      // entity identifier so it never lands in Reference/Vendor/Description.
       const textCells = cells.filter(
-        (c) => c !== dateCell && c.x < moneyStart && !GL_DATE_RE.test(c.str) && parseGLMoney(c.str) === null
+        (c) => c !== dateCell && c.x < moneyStart && !GL_DATE_RE.test(c.str) && !isPunctCell(c.str)
       )
-      let vendor = ''
-      let description = ''
-      if (bands.nameX != null && bands.memoX != null) {
-        const mid = (bands.nameX + bands.memoX) / 2
-        vendor = textCells.filter((c) => c.x <= mid).map((c) => c.str).join(' ').trim()
-        description = textCells.filter((c) => c.x > mid).map((c) => c.str).join(' ').trim()
-      } else {
-        vendor = textCells.map((c) => c.str).join(' ').trim()
-      }
-
+      const { reference, vendor, description } = assignTextFields(textCells, bands)
+      // A money-formatted token (e.g. "5,652.22") inside the description or vendor
+      // means a value landed OUTSIDE the amount columns — a wrapped or
+      // oddly-positioned row whose columnar parse is unreliable. Suppress the
+      // amount so a skewed figure never reaches a total (the row still supports
+      // count/vendor evidence). This strengthens, never weakens, the gate.
+      if (amount != null && /\d[\d,]*\.\d{2}(?!\d)/.test(`${description} ${vendor}`)) amount = null
       const row = [currentAccount, dateCell.str, reference, vendor, description, amount == null ? '' : formatGLAmount(amount)]
       if (dataRows.length < MAX_TABLE_ROWS) {
         dataRows.push(row)
@@ -528,24 +625,29 @@ function reconstructGLTable(lineCells) {
       lastWasTotal = false
       continue
     }
+    if (dateCell) continue // dated row before any account heading — skip
 
-    // Non-transaction text line: either a wrapped-description continuation of the
-    // previous transaction, or a new account-section heading. A heading sits at
-    // the left margin (or leads with an account code); a wrapped memo is indented
-    // under the Name/Memo columns and only continues an open transaction.
+    // ---- Total / subtotal / running-balance line ----
+    if (GL_TOTAL_RE.test(text)) {
+      lastTxn = null
+      lastWasTotal = true
+      continue
+    }
+
+    // ---- Account-section heading ----
+    const heading = glHeadingLabel(cells, text, moneyStart, headingLeftEdge)
+    if (heading) {
+      currentAccount = heading
+      sections.push(heading)
+      lastTxn = null
+      lastWasTotal = false
+      continue
+    }
+
+    // ---- Wrapped-memo continuation of the previous transaction ----
     const hasMoney = cells.some((c) => c.x >= moneyStart && parseGLMoney(c.str) !== null)
-    if (/[A-Za-z]/.test(text) && !dateCell && !hasMoney) {
-      const leftX = cells[0].x // cells are sorted left-to-right
-      const headingLike = leftX <= headingLeftEdge || GL_CODE_HEADING_RE.test(text)
-      if (!headingLike && lastTxn && !lastWasTotal) {
-        // Wrapped memo: append to the previous transaction's Description.
-        lastTxn[4] = lastTxn[4] ? `${lastTxn[4]} ${text}` : text
-      } else {
-        currentAccount = cleanAccountHeading(text)
-        sections.push(currentAccount)
-        lastTxn = null
-        lastWasTotal = false
-      }
+    if (/[A-Za-z]/.test(text) && !hasMoney && lastTxn && !lastWasTotal) {
+      lastTxn[4] = lastTxn[4] ? `${lastTxn[4]} ${text}` : text
     }
   }
 
