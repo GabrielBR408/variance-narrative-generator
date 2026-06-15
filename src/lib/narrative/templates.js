@@ -19,7 +19,8 @@ import {
   formatAbsMoney,
   formatAbsPercent,
   periodPhrase,
-  capitalize
+  capitalize,
+  displayAccountLabel
 } from './formatters.js'
 
 // Direction verb for a movement against its comparison basis. Sign of the
@@ -40,7 +41,10 @@ export function movementPhrase(comparisonType, varianceAmount) {
 // (e.g. a zero comparison base) rather than printed as a guessed value. The
 // period is not repeated here — it is carried by the section heading.
 export function varianceSentence({ account, comparisonType, varianceAmount, variancePercent }) {
-  const subject = account && account.trim() ? account.trim() : 'This line'
+  // Owner prose strips the leading account code; the coded label is retained on
+  // the note metadata (Phase 20A.1).
+  const display = displayAccountLabel(account)
+  const subject = display ? display : 'This line'
   const phrase = movementPhrase(comparisonType, varianceAmount)
   const amount = formatAbsMoney(varianceAmount)
   const pct = formatAbsPercent(variancePercent)
@@ -52,7 +56,8 @@ export function varianceSentence({ account, comparisonType, varianceAmount, vari
 // missing value — it only reports that it could not be compared. Like the
 // variance line, it inherits its period from the section heading.
 export function missingSentence({ account, hasActual, hasComparison }) {
-  const subject = account && account.trim() ? `${account.trim()}: ` : ''
+  const display = displayAccountLabel(account)
+  const subject = display ? `${display}: ` : ''
   let body
   if (!hasActual && !hasComparison) body = 'no actual or comparison figure available'
   else if (!hasActual) body = 'actual figure unavailable, so no variance was computed'

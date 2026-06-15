@@ -56,3 +56,17 @@ export function capitalize(s) {
   if (!s) return s
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
+
+// Owner-facing account label: strip a leading numeric account code (and its
+// separator) so "54110 Real Estate Taxes" reads as "Real Estate Taxes" in prose.
+// Phase 20A.1: presentation only — the original coded label is preserved on the
+// note's `account` field (used for matching, exports, and traceability); this is
+// applied solely where the label is rendered into a sentence. Falls back to the
+// original label if stripping would leave nothing. Deterministic, mirrors the
+// enrich-layer `displayAccount` so both surfaces strip codes identically.
+export function displayAccountLabel(account = '') {
+  const stripped = String(account)
+    .replace(/^\s*[0-9][0-9.\-]*\s*[·:.\-]?\s*/, '')
+    .trim()
+  return stripped || String(account).trim()
+}

@@ -75,9 +75,31 @@ function toNote(c) {
   }
 }
 
-// Rows that crossed a threshold, by definition the only ones we narrate.
+// Statement rollup / subtotal lines (e.g. "NET INCOME", "TOTAL EXPENSES",
+// "GROSS PROFIT", "SUBTOTAL …") are aggregates of the real account lines beneath
+// them — narrating them double-counts and crowds the owner's watch-list with
+// totals rather than accounts. Phase 20A.1 keeps them OUT of owner-facing notes.
+//
+// Detection is conservative and deterministic: the label must START with one of
+// those keywords AND must NOT be a normal coded account line (real accounts here
+// carry a leading numeric code, e.g. "54110 Real Estate Taxes"). This never
+// suppresses a coded account, and never suppresses a named account that merely
+// contains one of the words later (e.g. "Internet Expense"). Source rows and
+// variance figures are untouched — this is presentation only.
+const ROLLUP_PREFIX_RE = /^(total|net|gross|subtotal)\b/i
+export function isRollupLabel(label = '') {
+  const s = String(label).trim()
+  if (!s) return false
+  if (/^\s*[0-9]/.test(s)) return false // coded account → a real line, never a rollup
+  return ROLLUP_PREFIX_RE.test(s)
+}
+
+// Rows that crossed a threshold, by definition the only ones we narrate. Phase
+// 20A.1: statement rollups/subtotals are excluded from every owner-facing
+// section (high/revenue/expense notes and the executive summary count/total) so
+// the narrative reflects real account lines, not double-counted aggregates.
 function triggeredRows(comparisons) {
-  return comparisons.filter((c) => c && c.thresholdTriggered)
+  return comparisons.filter((c) => c && c.thresholdTriggered && !isRollupLabel(c.account))
 }
 
 // High Variances — every triggered row, unfavorable first then favorable, most
