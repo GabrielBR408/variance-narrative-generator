@@ -9,9 +9,15 @@
 // session and is derived purely from the normalized input.
 //
 // Output contract:
-//   { fileId, fileName, baseClassification, comparisons:[...], summary, confidence }
+//   { fileId, fileName, baseClassification, comparisons:[...], summary, confidence,
+//     comparisonSets:[{ period, comparisons, summary, confidence }] }
+//
+// Phase 7.1: statements that carry both a Current and a YTD comparison side by
+// side now yield one entry per period in `comparisonSets`. The top-level
+// `comparisons`/`summary`/`confidence` mirror the Current period so every
+// existing consumer keeps working unchanged.
 
-import { detectColumns } from './detectColumns.js'
+import { detectColumns, detectComparisonSets } from './detectColumns.js'
 import { alignRows } from './alignRows.js'
 import { calculate } from './calculate.js'
 import { summarize } from './summarize.js'
@@ -58,30 +64,51 @@ export function computeVariance(extraction, thresholds = DEFAULT_THRESHOLDS) {
   }
 
   const rows = Array.isArray(normalized.rows) ? normalized.rows : []
-  const columns = detectColumns(normalized.columns, rows)
+  const { account, sets } = detectComparisonSets(normalized.columns, rows)
 
-  // Without an actual column AND at least one comparison column there is nothing
-  // to compute. Report the shape honestly rather than inventing numbers.
-  const hasActual = columns.actual !== null
-  const hasComparison = columns.budget !== null || columns.prior !== null
-  if (!hasActual || !hasComparison) {
+  // Compute one comparison set per detected period that actually has an actual
+  // column plus a budget or prior to compare against. The account/label column
+  // is shared across every period.
+  const comparisonSets = []
+  for (const set of sets) {
+    const columns = { account, ...set.columns }
+    const hasActual = columns.actual !== null
+    const hasComparison = columns.budget !== null || columns.prior !== null
+    if (!hasActual || !hasComparison) continue
+
+    const aligned = alignRows(rows, columns)
+    const comparisons = calculate(aligned, thresholds, extraction.confidence)
+    const summary = summarize(comparisons, rows.length)
+    comparisonSets.push({
+      period: set.period,
+      columns,
+      comparisons,
+      summary,
+      confidence: overallConfidence(comparisons)
+    })
+  }
+
+  // Without any comparable period there is nothing to compute. Report the shape
+  // honestly rather than inventing numbers.
+  if (comparisonSets.length === 0) {
     const result = empty(base, 'no-comparable-columns')
-    result.columns = columns
+    result.columns = { account, actual: null, budget: null, prior: null }
     result.summary.totalRowsReviewed = rows.length
     return result
   }
 
-  const aligned = alignRows(rows, columns)
-  const comparisons = calculate(aligned, thresholds, extraction.confidence)
-  const summary = summarize(comparisons, rows.length)
+  // Top-level fields mirror the Current period for backward compatibility,
+  // falling back to the first available set when no Current period is present.
+  const primary = comparisonSets.find((s) => s.period === 'current') || comparisonSets[0]
 
   return {
     ...base,
-    columns,
-    comparisons,
-    summary,
-    confidence: overallConfidence(comparisons)
+    columns: primary.columns,
+    comparisons: primary.comparisons,
+    summary: primary.summary,
+    confidence: primary.confidence,
+    comparisonSets
   }
 }
 
-export { detectColumns, alignRows, calculate, summarize, DEFAULT_THRESHOLDS }
+export { detectColumns, detectComparisonSets, alignRows, calculate, summarize, DEFAULT_THRESHOLDS }

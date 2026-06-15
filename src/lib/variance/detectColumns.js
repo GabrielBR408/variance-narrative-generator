@@ -18,6 +18,15 @@ const COLUMN_PATTERNS = [
 // Header names that explicitly identify the account/label column.
 const ACCOUNT_RE = /account|acct|description|\bdesc\b|\bgl\b|\bname\b|line\s*item|\bitem\b|category|particulars/i
 
+// Period marker. A value column whose header reads as year-to-date belongs to
+// the YTD set; everything else (Current, MTD, plain "Actual"…) is the Current
+// set. Deterministic keyword check only — same header, same period.
+const YTD_RE = /\bytd\b|year[-\s]*to[-\s]*date|y[-.\s]*t[-.\s]*d\b/i
+
+function detectPeriod(header) {
+  return YTD_RE.test(String(header)) ? 'ytd' : 'current'
+}
+
 function matchType(header) {
   const h = String(header).toLowerCase()
   for (const [type, patterns] of COLUMN_PATTERNS) {
@@ -76,4 +85,51 @@ export function detectColumns(columns = [], rows = []) {
 
   result.account = detectAccountColumn(columns, rows, valueIndexes)
   return result
+}
+
+// Period-aware detection. Some statements lay Current and YTD comparisons side
+// by side ("Current Actual | Current Budget | … | YTD Actual | YTD Budget | …").
+// This groups the value columns by period so each can be compared on its own,
+// while the account/label column is shared across all periods.
+//
+// Returns { account, sets: [{ period, columns: { actual, budget, prior } }] }.
+// Sets are ordered Current first (the default/backward-compatible view), then
+// YTD, then any other period in first-seen order. Within a period the first
+// column to claim a value type wins, mirroring detectColumns.
+export function detectComparisonSets(columns = [], rows = []) {
+  if (!Array.isArray(columns) || columns.length === 0) {
+    return { account: null, sets: [] }
+  }
+
+  const byPeriod = new Map() // period -> { actual, budget, prior } indexes
+  const seen = [] // periods in first-seen order
+  const valueIndexes = []
+
+  columns.forEach((header, i) => {
+    const type = matchType(header)
+    if (!type) return
+    const period = detectPeriod(header)
+    if (!byPeriod.has(period)) {
+      byPeriod.set(period, { actual: null, budget: null, prior: null })
+      seen.push(period)
+    }
+    const set = byPeriod.get(period)
+    if (set[type] === null) {
+      set[type] = i
+      valueIndexes.push(i)
+    }
+  })
+
+  const account = detectAccountColumn(columns, rows, valueIndexes)
+
+  const priority = ['current', 'ytd']
+  const ordered = [
+    ...priority.filter((p) => byPeriod.has(p)),
+    ...seen.filter((p) => !priority.includes(p))
+  ]
+
+  return {
+    account,
+    sets: ordered.map((period) => ({ period, columns: byPeriod.get(period) }))
+  }
 }
