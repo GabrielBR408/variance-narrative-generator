@@ -38,8 +38,11 @@ const DEFAULT_STYLE = {
   notes: ''
 }
 const DEFAULT_VARIANCE = {
-  thresholdLogic: 'AND',
-  dollarThreshold: '10000',
+  // A row is flagged when it crosses EITHER threshold (dollar OR percent) — the
+  // variance engine's only rule (see src/lib/variance/thresholds.js). There is
+  // no AND/OR toggle: the semantics are always OR, so the UI exposes only the
+  // two threshold values. Default is $1,000 OR 10%, matching DEFAULT_THRESHOLDS.
+  dollarThreshold: '1000',
   percentThreshold: '10',
   narrativeDetail: 'Standard',
   include: { glResearch: true, suggestedCauses: true, questions: true, priorComparison: true },
