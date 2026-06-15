@@ -35,9 +35,15 @@ export const TABLE_COLUMNS = Object.freeze([
 // Number of value cells that follow the account label on a data row.
 const VALUE_COUNT = 8
 
-// Among the eight value cells, these (0-based) are percentages: Current
-// Variance % and YTD Variance %. Everything else is a dollar amount.
-const PERCENT_CELLS = new Set([3, 7])
+// Which value cells are percentages is DERIVED from the header names above
+// rather than hard-coded, so the cell mapping can never drift out of step with
+// TABLE_COLUMNS. (0-based among the eight value cells; here: Current Variance %
+// and YTD Variance %.)
+const PERCENT_CELLS = new Set(
+  TABLE_COLUMNS.slice(1)
+    .map((name, i) => (/%/.test(name) ? i : -1))
+    .filter((i) => i >= 0)
+)
 
 // Bound how many data rows we reconstruct so a large document can't spike
 // memory. Not a storage limit — nothing is ever stored.
@@ -126,6 +132,55 @@ function parseRows(line) {
     if (m.index === ROW_RE.lastIndex) ROW_RE.lastIndex++ // guard against zero-width
   }
   return rows
+}
+
+// Horizontal position of a pdf.js text item (transform[4] = x translation).
+// Items without a usable transform sort to the far left so they keep their
+// relative arrival order via the stable sort.
+function itemX(item) {
+  const t = item && item.transform
+  return Array.isArray(t) && t.length >= 5 && Number.isFinite(t[4]) ? t[4] : -Infinity
+}
+
+// Group pdf.js text items into visual lines (split on the per-item end-of-line
+// marker), ordering the items WITHIN each line by horizontal position before
+// joining.
+//
+// Why order matters: pdf.js returns text items in content-stream order, which
+// for a report's right-aligned numeric columns is not guaranteed to be visual
+// left-to-right — two adjacent cells (e.g. Current Budget and Current Variance)
+// can arrive swapped. The downstream row parser maps cells strictly by their
+// position in the line, so if the line is out of order the columns are too.
+// Sorting by x makes every line read left-to-right, so the parser's positional
+// mapping is always correct. The sort is stable, so already-ordered lines (the
+// common case) are unchanged.
+//
+// Returns an array of normalized line strings (whitespace collapsed, trimmed).
+export function groupItemsIntoLines(items = []) {
+  const lines = []
+  let current = []
+
+  const flush = () => {
+    if (current.length === 0) return
+    const line = current
+      .slice()
+      .sort((a, b) => itemX(a) - itemX(b))
+      .map((it) => (it && typeof it.str === 'string' ? it.str : ''))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (line) lines.push(line)
+    current = []
+  }
+
+  for (const item of Array.isArray(items) ? items : []) {
+    const str = item && typeof item.str === 'string' ? item.str : ''
+    if (str) current.push(item)
+    if (item && item.hasEOL) flush()
+  }
+  flush()
+
+  return lines
 }
 
 // True when the text body carries the signatures of a variance report header.

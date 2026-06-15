@@ -14,7 +14,7 @@
 
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { reconstructTable } from './pdfTable.js'
+import { reconstructTable, groupItemsIntoLines } from './pdfTable.js'
 
 // Run the parser in pdf.js's own worker (this is part of the library, not an
 // app-level background job). Configured once at module load.
@@ -51,24 +51,12 @@ export async function extractPdf(file, maxPages) {
       const page = await doc.getPage(i)
       const content = await page.getTextContent()
 
-      // Group text items into visual lines using pdf.js's end-of-line marker.
-      // Items within a line are space-joined (matching the previous behavior),
-      // so a number like "29,522.70" stays one token and adjacent cells stay
-      // separated.
-      let current = []
-      for (const item of content.items) {
-        const str = item && typeof item.str === 'string' ? item.str : ''
-        if (str) current.push(str)
-        if (item && item.hasEOL) {
-          const line = current.join(' ').replace(/\s+/g, ' ').trim()
-          if (line) lines.push(line)
-          current = []
-        }
-      }
-      if (current.length) {
-        const line = current.join(' ').replace(/\s+/g, ' ').trim()
-        if (line) lines.push(line)
-      }
+      // Group text items into visual lines using pdf.js's end-of-line marker,
+      // ordering each line's items by horizontal position so columns always read
+      // left-to-right (pdf.js emits items in content-stream order, which for
+      // right-aligned numeric columns is not always visual order). A number like
+      // "29,522.70" stays one token and adjacent cells stay separated.
+      for (const line of groupItemsIntoLines(content.items)) lines.push(line)
 
       // Per-page text string — same shape consumers already rely on.
       const pageText = content.items
