@@ -244,6 +244,7 @@ body {
 .export-btn:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
 .export-btn--secondary { background: #fff; color: var(--accent-ink); }
 .export-btn--secondary:hover { background: #eaf6f1; border-color: var(--accent-ink); }
+.export-btn:disabled { opacity: 0.6; cursor: progress; }
 .export-msg { font-size: 0.84rem; margin: 0.6rem 0 0; }
 .export-msg--ok { color: var(--accent-ink); }
 .export-msg--error { color: var(--danger); }

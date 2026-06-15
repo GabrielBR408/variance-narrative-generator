@@ -1,17 +1,19 @@
 import React, { useState } from 'react'
 import { narrativeToMarkdown, narrativeToClipboardText } from '../lib/export/markdown.js'
-import { exportFileName } from '../lib/export/exportState.js'
+import { narrativeToDocxBlob } from '../lib/export/docx.js'
+import { exportFileName, docxFileName } from '../lib/export/exportState.js'
 
-// --- Export actions — Phase 10A -------------------------------------------
-// Presentation only. Renders "Copy Narrative" and "Download Markdown" for a
-// generated narrative. The exported text is built by the pure, tested
-// src/lib/export/markdown.js — this component never authors or reformats prose.
-// It only appears once a generation has succeeded (the parent gates on
-// canExport), and degrades safely: a failed copy shows a retry-friendly note,
-// never throws.
+// --- Export actions — Phase 10A (Copy + Markdown) / Phase 11 (DOCX) --------
+// Presentation only. Renders "Copy Narrative", "Download Markdown", and
+// "Download DOCX" for a generated narrative. The exported text/structure is
+// built by the pure, tested src/lib/export/{markdown,docx}.js — this component
+// never authors or reformats prose. It only appears once a generation has
+// succeeded (the parent gates on canExport), and degrades safely: a failed
+// copy or DOCX build shows a retry-friendly note, never throws.
 //
-// Boundaries (Phase 10A): no storage, no document rendering, no network, no
-// AI/LLM. The download is an in-memory Blob the browser saves locally.
+// Boundaries: browser-only. No storage, no server-side document generation, no
+// network, no AI/LLM. Both downloads are in-memory Blobs the browser saves
+// locally; nothing is persisted.
 
 // Best-effort clipboard write. Prefers the async Clipboard API (works in secure
 // contexts incl. installed PWAs); falls back to a hidden textarea + execCommand
@@ -38,19 +40,31 @@ async function writeClipboard(text) {
   if (!ok) throw new Error('Copy command was rejected.')
 }
 
-// Trigger a local download of the Markdown as a .md file. Object URL is revoked
+// Trigger a local download of an in-memory Blob. Object URL is revoked
 // immediately after the click so nothing lingers in memory.
-function downloadMarkdown(narrative) {
-  const md = narrativeToMarkdown(narrative)
-  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = exportFileName(narrative)
+  a.download = filename
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+}
+
+// Trigger a local download of the Markdown as a .md file.
+function downloadMarkdown(narrative) {
+  const md = narrativeToMarkdown(narrative)
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+  downloadBlob(blob, exportFileName(narrative))
+}
+
+// Build the .docx in the browser and trigger a local download. Async because
+// docx zips the document asynchronously; callers handle the rejection.
+async function downloadDocx(narrative) {
+  const blob = await narrativeToDocxBlob(narrative)
+  downloadBlob(blob, docxFileName(narrative))
 }
 
 const COPY_LABEL = {
@@ -59,8 +73,16 @@ const COPY_LABEL = {
   error: 'Copy failed — try again'
 }
 
+const DOCX_LABEL = {
+  idle: 'Download DOCX',
+  working: 'Preparing DOCX…',
+  done: 'DOCX downloaded ✓',
+  error: 'DOCX failed — try again'
+}
+
 export default function ExportActions({ narrative }) {
   const [copyState, setCopyState] = useState('idle') // idle | copied | error
+  const [docxState, setDocxState] = useState('idle') // idle | working | done | error
 
   async function handleCopy() {
     try {
@@ -68,6 +90,16 @@ export default function ExportActions({ narrative }) {
       setCopyState('copied')
     } catch {
       setCopyState('error')
+    }
+  }
+
+  async function handleDocx() {
+    setDocxState('working')
+    try {
+      await downloadDocx(narrative)
+      setDocxState('done')
+    } catch {
+      setDocxState('error')
     }
   }
 
@@ -90,6 +122,15 @@ export default function ExportActions({ narrative }) {
         >
           Download Markdown
         </button>
+        <button
+          type="button"
+          className="export-btn export-btn--secondary"
+          onClick={handleDocx}
+          disabled={docxState === 'working'}
+          onMouseEnter={() => (docxState === 'done' || docxState === 'error') && setDocxState('idle')}
+        >
+          {DOCX_LABEL[docxState]}
+        </button>
       </div>
       {copyState !== 'idle' && (
         <p
@@ -99,6 +140,16 @@ export default function ExportActions({ narrative }) {
           {copyState === 'error'
             ? 'Could not copy to the clipboard. You can still download the Markdown.'
             : 'Narrative copied to your clipboard.'}
+        </p>
+      )}
+      {(docxState === 'done' || docxState === 'error') && (
+        <p
+          className={`export-msg export-msg--${docxState === 'error' ? 'error' : 'ok'}`}
+          role={docxState === 'error' ? 'alert' : 'status'}
+        >
+          {docxState === 'error'
+            ? 'Could not build the Word document. You can still copy or download the Markdown.'
+            : 'Word document downloaded.'}
         </p>
       )}
     </div>

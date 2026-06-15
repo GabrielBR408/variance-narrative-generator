@@ -58,7 +58,9 @@ Upload
   variance calculation, and threshold logic (dollar/percent, AND/OR).
 - **Narrative** — significant variances are turned into plain-language narrative
   sections by deterministic templates and formatters.
-- **Export** — planned; not implemented yet (results are display-only).
+- **Export** — browser-only. A successful generation offers Copy Narrative,
+  Download Markdown, and Download DOCX; all three render the same deterministic
+  narrative locally with no server, storage, or AI involved.
 
 ### Code map
 
@@ -71,6 +73,8 @@ Upload
   `calculate.js`, `thresholds.js`, `summarize.js`, `index.js`).
 - `src/lib/narrative/` — deterministic narrative engine (`templates.js`,
   `sections.js`, `formatters.js`, `generateNarrative.js`, `index.js`).
+- `src/lib/export/` — browser-only export layer (`markdown.js`, `docx.js`,
+  `exportState.js`); `src/components/ExportActions.jsx` renders the buttons.
 - `server/generate.js` — backend `/generate` upload handler.
 - `test/`, `tests/` — Node test-runner suites for variance, narrative, and PDF
   table reconstruction.
@@ -94,6 +98,10 @@ Upload
   calculation, and thresholds.
 - **Phase 9A — Deterministic Narrative Engine** — rule-based narrative
   generation from variance results.
+- **Phase 10A — Export (Copy + Markdown)** — deterministic, browser-only Copy
+  Narrative and Download Markdown actions.
+- **Phase 11 — DOCX Export** — additive, browser-only Download DOCX (via the
+  `docx` package) using the same generated narrative; Markdown export remains.
 - **CI foundation enabled** — GitHub Actions runs `node --test` and
   `npm run build` on every push and pull request (Node 20).
 
@@ -109,5 +117,6 @@ npm test         # run the test suite (node --test)
 
 ## Not yet implemented
 
-Export, persistence, authentication, and any AI/model integration are
-deliberately out of scope at this stage.
+Persistence, authentication, and any AI/model integration are deliberately out
+of scope at this stage. Export is browser-only (Copy / Markdown / DOCX) with no
+server-side document generation or storage.
