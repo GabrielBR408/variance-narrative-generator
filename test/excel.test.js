@@ -68,14 +68,17 @@ function supporting({ fileName, type, columns, rows }) {
   return { fileName, status: 'ok', classification: { type }, normalized: { columns, rows } }
 }
 
+// Amounts carry cents and do not sum to a round figure, so the rounded
+// "approximately" display can be distinguished from the raw internal total
+// (9200.50 + 8215.49 = 17415.99 → displays as ~$17,400).
 const GL = (fileName = 'General Ledger.pdf') =>
   supporting({
     fileName,
     type: 'General Ledger (GL)',
     columns: ['Account', 'Vendor', 'Amount'],
     rows: [
-      ['Utility Expense Recovery', 'PG&E', '4000'],
-      ['Utility Expense Recovery', 'PG&E', '3400']
+      ['Utility Expense Recovery', 'PG&E', '9200.50'],
+      ['Utility Expense Recovery', 'PG&E', '8215.49']
     ]
   })
 
@@ -111,7 +114,9 @@ test('owner Supporting Detail summarizes GL detail without any file name', () =>
   const row = rows.find((r) => r.account === 'Utility Expense Recovery')
   assert.match(row.supporting, /^GL:/)
   assert.match(row.supporting, /PG&E/)
-  assert.match(row.supporting, /~\$7,400/)
+  // Rounded "approximately" presentation matching the narrative — no cents.
+  assert.match(row.supporting, /~\$17,400\b/)
+  assert.doesNotMatch(row.supporting, /17,415\.99|\.\d\d/)
   assert.doesNotMatch(row.supporting, /General Ledger\.pdf|Supporting file/)
 })
 
@@ -131,7 +136,8 @@ test('evidence rows carry the file name (debug sheet) and GL totals', () => {
   const ev = model.evidenceRows[0]
   assert.equal(ev.fileName, 'General Ledger.pdf')
   assert.equal(ev.matches, 2)
-  assert.equal(ev.total, 7400)
+  // The evidence sheet preserves the exact raw total (no rounding) for traceability.
+  assert.ok(Math.abs(ev.total - 17415.99) < 0.001, `expected raw 17415.99, got ${ev.total}`)
   assert.equal(ev.vendor, 'PG&E')
 })
 

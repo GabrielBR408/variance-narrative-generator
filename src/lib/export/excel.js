@@ -24,6 +24,7 @@
 
 import ExcelJS from 'exceljs'
 import { formatMoney } from '../narrative/formatters.js'
+import { approxMoney } from '../enrich/index.js'
 
 export const OWNER_SHEET = 'Owner Summary'
 export const EVIDENCE_SHEET = 'Supporting Evidence'
@@ -134,7 +135,10 @@ function ownerSupportSummary(note) {
     if (d.topVendorCount > 1 && d.topVendor) parts.push(String(d.topVendor).replace(/\s+/g, ' ').trim())
     else if (count > 0) parts.push(`${count} GL ${count === 1 ? 'entry' : 'entries'}`)
     if (typeof d.total === 'number' && Number.isFinite(d.total) && d.total !== 0) {
-      parts.push(`~${formatMoney(Math.abs(d.total))}`)
+      // Display only: present the rounded "approximately" style the narrative
+      // uses, so the two surfaces match. The raw total is preserved internally
+      // (and printed exactly in the evidence sheet's GL Total column).
+      parts.push(`~${approxMoney(d.total)}`)
     }
     return parts.length ? `GL: ${parts.join(' · ')}` : 'GL match'
   }

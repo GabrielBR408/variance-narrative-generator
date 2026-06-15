@@ -79,8 +79,9 @@ function join(...parts) {
 
 // Round a GL total to a sensible "approximately" magnitude so it reads as an
 // aggregate, never a fabricated exact figure: nearest 100 at/above $1,000, else
-// nearest 10. Formatted with thousands separators and no decimals.
-function approxMoney(total) {
+// nearest 10. Formatted with thousands separators and no decimals. Shared with
+// the Excel export so the narrative and the workbook present totals identically.
+export function approxMoney(total) {
   const abs = Math.abs(total)
   const step = abs >= 1000 ? 100 : 10
   const rounded = Math.round(abs / step) * step
