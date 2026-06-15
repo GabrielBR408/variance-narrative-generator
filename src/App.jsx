@@ -7,6 +7,7 @@ import ResultPanel from './components/ResultPanel.jsx'
 import { classifyFile } from './lib/classify.js'
 import { extractFile } from './lib/extract/extract.js'
 import { extractionReadiness } from './lib/generateState.js'
+import { enrichNarrative } from './lib/enrich/index.js'
 
 // Stable in-memory key for a File. Same name+size+mtime ⇒ same extraction, so
 // we never re-open a file we've already read this session.
@@ -179,6 +180,12 @@ export default function App() {
         throw new Error((data && data.error) || 'Generation could not be completed. Try again.')
       }
 
+      // Phase 15: enrich the server's base-only narrative with deterministic
+      // evidence from the supporting files (which the browser already extracted).
+      // With no supporting files or no confident match, this is a no-op and the
+      // narrative is byte-identical to the server's.
+      const narrative = enrichNarrative(data.narrative, { supporting: supportingExtractions })
+
       setResult({
         jobId: data.jobId,
         filesReceived: data.filesReceived,
@@ -186,7 +193,7 @@ export default function App() {
         files: Array.isArray(data.files) ? data.files : [],
         extraction: data.extraction,
         variance: data.variance,
-        narrative: data.narrative
+        narrative
       })
       setStatus('success')
     } catch (err) {

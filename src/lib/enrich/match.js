@@ -1,0 +1,164 @@
+// --- Supporting-evidence matching — Phase 15 -------------------------------
+// Deterministic, content-only matching of a flagged base-report account against
+// rows extracted from supporting files. NO AI/LLM, NO embeddings, NO network —
+// just normalized string comparison with an explicit, auditable confidence
+// score and floor. Pure functions: the same inputs always produce the same
+// matches in the same order.
+//
+// Matching tiers (highest first):
+//   1.0  exact account CODE match (leading numeric token, e.g. "5100")
+//   0.9  exact normalized NAME match
+//   0.7  conservative substring containment (guarded by length + token count)
+//   <0.6 partial token overlap — below the floor, so never attached
+//
+// Anything scoring below CONFIDENCE_FLOOR is discarded, so a weak/partial
+// resemblance never produces a citation.
+
+export const CONFIDENCE_FLOOR = 0.6
+export const MAX_CITATIONS_PER_NOTE = 3
+
+// Columns in a supporting file that are likely to carry the account label.
+const ACCOUNT_COL_RE = /account|acct|description|\bgl\b|\bname\b|item|line|category/i
+
+// A leading numeric token used as an account code: "5100", "5100-10", "51.00".
+const CODE_RE = /^\s*([0-9][0-9.\-]*[0-9]|[0-9])/
+
+// Cells that are purely numeric/symbolic are values, not account labels.
+const NUMERIC_ONLY_RE = /^[\s0-9.,$()%\-]+$/
+
+export function accountCode(label = '') {
+  const m = String(label).match(CODE_RE)
+  return m ? m[1].replace(/[.\-]+$/, '') : ''
+}
+
+// Lowercase, strip a leading code token, drop punctuation, collapse whitespace.
+// "5100 · Utility Expense Recovery" → "utility expense recovery".
+export function normalizeName(label = '') {
+  return String(label)
+    .toLowerCase()
+    .replace(/^\s*[0-9][0-9.\-]*\s*[·:.\-]?\s*/, '') // leading code + separator
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function tokensOf(normName = '') {
+  return normName.split(' ').filter(Boolean)
+}
+
+// Build a flat, deterministic index of candidate account entries from the
+// supporting extractions. Only files that read cleanly contribute. Each entry
+// records its file, classification, derived code/normalized-name/tokens, and the
+// source row index for traceability.
+export function buildEvidenceIndex(supporting = []) {
+  const entries = []
+  if (!Array.isArray(supporting)) return entries
+
+  for (const ex of supporting) {
+    if (!ex || typeof ex !== 'object') continue
+    if (ex.status && ex.status !== 'ok') continue
+    const normalized = ex.normalized || {}
+    const rows = Array.isArray(normalized.rows) ? normalized.rows : []
+    if (rows.length === 0) continue
+
+    const columns = Array.isArray(normalized.columns) ? normalized.columns : []
+    let col = columns.findIndex((c) => ACCOUNT_COL_RE.test(String(c)))
+    if (col < 0) col = 0
+
+    const fileName = ex.fileName || ''
+    const classificationType = (ex.classification && ex.classification.type) || 'Supporting Document'
+
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r]
+      if (!Array.isArray(row)) continue
+      const label = String(row[col] ?? '').trim()
+      if (!label || NUMERIC_ONLY_RE.test(label)) continue
+      const normName = normalizeName(label)
+      if (!normName) continue
+      entries.push({
+        fileName,
+        classificationType,
+        label,
+        code: accountCode(label),
+        normName,
+        tokens: tokensOf(normName),
+        sourceRow: r
+      })
+    }
+  }
+  return entries
+}
+
+// Score one base account against one index entry. Returns 0..1.
+export function scoreMatch(baseAccount, entry) {
+  const baseCode = accountCode(baseAccount)
+  const baseNorm = normalizeName(baseAccount)
+  if (!baseNorm) return 0
+  const baseTokens = tokensOf(baseNorm)
+
+  // 1) Exact account code.
+  if (baseCode && entry.code && baseCode === entry.code) return 1.0
+  // 2) Exact normalized name.
+  if (baseNorm === entry.normName) return 0.9
+  // 3) Conservative substring containment, guarded so short/single-word labels
+  //    (e.g. "tax") cannot match a longer unrelated account.
+  if (
+    baseNorm.length >= 5 &&
+    entry.normName.length >= 5 &&
+    baseTokens.length >= 2 &&
+    entry.tokens.length >= 2 &&
+    (entry.normName.includes(baseNorm) || baseNorm.includes(entry.normName))
+  ) {
+    return 0.7
+  }
+  // 4) Partial token overlap — deliberately scaled below the floor so a partial
+  //    resemblance is scored but never attached on its own.
+  const baseSet = new Set(baseTokens)
+  let shared = 0
+  for (const t of new Set(entry.tokens)) if (baseSet.has(t)) shared++
+  const denom = Math.max(baseTokens.length, entry.tokens.length, 1)
+  return 0.6 * (shared / denom)
+}
+
+// Match one flagged account to supporting evidence. Returns a deterministic,
+// deduped, capped list of citations:
+//   [{ fileName, classificationType, confidence, sourceRows }]
+// One citation per file (best score, all matching rows collected), ordered by
+// file name then first source row.
+export function matchAccount(account, index = [], options = {}) {
+  const floor = Number.isFinite(options.floor) ? options.floor : CONFIDENCE_FLOOR
+  const cap = Number.isFinite(options.cap) ? options.cap : MAX_CITATIONS_PER_NOTE
+  if (!account || !Array.isArray(index) || index.length === 0) return []
+
+  const byFile = new Map()
+  for (const entry of index) {
+    const score = scoreMatch(account, entry)
+    if (score < floor) continue
+    const existing = byFile.get(entry.fileName)
+    if (!existing) {
+      byFile.set(entry.fileName, {
+        fileName: entry.fileName,
+        classificationType: entry.classificationType,
+        confidence: score,
+        sourceRows: new Set([entry.sourceRow])
+      })
+    } else {
+      existing.confidence = Math.max(existing.confidence, score)
+      existing.sourceRows.add(entry.sourceRow)
+    }
+  }
+
+  return [...byFile.values()]
+    .map((c) => ({
+      fileName: c.fileName,
+      classificationType: c.classificationType,
+      confidence: c.confidence,
+      sourceRows: [...c.sourceRows].sort((a, b) => a - b)
+    }))
+    .sort((a, b) => {
+      const byName = a.fileName.localeCompare(b.fileName)
+      if (byName !== 0) return byName
+      return (a.sourceRows[0] ?? 0) - (b.sourceRows[0] ?? 0)
+    })
+    .slice(0, cap)
+}

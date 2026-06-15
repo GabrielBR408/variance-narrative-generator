@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { computeVariance } from '../lib/variance/index.js'
 import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
 import { generateNarrative } from '../lib/narrative/index.js'
+import { enrichNarrative } from '../lib/enrich/index.js'
 
 // --- Narrative Summary — Phase 9A -----------------------------------------
 // Presentation only. Runs the deterministic variance engine over the normalized
@@ -94,11 +95,15 @@ function NarrativeItem({ narrative }) {
 export default function NarrativeSummary({ items }) {
   const narratives = useMemo(() => {
     if (!items || items.length === 0) return []
-    return items
-      .filter((ex) => ex && ex.status === 'ok')
+    const ok = items.filter((ex) => ex && ex.status === 'ok')
+    return ok
       .map((ex) => {
         const variance = computeVariance(ex, DEFAULT_THRESHOLDS)
-        return generateNarrative(variance)
+        const narrative = generateNarrative(variance)
+        // Phase 15: enrich with every OTHER uploaded file as supporting evidence,
+        // so the preview matches the enriched result the generate flow produces.
+        const supporting = ok.filter((o) => o !== ex)
+        return enrichNarrative(narrative, { supporting })
       })
       // Only surface files that actually produced at least one comparable period.
       .filter((n) => Array.isArray(n.periods) && n.periods.length > 0)
