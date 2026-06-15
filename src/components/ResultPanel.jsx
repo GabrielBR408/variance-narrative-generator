@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { classifyFile, confidenceTier } from '../lib/classify.js'
 
 const STATUS_TEXT = {
@@ -77,13 +77,75 @@ export default function ResultPanel({ status, result }) {
             </ul>
           )}
 
-          <div className="narrative">
-            <div className="narrative-label">Narrative</div>
-            <p className="narrative-body">{result.summary}</p>
-            <p className="narrative-note">Analysis engine not connected yet.</p>
-          </div>
+          <ResultNarrative narrative={result.narrative} />
         </>
       )}
     </section>
+  )
+}
+
+const SECTIONS = [
+  { key: 'executiveSummary', title: 'Executive Summary' },
+  { key: 'highVariances', title: 'High Variances' },
+  { key: 'missingData', title: 'Missing Data' },
+  { key: 'revenueNotes', title: 'Revenue Notes' },
+  { key: 'expenseNotes', title: 'Expense Notes' }
+]
+
+// Renders the deterministic narrative returned by /generate. Presentation only —
+// every sentence is produced by the server's narrative engine; nothing here
+// invents or reformats figures.
+function ResultNarrative({ narrative }) {
+  const periods = narrative && Array.isArray(narrative.periods) ? narrative.periods : []
+  const [period, setPeriod] = useState(periods[0]?.period || 'current')
+
+  if (periods.length === 0) {
+    return (
+      <div className="narrative">
+        <div className="narrative-label">Narrative</div>
+        <p className="result-empty">
+          No comparable variance data was found in the base report, so there is nothing to narrate.
+        </p>
+      </div>
+    )
+  }
+
+  const active = periods.find((p) => p.period === period) || periods[0]
+  const hasMultiplePeriods = periods.length > 1
+
+  return (
+    <div className="narrative">
+      <div className="narrative-label">Narrative</div>
+      {hasMultiplePeriods && (
+        <div className="variance-periods" role="tablist" aria-label="Comparison period">
+          {periods.map((p) => (
+            <button
+              key={p.period}
+              type="button"
+              role="tab"
+              aria-selected={p.period === active.period}
+              className={`variance-period${p.period === active.period ? ' variance-period--on' : ''}`}
+              onClick={() => setPeriod(p.period)}
+            >
+              {p.periodLabel}
+            </button>
+          ))}
+        </div>
+      )}
+      {SECTIONS.map(({ key, title }) => {
+        const notes = Array.isArray(active[key]) ? active[key] : []
+        if (notes.length === 0) return null
+        return (
+          <div key={key} className="narrative-section">
+            <h4 className="narrative-section-title">{title}</h4>
+            <ul className="narrative-notes">
+              {notes.map((n, i) => (
+                <li key={i} className="narrative-note">{n.text}</li>
+              ))}
+            </ul>
+          </div>
+        )
+      })}
+    </div>
   )
 }
