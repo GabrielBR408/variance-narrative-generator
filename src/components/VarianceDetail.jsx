@@ -24,13 +24,10 @@ export default function VarianceDetail({ variance, setVariance }) {
         <span className="step-note">Control what gets discussed.</span>
       </summary>
       <div className="panel-body">
-        <label className="field">
-          <span className="field-label">Threshold Logic</span>
-          <select className="field-control" value={variance.thresholdLogic} onChange={(e) => set('thresholdLogic', e.target.value)}>
-            <option value="AND">AND</option>
-            <option value="OR">OR</option>
-          </select>
-        </label>
+        <p className="panel-note">
+          A line is flagged when it crosses <strong>either</strong> threshold —
+          the dollar amount <strong>or</strong> the percentage.
+        </p>
 
         <label className="field">
           <span className="field-label">Dollar Threshold</span>

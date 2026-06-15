@@ -135,6 +135,7 @@ body {
 }
 .step--panel[open] > summary::after { content: '–'; }
 .panel-body { padding: 0 1.5rem 1.5rem; border-top: 1px solid var(--line); }
+.panel-note { font-size: 0.84rem; color: var(--muted); margin: 0.9rem 0 0; }
 
 /* Fields */
 .field { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.7rem 0; }

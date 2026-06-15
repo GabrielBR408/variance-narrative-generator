@@ -55,7 +55,8 @@ Upload
   form (`{ rows, columns, accounts, dates, values }`) with an extraction
   confidence.
 - **Variance** — normalized data is analyzed: column detection, row alignment,
-  variance calculation, and threshold logic (dollar/percent, AND/OR).
+  variance calculation, and threshold logic (a line is flagged when it crosses
+  either the dollar **or** the percent threshold).
 - **Narrative** — significant variances are turned into plain-language narrative
   sections by deterministic templates and formatters.
 - **Export** — browser-only. A successful generation offers Copy Narrative,
