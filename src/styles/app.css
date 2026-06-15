@@ -296,6 +296,15 @@ body {
 .variance-stats { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0.7rem 0; font-size: 0.82rem; color: var(--muted); }
 .variance-stats strong { color: var(--ink); }
 
+.variance-periods { display: inline-flex; gap: 0; margin: 0.7rem 0 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.variance-period {
+  appearance: none; border: none; background: #fff; cursor: pointer;
+  padding: 0.3rem 0.85rem; font-size: 0.78rem; font-weight: 600; color: var(--muted);
+  border-right: 1px solid var(--line);
+}
+.variance-period:last-child { border-right: none; }
+.variance-period--on { background: var(--accent-ink, #1c2a3a); color: #fff; }
+
 .variance-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .variance-table { border-collapse: collapse; width: 100%; font-size: 0.78rem; }
 .variance-table th, .variance-table td {

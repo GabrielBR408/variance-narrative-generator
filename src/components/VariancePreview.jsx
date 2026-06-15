@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { computeVariance } from '../lib/variance/index.js'
 import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
 
@@ -85,9 +85,35 @@ function VarianceTable({ comparisons }) {
   )
 }
 
+const PERIOD_LABELS = { current: 'Current', ytd: 'YTD' }
+
+function periodLabel(period) {
+  return PERIOD_LABELS[period] || period
+}
+
 function VarianceItem({ result }) {
-  const { summary } = result
-  const hasComparisons = result.comparisons.length > 0
+  // Prefer per-period sets when present; otherwise fall back to the flat
+  // top-level shape so older/empty results still render unchanged.
+  const sets =
+    Array.isArray(result.comparisonSets) && result.comparisonSets.length > 0
+      ? result.comparisonSets
+      : [
+          {
+            period: 'current',
+            comparisons: result.comparisons,
+            summary: result.summary,
+            confidence: result.confidence
+          }
+        ]
+
+  // Only offer the toggle when there is more than one period to switch between.
+  const hasMultiplePeriods = sets.length > 1
+  const [period, setPeriod] = useState('current')
+  const active = sets.find((s) => s.period === period) || sets[0]
+
+  const { summary, confidence } = active
+  const comparisons = active.comparisons || []
+  const hasComparisons = comparisons.length > 0
 
   return (
     <details className="variance">
@@ -108,17 +134,33 @@ function VarianceItem({ result }) {
       <div className="variance-body">
         {hasComparisons ? (
           <>
+            {hasMultiplePeriods && (
+              <div className="variance-periods" role="tablist" aria-label="Comparison period">
+                {sets.map((s) => (
+                  <button
+                    key={s.period}
+                    type="button"
+                    role="tab"
+                    aria-selected={s.period === active.period}
+                    className={`variance-period${s.period === active.period ? ' variance-period--on' : ''}`}
+                    onClick={() => setPeriod(s.period)}
+                  >
+                    {periodLabel(s.period)}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="variance-stats">
               <span>Rows reviewed <strong>{summary.totalRowsReviewed}</strong></span>
               <span>Variances <strong>{summary.totalVariancesFound}</strong></span>
               <span>Flagged <strong>{summary.highVarianceCount}</strong></span>
               <span>Missing data <strong>{summary.missingDataCount}</strong></span>
-              <span>Confidence <strong>{result.confidence}%</strong></span>
+              <span>Confidence <strong>{confidence}%</strong></span>
             </div>
-            <VarianceTable comparisons={result.comparisons} />
-            {result.comparisons.length > PREVIEW_ROWS && (
+            <VarianceTable comparisons={comparisons} />
+            {comparisons.length > PREVIEW_ROWS && (
               <p className="variance-more">
-                Showing {PREVIEW_ROWS} of {result.comparisons.length} comparisons.
+                Showing {PREVIEW_ROWS} of {comparisons.length} comparisons.
               </p>
             )}
           </>
