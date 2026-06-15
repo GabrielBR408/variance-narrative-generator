@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import SourceFiles from './components/SourceFiles.jsx'
 import StylePanel from './components/StylePanel.jsx'
 import VarianceDetail from './components/VarianceDetail.jsx'
@@ -7,6 +7,11 @@ import ResultPanel from './components/ResultPanel.jsx'
 import { classifyFile } from './lib/classify.js'
 import { extractFile } from './lib/extract/extract.js'
 import { extractionReadiness } from './lib/generateState.js'
+import { enrichNarrative } from './lib/enrich/index.js'
+import { computeVariance } from './lib/variance/index.js'
+import { DEFAULT_THRESHOLDS } from './lib/variance/thresholds.js'
+import { generateNarrative } from './lib/narrative/index.js'
+import { periodScopeAvailable, DEFAULT_PERIOD_SCOPE } from './lib/narrative/periodScope.js'
 
 // Stable in-memory key for a File. Same name+size+mtime ⇒ same extraction, so
 // we never re-open a file we've already read this session.
@@ -56,6 +61,10 @@ export default function App() {
   // Settings state (isolated slices)
   const [style, setStyle] = useState(DEFAULT_STYLE)
   const [variance, setVariance] = useState(DEFAULT_VARIANCE)
+  // Period-scope selector (Phase 15.1). Only meaningful when the base report
+  // carries both a Current and a YTD period; otherwise it is hidden and this
+  // value stays a no-op. Default 'both' preserves current behavior byte-for-byte.
+  const [periodScope, setPeriodScope] = useState(DEFAULT_PERIOD_SCOPE)
   // Generation state (isolated slice)
   const [status, setStatus] = useState('idle') // idle | preparing | sending | success | failure
   const [result, setResult] = useState(null)
@@ -73,6 +82,16 @@ export default function App() {
   // base file is still being read, Generate stays disabled with a clear note.
   const baseExtraction = baseReport ? extractions[fileKey(baseReport)] : null
   const readiness = extractionReadiness({ hasBase: !!baseReport, baseExtraction })
+
+  // Period-scope availability (Phase 15.1): the selector is offered only when the
+  // base report actually produces both a Current and a YTD period. Derived from
+  // the same deterministic variance → narrative path the preview uses, so the
+  // control appears exactly when there is a real choice to make.
+  const periodScopeOffered = useMemo(() => {
+    if (!baseExtraction || baseExtraction.status !== 'ok') return false
+    const narrative = generateNarrative(computeVariance(baseExtraction, DEFAULT_THRESHOLDS))
+    return periodScopeAvailable(narrative)
+  }, [baseExtraction])
 
   // Extraction pipeline: classify (Phase 6) → extract → normalize → preview.
   // Runs whenever the uploaded files change. Each file is opened at most once;
@@ -179,6 +198,12 @@ export default function App() {
         throw new Error((data && data.error) || 'Generation could not be completed. Try again.')
       }
 
+      // Phase 15: enrich the server's base-only narrative with deterministic
+      // evidence from the supporting files (which the browser already extracted).
+      // With no supporting files or no confident match, this is a no-op and the
+      // narrative is byte-identical to the server's.
+      const narrative = enrichNarrative(data.narrative, { supporting: supportingExtractions })
+
       setResult({
         jobId: data.jobId,
         filesReceived: data.filesReceived,
@@ -186,7 +211,7 @@ export default function App() {
         files: Array.isArray(data.files) ? data.files : [],
         extraction: data.extraction,
         variance: data.variance,
-        narrative: data.narrative
+        narrative
       })
       setStatus('success')
     } catch (err) {
@@ -208,11 +233,18 @@ export default function App() {
           setSupportingFiles={setSupportingFiles}
           extractions={extractions}
           fileKey={fileKey}
+          periodScope={periodScope}
         />
         <StylePanel style={style} setStyle={setStyle} />
-        <VarianceDetail variance={variance} setVariance={setVariance} />
+        <VarianceDetail
+          variance={variance}
+          setVariance={setVariance}
+          periodScope={periodScope}
+          setPeriodScope={setPeriodScope}
+          periodScopeOffered={periodScopeOffered}
+        />
         <GeneratePanel status={status} message={message} readiness={readiness} onGenerate={generate} />
-        <ResultPanel status={status} result={result} />
+        <ResultPanel status={status} result={result} periodScope={periodScope} />
       </div>
     </main>
   )

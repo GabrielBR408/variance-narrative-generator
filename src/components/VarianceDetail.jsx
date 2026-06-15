@@ -1,4 +1,9 @@
 import React from 'react'
+import {
+  PERIOD_SCOPE_LABEL,
+  PERIOD_SCOPE_OPTIONS,
+  PERIOD_SCOPE_HELP
+} from '../lib/narrative/periodScope.js'
 
 const INCLUDE = [
   { key: 'glResearch', label: 'GL Research' },
@@ -11,7 +16,13 @@ const IGNORE = [
   { key: 'smallRepeatItems', label: 'Small Repeat Items' }
 ]
 
-export default function VarianceDetail({ variance, setVariance }) {
+export default function VarianceDetail({
+  variance,
+  setVariance,
+  periodScope,
+  setPeriodScope,
+  periodScopeOffered = false
+}) {
   const set = (key, value) => setVariance((prev) => ({ ...prev, [key]: value }))
   const toggle = (group, key) =>
     setVariance((prev) => ({ ...prev, [group]: { ...prev[group], [key]: !prev[group][key] } }))
@@ -53,6 +64,26 @@ export default function VarianceDetail({ variance, setVariance }) {
             onChange={(e) => set('percentThreshold', e.target.value)}
           />
         </label>
+
+        {periodScopeOffered && (
+          <>
+            <label className="field">
+              <span className="field-label">{PERIOD_SCOPE_LABEL}</span>
+              <select
+                className="field-control"
+                value={periodScope}
+                onChange={(e) => setPeriodScope(e.target.value)}
+              >
+                {PERIOD_SCOPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value} disabled={o.disabled}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="panel-note">{PERIOD_SCOPE_HELP}</p>
+          </>
+        )}
 
         <label className="field">
           <span className="field-label">Narrative Detail</span>

@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react'
 import { computeVariance } from '../lib/variance/index.js'
 import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
 import { generateNarrative } from '../lib/narrative/index.js'
+import { enrichNarrative } from '../lib/enrich/index.js'
+import { scopeNarrative, DEFAULT_PERIOD_SCOPE } from '../lib/narrative/periodScope.js'
 
 // --- Narrative Summary — Phase 9A -----------------------------------------
 // Presentation only. Runs the deterministic variance engine over the normalized
@@ -91,18 +93,26 @@ function NarrativeItem({ narrative }) {
 
 // `items` is the ordered list of extraction objects (same list the variance
 // preview renders). Variance → narrative is computed here, in a memo.
-export default function NarrativeSummary({ items }) {
+export default function NarrativeSummary({ items, periodScope = DEFAULT_PERIOD_SCOPE }) {
   const narratives = useMemo(() => {
     if (!items || items.length === 0) return []
-    return items
-      .filter((ex) => ex && ex.status === 'ok')
+    const ok = items.filter((ex) => ex && ex.status === 'ok')
+    return ok
       .map((ex) => {
         const variance = computeVariance(ex, DEFAULT_THRESHOLDS)
-        return generateNarrative(variance)
+        const narrative = generateNarrative(variance)
+        // Phase 15: enrich with every OTHER uploaded file as supporting evidence,
+        // so the preview matches the enriched result the generate flow produces.
+        const supporting = ok.filter((o) => o !== ex)
+        const enriched = enrichNarrative(narrative, { supporting })
+        // Phase 15.1: narrow to the selected period scope (no-op unless the file
+        // carries both Current and YTD periods), so the preview tracks exactly
+        // what the generated result and exports will show.
+        return scopeNarrative(enriched, periodScope)
       })
       // Only surface files that actually produced at least one comparable period.
       .filter((n) => Array.isArray(n.periods) && n.periods.length > 0)
-  }, [items])
+  }, [items, periodScope])
 
   if (narratives.length === 0) return null
 
