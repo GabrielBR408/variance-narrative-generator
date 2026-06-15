@@ -61,7 +61,7 @@ The fix slots a **classifier** between the already-computed evidence (`detail`) 
 Notation: `total`, `count`, `maxTxn`, `topVendor`, `topVendorCount` from `detail`; `comparison`, `category`, `accountType` from the note; `confidence`, `thick` from the primary GL citation. Period rendered via existing `periodSuffix(period)` (examples below show the current-period form; YTD substitutes "year-to-date"). `descriptorFor(account)` reused for "related {descriptor} activity". `reliableTotal = typeof total === 'number' && isFinite(total) && total !== 0`. `ratio = maxTxn / Math.abs(total)` (only defined when `reliableTotal`).
 
 Constants (single source, in `classify.js`):
-`CONF_G_MAX = 0.70` · `CONF_AE_MIN = 0.85` · `DOMINANCE_RATIO = 0.80` · `RECURRING_MAX_RATIO = 0.60` · `RECURRING_MIN_COUNT = 3` · `CONCENTRATED_MIN_RATIO = 0.60`.
+`CONF_G_MAX = 0.70` · `CONF_AE_MIN = 0.85` · `DOMINANCE_RATIO = 0.80` · `RECURRING_MAX_RATIO = 0.60` · `RECURRING_MIN_COUNT = 3` · `RECURRING_MAX_COUNT = 12` · `CONCENTRATED_MIN_RATIO = 0.60`.
 
 **Confidence bands (revised):**
 - `confidence < 0.70` → **G**
@@ -85,7 +85,7 @@ Constants (single source, in `classify.js`):
 
 ### C — Recurring
 - **Inputs:** `count`, `total`, `maxTxn`, `confidence`.
-- **Rule (revised — ratio-based, vendor frequency dropped):** `confidence ≥ 0.85` AND `count ≥ 3` AND `reliableTotal` AND `ratio ≤ 0.60`.
+- **Rule (revised — ratio-based, bounded population, vendor frequency dropped):** `confidence ≥ 0.85` AND `3 ≤ count ≤ 12` AND `reliableTotal` AND `ratio ≤ 0.60`. The upper bound prevents large populations from being labeled "recurring".
 - **Template:** `GL detail shows approximately {approxMoney(total)} across {count} recurring transactions {period}.`
 - **Note:** `topVendor`/`topVendorCount` are **not** used by the classifier or rendered.
 - **Fallback:** → F (recurrence cannot be detected without a reliable total).
@@ -150,7 +150,7 @@ Runs **only** when `enrichNote` has selected a **GL** primary citation. Evaluate
     b. reliableTotal && total < 0 ....................... → E
     c. count === 1 ....................................... → A
     d. count > 1 && reliableTotal && ratio >= 0.80 ....... → B
-    e. count >= 3 && reliableTotal && ratio <= 0.60 ...... → C
+    e. 3 <= count <= 12 && reliableTotal && ratio <= 0.60  → C
     f. count === 2 && reliableTotal && ratio >= 0.60 ..... → I
     g. otherwise ......................................... → F
 ```
@@ -217,7 +217,7 @@ No new dependencies. No changes outside `src/lib/enrich/` and `test/`.
 - **Confidence bands:** `0.69 → G`; `0.70 + thick + reliable → F`; `0.70 + no total → G`; `0.84 → F`; `0.85 → A–E/I eligible`.
 - **A:** `count 1` (with/without total).
 - **B:** `count 4, ratio 0.85 → B`; `ratio 0.79 → not B`.
-- **C:** `count 5, ratio 0.50 → C`; `count 5, ratio 0.70 → F`; `count 2, ratio 0.50 → F` (count<3).
+- **C:** `count 5, ratio 0.50 → C`; `count 12, ratio 0.25 → C`; `count 13, ratio 0.25 → F` (above the 12 upper bound); `count 5, ratio 0.70 → F`; `count 2, ratio 0.50 → F` (count<3).
 - **I:** `count 2, ratio 0.70 → I`; `count 2, ratio 0.85 → B` (precedence); `count 2, ratio 0.55 → F`.
 - **D:** `comparison 0` and `comparison null` → D (overrides E/A/B/C/I); no-total form.
 - **E:** `total -7400, count 1 → E single`; `count 3 → E multiple`; `total +7400 → not E`.

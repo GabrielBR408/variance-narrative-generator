@@ -110,6 +110,72 @@ export function glEvidenceSentence({ account, thick, detail, period } = {}) {
   return 'Detailed account activity was available for review.'
 }
 
+// --- Phase 19A: classified GL commentary ----------------------------------
+// Render the owner-facing GL sentence for a classifier category (see
+// classify.js). Pure string builder: it reads only the category and the same
+// deterministic GL-detail summary used elsewhere, plus the base account label
+// for an optional friendly descriptor. It never renders a vendor string, a date,
+// a reference/invoice ID, or a file name, and carries no causal language.
+// Amounts are always passed through approxMoney() so a raw row figure is never
+// re-quoted as an exact value.
+export function commentarySentence({ type, account, detail, period } = {}) {
+  const d = detail || {}
+  const count = Number(d.count) || 0
+  const total = d.total
+  const reliableTotal = typeof total === 'number' && Number.isFinite(total) && total !== 0
+  const maxTxn = typeof d.maxTxn === 'number' && Number.isFinite(d.maxTxn) ? Math.abs(d.maxTxn) : null
+  const during = periodSuffix(period, 'during')
+
+  switch (type) {
+    case 'A': // One-time
+      return reliableTotal
+        ? `GL detail shows a single transaction of approximately ${approxMoney(total)} ${during}.`
+        : `GL detail shows a single related transaction ${during}.`
+
+    case 'B': // One-time-dominated
+      return (
+        `GL detail shows approximately ${approxMoney(total)} across ${count} transactions, ` +
+        `with one of about ${approxMoney(maxTxn)} ${during}.`
+      )
+
+    case 'C': // Recurring
+      return `GL detail shows approximately ${approxMoney(total)} across ${count} recurring transactions ${during}.`
+
+    case 'D': // Unbudgeted
+      return reliableTotal
+        ? `Activity occurred without a budget allocation; GL detail shows approximately ${approxMoney(total)} ${during}.`
+        : 'Activity occurred without a budget allocation and should be reviewed for future forecasting.'
+
+    case 'E': // Credit / true-up
+      return count === 1
+        ? `GL detail shows a single credit of approximately ${approxMoney(Math.abs(total))} ${during}.`
+        : `GL detail shows net credits of approximately ${approxMoney(Math.abs(total))} across ${count} transactions ${during}.`
+
+    case 'I': // Concentrated activity
+      return `GL detail shows approximately ${approxMoney(total)} across two related transactions ${during}.`
+
+    case 'G': // Low-confidence / thin
+      return 'Detailed account activity was available for review.'
+
+    case 'F': // Quantified fallback
+    default: {
+      if (!reliableTotal) {
+        if (count > 0) {
+          const noun = count === 1 ? 'transaction' : 'transactions'
+          return `Detailed activity includes ${count} related ${noun} ${during}.`
+        }
+        return 'Detailed account activity was available for review.'
+      }
+      const descriptor = descriptorFor(account)
+      const kind = descriptor ? `${descriptor} ` : ''
+      if (count === 1) {
+        return `GL detail shows approximately ${approxMoney(total)} of related ${kind}activity ${during}.`
+      }
+      return `GL detail shows approximately ${approxMoney(total)} across ${count} related ${kind}transactions ${during}.`
+    }
+  }
+}
+
 // Build a NON-GL supporting-evidence clause (no leading comma, no trailing
 // period — the caller merges it into the variance sentence). GL evidence is NOT
 // handled here; it renders as its own sentence via glEvidenceSentence. All

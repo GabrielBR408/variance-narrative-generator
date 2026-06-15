@@ -20,6 +20,8 @@ import { computeVariance } from '../src/lib/variance/index.js'
 import { generateNarrative } from '../src/lib/narrative/index.js'
 import { narrativeToMarkdown } from '../src/lib/export/markdown.js'
 import { narrativeToDocxBlocks } from '../src/lib/export/docx.js'
+import { enrichNarrative } from '../src/lib/enrich/index.js'
+import { classifyGLCommentary } from '../src/lib/enrich/classify.js'
 
 // A faithful real-report shape with zero sensitive data: leading metadata rows,
 // a merged Current Period / Year-To-Date group band, repeated Actual/Budget/
@@ -137,4 +139,139 @@ test('High Variances leads with the unfavorable expense before the favorable rev
   const current = narrative.periods[0]
   const accounts = current.highVariances.map((n) => n.account)
   assert.deepEqual(accounts, ['Repairs Expense', 'Rental Income'])
+})
+
+// --- Phase 19A: classified GL commentary — distribution & release targets ---
+// A synthetic, non-sensitive GL corpus that exercises every category, run
+// through the real enrichment path, then classified and measured against the
+// PM release targets (A ≥5, B ≥5, C ≥10, D ≥3, E ≥1, F ≤30%, G no increase,
+// generic-line reduction ≥70%). Phase 18A baseline: every reliable-total GL
+// note rendered the single generic line "GL detail shows approximately $X of
+// related activity" → 100% generic, 0 specific.
+
+// One self-consistent triggered comparison record (variance-engine shape).
+function qaRec({ account, actual, budget }) {
+  const varianceAmount = actual - budget
+  const variancePercent = budget === 0 ? null : (varianceAmount / Math.abs(budget)) * 100
+  return {
+    account,
+    actual,
+    budget,
+    prior: null,
+    varianceAmount,
+    variancePercent,
+    comparisonType: 'budget',
+    thresholdTriggered: Math.abs(varianceAmount) >= 1000 || (variancePercent !== null && Math.abs(variancePercent) >= 10),
+    category: varianceAmount >= 0 ? 'unfavorable' : 'favorable',
+    accountType: 'expense',
+    missingData: false,
+    confidence: 90,
+    sourceRows: [0]
+  }
+}
+
+// Build a corpus account spec: a unique GL account name, a budget, an actual
+// derived from the GL amounts, and the literal GL transaction amounts.
+function spec(prefix, i, { budget, amounts }) {
+  const name = `${prefix} Account ${String(i).padStart(2, '0')}`
+  const glTotal = amounts.reduce((s, a) => s + a, 0)
+  // Actual is set so each line is comfortably flagged; the exact value does not
+  // affect classification (which reads the GL detail + the budget basis).
+  const actual = budget + (glTotal >= 0 ? Math.max(glTotal, 1000) : glTotal)
+  return { name, budget, actual, amounts }
+}
+
+function buildCorpus() {
+  const specs = []
+  // A — one-time (6)
+  for (let i = 0; i < 6; i++) specs.push(spec('Alpha', i, { budget: 3000, amounts: [5000] }))
+  // B — one-time-dominated (6): max 18000 / total 20000 = 0.90
+  for (let i = 0; i < 6; i++) specs.push(spec('Bravo', i, { budget: 8000, amounts: [18000, 1000, 1000] }))
+  // C — recurring (10): 4 even transactions, ratio 0.25
+  for (let i = 0; i < 10; i++) specs.push(spec('Charlie', i, { budget: 2000, amounts: [1000, 1000, 1000, 1000] }))
+  // D — unbudgeted (3): zero budget
+  for (let i = 0; i < 3; i++) specs.push(spec('Delta', i, { budget: 0, amounts: [5000] }))
+  // E — credit / true-up (2): negative total
+  for (let i = 0; i < 2; i++) specs.push(spec('Echo', i, { budget: 4000, amounts: [-3000] }))
+  // F — quantified fallback (1): count 3, ratio 0.70 (the 0.60–0.80 gap)
+  specs.push(spec('Foxtrot', 0, { budget: 500, amounts: [700, 200, 100] }))
+
+  const comparisons = specs.map((s) => qaRec({ account: s.name, actual: s.actual, budget: s.budget }))
+  const narrative = generateNarrative({
+    fileId: 'base',
+    fileName: 'Comparative Income Statement.xlsx',
+    baseClassification: 'Base Variance Report',
+    thresholds: { amount: 1000, percent: 10 },
+    comparisonSets: [{ period: 'current', comparisons }]
+  })
+
+  const glRows = specs.flatMap((s) => s.amounts.map((a) => [s.name, String(a)]))
+  const gl = {
+    fileName: 'General Ledger.pdf',
+    status: 'ok',
+    classification: { type: 'General Ledger (GL)' },
+    normalized: { columns: ['Account', 'Amount'], rows: glRows }
+  }
+  return { specs, enriched: enrichNarrative(narrative, { supporting: [gl] }) }
+}
+
+// Every GL-enriched high-variance note, with its classified category.
+function classifiedNotes(enriched) {
+  return enriched.periods[0].highVariances
+    .filter((n) => Array.isArray(n.support) && n.support.some((s) => /general\s*ledger|\bgl\b/i.test(s.classificationType)))
+    .map((n) => {
+      const gl = n.support.find((s) => /general\s*ledger|\bgl\b/i.test(s.classificationType))
+      const { type } = classifyGLCommentary({
+        detail: gl.detail,
+        comparison: n.comparison,
+        comparisonType: n.comparisonType,
+        confidence: gl.confidence,
+        thick: gl.thick
+      })
+      return { note: n, type, detail: gl.detail }
+    })
+}
+
+test('GL commentary distribution meets the Phase 19A release targets', () => {
+  const { enriched } = buildCorpus()
+  const notes = classifiedNotes(enriched)
+  const dist = notes.reduce((m, x) => ((m[x.type] = (m[x.type] || 0) + 1), m), {})
+
+  assert.ok((dist.A || 0) >= 5, `A ≥ 5, got ${dist.A || 0}`)
+  assert.ok((dist.B || 0) >= 5, `B ≥ 5, got ${dist.B || 0}`)
+  assert.ok((dist.C || 0) >= 10, `C ≥ 10, got ${dist.C || 0}`)
+  assert.ok((dist.D || 0) >= 3, `D ≥ 3, got ${dist.D || 0}`)
+  assert.ok((dist.E || 0) >= 1, `E ≥ 1, got ${dist.E || 0}`)
+
+  const fShare = (dist.F || 0) / notes.length
+  assert.ok(fShare <= 0.30, `F share ≤ 30%, got ${(fShare * 100).toFixed(1)}%`)
+
+  // G must not increase over the Phase 18A baseline (0 for this corpus — no thin
+  // or low-confidence matches are present).
+  assert.equal(dist.G || 0, 0, 'G must not increase over baseline')
+})
+
+test('generic-line usage is reduced ≥70% vs the Phase 18A baseline', () => {
+  const { enriched } = buildCorpus()
+  const notes = classifiedNotes(enriched)
+
+  // Baseline: in Phase 18A every reliable-total GL note rendered the generic line.
+  const reliable = notes.filter((x) => typeof x.detail.total === 'number' && Number.isFinite(x.detail.total) && x.detail.total !== 0)
+  const baselineGeneric = reliable.length
+  assert.ok(baselineGeneric > 0, 'corpus must contain reliable-total GL notes')
+
+  // After: count notes still rendering the old generic phrasing.
+  const GENERIC = /GL detail shows approximately \$[\d,]+ of related (?:\w+ )?activity/
+  const afterGeneric = notes.filter((x) => GENERIC.test(x.note.text)).length
+
+  const reduction = (baselineGeneric - afterGeneric) / baselineGeneric
+  assert.ok(reduction >= 0.70, `generic reduction ≥ 70%, got ${(reduction * 100).toFixed(1)}% (after=${afterGeneric}/${baselineGeneric})`)
+})
+
+test('no classified GL commentary leaks a vendor, file name, date, or causal phrase', () => {
+  const { enriched } = buildCorpus()
+  const md = narrativeToMarkdown(enriched)
+  assert.doesNotMatch(md, /General Ledger\.pdf|Supporting file/)
+  assert.doesNotMatch(md, /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/) // no dates
+  assert.doesNotMatch(md, /due to|driven by|caused by|because of|explains|resulting from/i)
 })

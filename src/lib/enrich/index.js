@@ -29,7 +29,8 @@
 //         revenueNotes, expenseNotes, sourceRows }, ... ] }
 
 import { buildEvidenceIndex, matchAccount, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
-import { explanationClause, glEvidenceSentence } from './templates.js'
+import { explanationClause, glEvidenceSentence, commentarySentence } from './templates.js'
+import { classifyGLCommentary } from './classify.js'
 
 // Only these sections hold flagged variance notes — they are the only ones we
 // enrich. Executive Summary (a roll-up) and Missing Data (no comparison) are
@@ -95,7 +96,17 @@ function enrichNote(note, index, options, period) {
 
   let text = note.text
   if (isGL(primary.classificationType)) {
-    const sentence = glEvidenceSentence({ account: note.account, thick: primary.thick, detail: primary.detail, period })
+    // Phase 19A: classify the GL evidence into one owner commentary category,
+    // then render it. The variance sentence is preserved verbatim; the classified
+    // GL sentence is appended as standalone context (never a causal clause).
+    const { type } = classifyGLCommentary({
+      detail: primary.detail,
+      comparison: note.comparison,
+      comparisonType: note.comparisonType,
+      confidence: primary.confidence,
+      thick: primary.thick
+    })
+    const sentence = commentarySentence({ type, account: note.account, detail: primary.detail, period })
     if (sentence) text = appendSentence(note.text, sentence)
   } else {
     const clause = explanationClause({ classificationType: primary.classificationType })
@@ -136,4 +147,14 @@ export function enrichNarrative(narrative, { supporting = [], floor = CONFIDENCE
 }
 
 export { buildEvidenceIndex, matchAccount, scoreMatch, normalizeName, accountCode, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
-export { explanationClause, glEvidenceSentence, displayAccount, descriptorFor, approxMoney } from './templates.js'
+export { explanationClause, glEvidenceSentence, commentarySentence, displayAccount, descriptorFor, approxMoney } from './templates.js'
+export {
+  classifyGLCommentary,
+  CONF_G_MAX,
+  CONF_AE_MIN,
+  DOMINANCE_RATIO,
+  CONCENTRATED_MIN_RATIO,
+  RECURRING_MAX_RATIO,
+  RECURRING_MIN_COUNT,
+  RECURRING_MAX_COUNT
+} from './classify.js'

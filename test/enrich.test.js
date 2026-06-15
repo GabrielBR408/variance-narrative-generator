@@ -120,10 +120,11 @@ test('GL thick reliable total renders as a standalone evidence sentence (no caus
   assert.equal(note.support[0].fileName, 'General Ledger.pdf')
   assert.equal(note.support[0].thick, true, 'GL row with an Amount column is thick')
   // The variance sentence is preserved verbatim, then a SEPARATE GL evidence
-  // sentence states context only — never a causal comma clause.
+  // sentence states context only — never a causal comma clause. Phase 19A: a
+  // single matching GL transaction classifies as one-time (Category A).
   assert.match(
     note.text,
-    /^Utility Expense Recovery exceeded budget by \$7,366 \(138\.1%\)\. GL detail shows approximately \$7,400 of related utility activity during the current period\.$/
+    /^Utility Expense Recovery exceeded budget by \$7,366 \(138\.1%\)\. GL detail shows a single transaction of approximately \$7,400 during the current period\.$/
   )
   // No citation / file-name / debug language leaks into the owner text.
   assert.doesNotMatch(note.text, /Supporting file/)
@@ -199,8 +200,9 @@ test('multiple matching files: support keeps stable file-name order, GL phrases 
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
   // All matches retained in metadata, stable order.
   assert.deepEqual(note.support.map((s) => s.fileName), ['Budget Detail.xlsx', 'General Ledger.pdf'])
-  // GL outranks budget, so the standalone GL evidence sentence is used.
-  assert.match(note.text, /\. GL detail shows approximately \$7,400 of related utility activity during the current period\.$/)
+  // GL outranks budget, so the standalone GL evidence sentence is used (a single
+  // matching transaction → one-time, Category A).
+  assert.match(note.text, /\. GL detail shows a single transaction of approximately \$7,400 during the current period\.$/)
   assert.doesNotMatch(note.text, /budget assumptions/)
   assert.doesNotMatch(note.text, /Budget Detail\.xlsx|General Ledger\.pdf|Supporting file/)
 })
@@ -260,7 +262,9 @@ test('GL reliable total renders the evidence sentence; vendor stays in metadata 
   assert.equal(detail.topVendor, 'PG&E')
   assert.equal(detail.topVendorCount, 2)
   // The owner narrative states context only — the vendor name is NOT rendered.
-  assert.match(note.text, /\. GL detail shows approximately \$7,400 of related utility activity during the current period\.$/)
+  // Two transactions, neither dominating nor concentrated (ratio ≈ 0.54) →
+  // quantified fallback (Category F) with the transaction count.
+  assert.match(note.text, /\. GL detail shows approximately \$7,400 across 2 related utility transactions during the current period\.$/)
   assert.doesNotMatch(note.text, /PG&E/)
 })
 
@@ -299,7 +303,8 @@ test('GL with descriptions but no reliable total uses descriptions-only wording'
   const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [gl] })
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
   assert.equal(note.support[0].detail.total, null, 'ambiguous amounts → no total')
-  assert.match(note.text, /\. Related transactions appear in detailed activity for the current period\.$/)
+  // No reliable total → quantified fallback degrades to the count-only form.
+  assert.match(note.text, /\. Detailed activity includes 2 related transactions during the current period\.$/)
   assert.doesNotMatch(note.text, /PG&E|City Water|approximately/)
 })
 
@@ -377,7 +382,49 @@ test('Markdown and DOCX carry the enriched note text identically', () => {
   const dx = narrativeToDocxBlocks(enriched).filter((b) => b.kind === 'bullet').map((b) => b.text)
   assert.deepEqual(md, dx)
   // And the standalone GL evidence sentence actually made it into both renderers.
-  assert.ok(md.some((t) => /GL detail shows approximately/.test(t)))
+  assert.ok(md.some((t) => /GL detail shows a single transaction of approximately/.test(t)))
+})
+
+// --- Phase 19A: classified commentary renders end-to-end -------------------
+
+// Build a one-account flagged narrative + a GL file of literal amounts, enrich,
+// and return the high-variance note for that account.
+function enrichedNote({ account, actual, budget, category = 'unfavorable', amounts }) {
+  const n = baseNarrative([rec({ account, actual, budget, accountType: 'expense', category, sourceRows: [4] })])
+  const gl = supporting({
+    fileName: 'General Ledger.pdf',
+    type: 'General Ledger (GL)',
+    columns: ['Account', 'Amount'],
+    rows: amounts.map((a) => [account, String(a)])
+  })
+  const enriched = enrichNarrative(n, { supporting: [gl] })
+  return enriched.periods[0].highVariances.find((x) => x.account === account)
+}
+
+test('Category B: one transaction dominates a multi-transaction total', () => {
+  const note = enrichedNote({ account: 'Repairs Expense', actual: 25000, budget: 5000, amounts: [18000, 1000, 1000] })
+  assert.match(note.text, /\. GL detail shows approximately \$20,000 across 3 transactions, with one of about \$18,000 during the current period\.$/)
+})
+
+test('Category C: several evenly-spread recurring transactions', () => {
+  const note = enrichedNote({ account: 'Landscaping Expense', actual: 4000, budget: 2000, amounts: [1000, 1000, 1000, 1000] })
+  assert.match(note.text, /\. GL detail shows approximately \$4,000 across 4 recurring transactions during the current period\.$/)
+})
+
+test('Category D: activity against a zero budget', () => {
+  const note = enrichedNote({ account: 'New Service Line', actual: 5000, budget: 0, amounts: [5000] })
+  assert.match(note.text, /\. Activity occurred without a budget allocation; GL detail shows approximately \$5,000 during the current period\.$/)
+  assert.doesNotMatch(note.text, /recommend|should consider/i)
+})
+
+test('Category E: a net credit reads as a credit, not new spend', () => {
+  const note = enrichedNote({ account: 'Insurance Expense', actual: 1000, budget: 4000, category: 'favorable', amounts: [-3000] })
+  assert.match(note.text, /\. GL detail shows a single credit of approximately \$3,000 during the current period\.$/)
+})
+
+test('Category I: exactly two concentrated transactions', () => {
+  const note = enrichedNote({ account: 'Marketing Expense', actual: 9000, budget: 4000, amounts: [6000, 3000] })
+  assert.match(note.text, /\. GL detail shows approximately \$9,000 across two related transactions during the current period\.$/)
 })
 
 // --- Phase 17.1: no causation / implied-causation language -----------------
