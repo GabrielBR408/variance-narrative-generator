@@ -77,22 +77,29 @@ function normalizeText(extracted) {
   }
 }
 
+function hasReconstructedTable(extracted) {
+  const table = extracted.tables && extracted.tables[0]
+  return Boolean(table && Array.isArray(table.rows) && table.rows.length > 0)
+}
+
 // Returns { normalized, confidence, empty }.
 export function normalize(extracted, kind) {
-  const normalized =
-    kind === 'spreadsheet' ? normalizeSpreadsheet(extracted) : normalizeText(extracted)
+  // A spreadsheet is always a grid. A PDF (Phase 7.1) becomes a grid only when
+  // table reconstruction produced rows; otherwise it stays free text. DOCX is
+  // always free text.
+  const grid = kind === 'spreadsheet' || (kind === 'pdf' && hasReconstructedTable(extracted))
+  const normalized = grid ? normalizeSpreadsheet(extracted) : normalizeText(extracted)
 
   // "Empty" reflects whether the parser found anything readable at all, judged
-  // on the source: a spreadsheet's whole grid, or a text file's blocks.
-  const empty =
-    kind === 'spreadsheet'
-      ? !((extracted.tables && extracted.tables[0] && extracted.tables[0].rows) || []).length
-      : normalized.rows.length === 0
+  // on the source: a grid's rows, or a text source's blocks.
+  const empty = grid
+    ? !((extracted.tables && extracted.tables[0] && extracted.tables[0].rows) || []).length
+    : normalized.rows.length === 0
 
   let confidence = empty ? 0 : BASE_CONFIDENCE[kind] || 0
 
-  // A spreadsheet with a header but no data rows is real, but thin.
-  if (kind === 'spreadsheet' && !empty && normalized.rows.length === 0) confidence = 50
+  // A grid with a header but no data rows is real, but thin.
+  if (grid && !empty && normalized.rows.length === 0) confidence = 50
 
   return { normalized, confidence, empty }
 }
