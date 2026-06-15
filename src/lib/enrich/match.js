@@ -14,11 +14,19 @@
 // Anything scoring below CONFIDENCE_FLOOR is discarded, so a weak/partial
 // resemblance never produces a citation.
 
+import { toNumber } from '../extract/normalize.js'
+
 export const CONFIDENCE_FLOOR = 0.6
 export const MAX_CITATIONS_PER_NOTE = 3
 
 // Columns in a supporting file that are likely to carry the account label.
 const ACCOUNT_COL_RE = /account|acct|description|\bgl\b|\bname\b|item|line|category/i
+
+// Columns that carry transactional detail. Their presence WITH a real value is
+// what makes GL evidence "thick" — solid enough to phrase a cause — versus a
+// bare name match ("thin"), which only confirms the line appears in the file.
+const AMOUNT_COL_RE = /amount|debit|credit|balance|charge|total|\bvalue\b|\bnet\b|cost|\$/i
+const DETAIL_COL_RE = /description|memo|detail|narrative|note|particular|reference|\bref\b|vendor|payee|invoice|\bdoc\b|check/i
 
 // A leading numeric token used as an account code: "5100", "5100-10", "51.00".
 const CODE_RE = /^\s*([0-9][0-9.\-]*[0-9]|[0-9])/
@@ -65,6 +73,17 @@ export function buildEvidenceIndex(supporting = []) {
     let col = columns.findIndex((c) => ACCOUNT_COL_RE.test(String(c)))
     if (col < 0) col = 0
 
+    // Pre-resolve which columns (other than the account column) carry an amount
+    // or a description/reference, so per-row thickness is a cheap lookup.
+    const amountCols = []
+    const detailCols = []
+    for (let i = 0; i < columns.length; i++) {
+      if (i === col) continue
+      const h = String(columns[i])
+      if (AMOUNT_COL_RE.test(h)) amountCols.push(i)
+      if (DETAIL_COL_RE.test(h)) detailCols.push(i)
+    }
+
     const fileName = ex.fileName || ''
     const classificationType = (ex.classification && ex.classification.type) || 'Supporting Document'
 
@@ -82,11 +101,31 @@ export function buildEvidenceIndex(supporting = []) {
         code: accountCode(label),
         normName,
         tokens: tokensOf(normName),
-        sourceRow: r
+        sourceRow: r,
+        // Thick = this matched row carries a usable amount or description/reference.
+        // When no headers identify amount columns (e.g. a positional PDF table),
+        // fall back to "any non-account cell parses as a number".
+        hasDetail: rowHasDetail(row, col, amountCols, detailCols)
       })
     }
   }
   return entries
+}
+
+// Does a matched row carry transactional detail beyond its account label?
+// True when an amount column holds a number (or, with no typed amount columns,
+// any non-account cell parses as a number), or a description/reference column
+// holds non-numeric text. Pure read of cells already normalized upstream.
+function rowHasDetail(row, accountCol, amountCols, detailCols) {
+  const hasAmount =
+    amountCols.length > 0
+      ? amountCols.some((i) => toNumber(row[i]) !== null)
+      : row.some((cell, i) => i !== accountCol && toNumber(cell) !== null)
+  const hasDescription = detailCols.some((i) => {
+    const t = String(row[i] ?? '').trim()
+    return t !== '' && toNumber(t) === null
+  })
+  return hasAmount || hasDescription
 }
 
 // Score one base account against one index entry. Returns 0..1.
@@ -122,9 +161,10 @@ export function scoreMatch(baseAccount, entry) {
 
 // Match one flagged account to supporting evidence. Returns a deterministic,
 // deduped, capped list of citations:
-//   [{ fileName, classificationType, confidence, sourceRows }]
+//   [{ fileName, classificationType, confidence, sourceRows, thick }]
 // One citation per file (best score, all matching rows collected), ordered by
-// file name then first source row.
+// file name then first source row. `thick` is true when ANY matched row in the
+// file carried usable amount/description detail.
 export function matchAccount(account, index = [], options = {}) {
   const floor = Number.isFinite(options.floor) ? options.floor : CONFIDENCE_FLOOR
   const cap = Number.isFinite(options.cap) ? options.cap : MAX_CITATIONS_PER_NOTE
@@ -140,11 +180,13 @@ export function matchAccount(account, index = [], options = {}) {
         fileName: entry.fileName,
         classificationType: entry.classificationType,
         confidence: score,
-        sourceRows: new Set([entry.sourceRow])
+        sourceRows: new Set([entry.sourceRow]),
+        thick: !!entry.hasDetail
       })
     } else {
       existing.confidence = Math.max(existing.confidence, score)
       existing.sourceRows.add(entry.sourceRow)
+      existing.thick = existing.thick || !!entry.hasDetail
     }
   }
 
@@ -153,7 +195,8 @@ export function matchAccount(account, index = [], options = {}) {
       fileName: c.fileName,
       classificationType: c.classificationType,
       confidence: c.confidence,
-      sourceRows: [...c.sourceRows].sort((a, b) => a - b)
+      sourceRows: [...c.sourceRows].sort((a, b) => a - b),
+      thick: c.thick
     }))
     .sort((a, b) => {
       const byName = a.fileName.localeCompare(b.fileName)

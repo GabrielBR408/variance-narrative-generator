@@ -1,18 +1,24 @@
-// Supporting-file enrichment tests — Phase 15.
+// Supporting-file enrichment tests — Phase 15 / 16.
 // Runs on Node's built-in test runner (`node --test`), no extra dependencies.
 //
 // Covers the deterministic client-side enrichment layer: base-only narratives
 // stay byte-identical, evidence attaches only to flagged variance notes by
 // confident match, weak/partial matches are gated by the confidence floor,
-// multiple files produce a stable citation order, citations name the file and
-// invent no figures, and the appended text flows identically into Markdown and
-// DOCX.
+// multiple files produce a stable order, and the merged text flows identically
+// into Markdown and DOCX.
+//
+// Phase 16: the rendered owner text is an explanation clause merged into the
+// variance sentence — never a "Supporting file" citation, never a file name.
+// GL "thick" evidence (a matched amount/description) may phrase a cause; "thin"
+// name-only evidence and budget-only evidence stay conservative; wording is
+// period-aware; structured `support` metadata remains for tooling/tests.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { computeVariance } from '../src/lib/variance/index.js'
 import { generateNarrative } from '../src/lib/narrative/index.js'
+import { scopeNarrative } from '../src/lib/narrative/periodScope.js'
 import { narrativeToMarkdown } from '../src/lib/export/markdown.js'
 import { narrativeToDocxBlocks } from '../src/lib/export/docx.js'
 import {
@@ -105,16 +111,23 @@ test('supporting files but no match: narrative unchanged and Markdown byte-ident
 
 // --- evidence attaches to a matching flagged note --------------------------
 
-test('GL evidence attaches to the matching flagged note', () => {
+test('GL thick evidence merges an owner-facing explanation into the sentence', () => {
   const n = baseNarrative(FLAGGED)
   const enriched = enrichNarrative(n, { supporting: [GL()] })
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
   assert.ok(note.enriched, 'note should be marked enriched')
   assert.equal(note.support.length, 1)
   assert.equal(note.support[0].fileName, 'General Ledger.pdf')
-  // Original variance sentence is preserved, with the citation appended.
-  assert.match(note.text, /^Utility Expense Recovery exceeded budget by \$7,366 \(138\.1%\)\. /)
-  assert.match(note.text, /Supporting file "General Ledger\.pdf" contains matching ledger activity for Utility Expense Recovery\.$/)
+  assert.equal(note.support[0].thick, true, 'GL row with an Amount column is thick')
+  // The original variance amount + percent are preserved, and the explanation is
+  // merged into the SAME sentence (single period at the end).
+  assert.match(
+    note.text,
+    /^Utility Expense Recovery exceeded budget by \$7,366 \(138\.1%\), primarily due to higher current-period .*charges shown in the GL detail\.$/
+  )
+  // No citation / file-name / debug language leaks into the owner text.
+  assert.doesNotMatch(note.text, /Supporting file/)
+  assert.doesNotMatch(note.text, /General Ledger\.pdf/)
 })
 
 test('the same evidence appears on the matching expense-notes entry too', () => {
@@ -133,7 +146,7 @@ test('a missing-data note is never enriched even when its account matches', () =
   const enriched = enrichNarrative(n, { supporting: [GL()] })
   const md = enriched.periods[0].missingData[0]
   assert.ok(!md.support, 'missing-data note must not carry evidence')
-  assert.doesNotMatch(md.text, /Supporting file/)
+  assert.doesNotMatch(md.text, /Supporting file|GL detail|General Ledger\.pdf/)
 })
 
 test('a sub-threshold line produces no note, so it is never enriched', () => {
@@ -173,7 +186,7 @@ test('scoreMatch tiers: code exact > name exact > substring', () => {
 
 // --- multiple files: deterministic order + dedupe --------------------------
 
-test('multiple matching files cite in stable file-name order', () => {
+test('multiple matching files: support keeps stable file-name order, GL phrases the clause', () => {
   const n = baseNarrative(FLAGGED)
   const budget = supporting({
     fileName: 'Budget Detail.xlsx',
@@ -181,12 +194,15 @@ test('multiple matching files cite in stable file-name order', () => {
     columns: ['Account', 'Budget'],
     rows: [['Utility Expense Recovery', '5334']]
   })
-  // Pass the GL last to prove ordering is by file name, not input order.
+  // Pass the GL last to prove support order is by file name, not input order.
   const enriched = enrichNarrative(n, { supporting: [budget, GL('General Ledger.pdf')] })
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
+  // All matches retained in metadata, stable order.
   assert.deepEqual(note.support.map((s) => s.fileName), ['Budget Detail.xlsx', 'General Ledger.pdf'])
-  assert.match(note.support[0].text, /includes budget detail matching/)
-  assert.match(note.support[1].text, /contains matching ledger activity/)
+  // GL outranks budget, so the merged owner clause is the GL explanation.
+  assert.match(note.text, /shown in the GL detail\.$/)
+  assert.doesNotMatch(note.text, /budget assumptions/)
+  assert.doesNotMatch(note.text, /Budget Detail\.xlsx|General Ledger\.pdf|Supporting file/)
 })
 
 test('repeated rows in one file collapse to a single citation with all source rows', () => {
@@ -206,16 +222,79 @@ test('repeated rows in one file collapse to a single citation with all source ro
   assert.deepEqual(note.support[0].sourceRows, [0, 2])
 })
 
-// --- citation quality ------------------------------------------------------
+// --- owner-facing text: no invented figures, no file names, no debug ----------
 
-test('citations name the supporting file and invent no figures', () => {
+test('explanation invents no supporting-file figures and preserves the base amount/percent', () => {
   const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [GL('General Ledger.pdf')] })
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
-  const citation = note.support[0].text
-  assert.ok(citation.includes('General Ledger.pdf'))
-  assert.doesNotMatch(citation, /\$/, 'citation must not contain a dollar figure')
-  assert.doesNotMatch(citation, /\d/, 'citation must not contain any digit')
-  assert.doesNotMatch(citation, /caused|because|due to/i, 'citation must not assert causation')
+  // The base figure is preserved verbatim, and it is the ONLY money/number in the text.
+  assert.ok(note.text.includes('$7,366 (138.1%)'))
+  const monies = note.text.match(/\$[\d,]+(?:\.\d+)?/g) || []
+  assert.deepEqual(monies, ['$7,366'], 'no supporting-file dollar amount is introduced')
+  // The GL row value (7366) must not be re-quoted as its own figure.
+  assert.doesNotMatch(note.text.replace('$7,366', ''), /7366/)
+})
+
+test('no enriched owner text contains "Supporting file" or an uploaded file name', () => {
+  const budget = supporting({
+    fileName: 'Annual Budget 2026.xlsx',
+    type: 'Budget',
+    columns: ['Account', 'Budget'],
+    rows: [['Utility Expense Recovery', '5334']]
+  })
+  const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [GL('4. General Ledger.pdf'), budget] })
+  const allText = narrativeToMarkdown(enriched)
+  assert.doesNotMatch(allText, /Supporting file/)
+  assert.doesNotMatch(allText, /General Ledger\.pdf/)
+  assert.doesNotMatch(allText, /Annual Budget 2026\.xlsx/)
+  assert.doesNotMatch(allText, /source row|sourceRow|debug/i)
+})
+
+// --- GL thin vs thick -------------------------------------------------------
+
+test('GL thin evidence (name-only, no amount/description) stays conservative', () => {
+  const thinGL = supporting({
+    fileName: 'General Ledger.pdf',
+    type: 'General Ledger (GL)',
+    columns: ['Account'],
+    rows: [['Utility Expense Recovery'], ['Office Supplies']]
+  })
+  const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [thinGL] })
+  const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
+  assert.equal(note.support[0].thick, false)
+  assert.match(note.text, /with matching GL activity supporting the variance\.$/)
+  assert.doesNotMatch(note.text, /primarily due to|shown in the GL detail/)
+})
+
+// --- budget-only evidence ---------------------------------------------------
+
+test('budget-only evidence uses conservative, non-causal language', () => {
+  const budget = supporting({
+    fileName: 'Budget Detail.xlsx',
+    type: 'Budget',
+    columns: ['Account', 'Budget'],
+    rows: [['Utility Expense Recovery', '5334']]
+  })
+  const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [budget] })
+  const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
+  assert.match(note.text, /compared against scheduled budget assumptions for the period\.$/)
+  assert.doesNotMatch(note.text, /primarily due to|caused|because/i)
+})
+
+// --- period-aware wording ---------------------------------------------------
+
+test('YTD period uses year-to-date wording, never "current-period"', () => {
+  const ytd = generateNarrative({
+    fileId: 'base',
+    fileName: 'Comparative Income Statement.xlsx',
+    baseClassification: 'Base Variance Report',
+    thresholds: { amount: 1000, percent: 10 },
+    comparisonSets: [{ period: 'ytd', comparisons: FLAGGED }]
+  })
+  const enriched = enrichNarrative(ytd, { supporting: [GL()] })
+  const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
+  assert.match(note.text, /year-to-date/)
+  assert.doesNotMatch(note.text, /current-period/)
 })
 
 // --- export parity ---------------------------------------------------------
@@ -228,8 +307,44 @@ test('Markdown and DOCX carry the enriched note text identically', () => {
     .flatMap((chunk) => chunk.split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2)))
   const dx = narrativeToDocxBlocks(enriched).filter((b) => b.kind === 'bullet').map((b) => b.text)
   assert.deepEqual(md, dx)
-  // And the citation actually made it into both.
-  assert.ok(md.some((t) => /Supporting file "General Ledger\.pdf"/.test(t)))
+  // And the merged explanation actually made it into both renderers.
+  assert.ok(md.some((t) => /shown in the GL detail\./.test(t)))
+})
+
+// --- internal support metadata ----------------------------------------------
+
+test('structured support metadata remains available internally', () => {
+  const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [GL('General Ledger.pdf')] })
+  const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
+  const s = note.support[0]
+  assert.equal(s.fileName, 'General Ledger.pdf')
+  assert.equal(s.classificationType, 'General Ledger (GL)')
+  assert.equal(typeof s.confidence, 'number')
+  assert.ok(Array.isArray(s.sourceRows))
+  assert.equal(typeof s.thick, 'boolean')
+})
+
+// --- Period Scope interop ---------------------------------------------------
+
+test('Period Scope selector still narrows an enriched two-period narrative', () => {
+  const two = generateNarrative({
+    fileId: 'base',
+    fileName: 'Comparative Income Statement.xlsx',
+    baseClassification: 'Base Variance Report',
+    thresholds: { amount: 1000, percent: 10 },
+    comparisonSets: [
+      { period: 'current', comparisons: FLAGGED },
+      { period: 'ytd', comparisons: FLAGGED }
+    ]
+  })
+  const enriched = enrichNarrative(two, { supporting: [GL()] })
+  assert.equal(enriched.periods.length, 2)
+  const current = scopeNarrative(enriched, 'current')
+  assert.equal(current.periods.length, 1)
+  assert.equal(current.periods[0].period, 'current')
+  // Enrichment survives the scope narrowing.
+  const note = current.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
+  assert.match(note.text, /current-period/)
 })
 
 // --- normalize / code helpers ----------------------------------------------

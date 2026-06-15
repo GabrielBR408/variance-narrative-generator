@@ -182,9 +182,11 @@ test('supporting-file enrichment still applies after scope filtering', () => {
 
   assert.deepEqual(scoped.periods.map((p) => p.period), ['current'])
   const note = scoped.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
-  assert.ok(note.enriched, 'enriched citation must survive the scope filter')
+  assert.ok(note.enriched, 'enriched explanation must survive the scope filter')
   assert.equal(note.support[0].fileName, 'General Ledger.pdf')
-  assert.match(note.text, /Supporting file "General Ledger\.pdf" contains matching ledger activity for Utility Expense Recovery\.$/)
+  // Phase 16: an owner-facing explanation merged into the sentence — no file name.
+  assert.match(note.text, /shown in the GL detail\.$/)
+  assert.doesNotMatch(note.text, /Supporting file|General Ledger\.pdf/)
 })
 
 test('scoping an enriched narrative to "both" is still identity', () => {
