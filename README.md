@@ -81,6 +81,68 @@ Upload
   table reconstruction.
 - `.github/workflows/ci.yml` — CI workflow.
 
+## Deployment (Netlify)
+
+GitHub remains the source of truth. Netlify builds the Vite app from the repo
+and publishes the static `dist/` output, with a Deploy Preview for every pull
+request.
+
+### Connect the repo
+
+1. In Netlify, **Add new site → Import an existing project** and pick this
+   GitHub repository.
+2. Netlify reads `netlify.toml`, so the build settings are pre-filled:
+   - **Build command:** `npm run build`
+   - **Publish directory:** `dist`
+   - **Node version:** 20 (pinned via `NODE_VERSION`)
+3. Set the **production branch** to `main` (Site configuration → Build &
+   deploy → Branches). Pushes to `main` deploy to production.
+4. Leave **Deploy Previews** enabled (the default) so every PR builds a preview.
+
+### Preview URLs
+
+- **Production:** `https://<site-name>.netlify.app`
+- **Deploy Preview (per PR):** `https://deploy-preview-<PR#>--<site-name>.netlify.app`
+- **Branch deploy (optional):** `https://<branch-name>--<site-name>.netlify.app`
+
+Testers open the Deploy Preview link from the PR — no local setup, install, or
+build required.
+
+### Privacy on a deployed preview
+
+The deploy is **static front-end only**. File reading and extraction happen
+**entirely in the browser** (PDF via the pdf.js worker, spreadsheets and DOCX
+in-page); uploaded files are **not** sent to Netlify, **not** stored, **not**
+logged, and **nothing is persisted** server-side. A preview link is a public
+URL, so testers should still use non-sensitive sample files.
+
+### Known limitation — Generate in production
+
+The in-app **Generate** action POSTs to `/generate`, which today is served
+only by the Vite dev/preview middleware (`vite.config.js` → `server/generate.js`).
+A static Netlify deploy has **no `/generate` route**, so the app loads and the
+UI works, but **pressing Generate fails** (the SPA fallback returns HTML, not
+JSON) until a server route is added.
+
+#### Proposal (not yet implemented): `/generate` Netlify Function
+
+The lowest-risk fix preserves behavior and privacy exactly, because
+`server/generate.js` already does only surface file validation plus the pure,
+browser-compatible `runPipeline` (the browser still does all extraction):
+
+- Add a Netlify Function (e.g. `netlify/functions/generate.js`) that adapts
+  Netlify's request to Node's `(req, res)` and calls the existing
+  `handleGenerate` from `server/generate.js` — no engine changes.
+- Add a redirect in `netlify.toml` routing `/generate` →
+  `/.netlify/functions/generate` **above** the `/*` SPA fallback so it wins.
+
+Privacy note for this path: file bytes would stream **through** the function,
+where Busboy counts and then **discards** them — never buffered to disk,
+uploaded, logged, or persisted — identical to the current dev/preview behavior.
+This is the one place where uploaded bytes would touch a server, so it is
+called out explicitly. This function is **left unimplemented pending approval**;
+`netlify.toml` contains the wiring as commented guidance.
+
 ## Completed phases
 
 - **Phase 1 — Shell** — application skeleton.

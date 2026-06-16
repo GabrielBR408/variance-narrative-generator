@@ -1,0 +1,42 @@
+# Netlify configuration — static deploy of the Vite build.
+#
+# Scope: this deploys the front end only. The app loads and runs as static
+# assets, but the in-app "Generate" action POSTs to /generate, which is served
+# today only by the Vite dev/preview middleware (see vite.config.js →
+# server/generate.js). In a pure static deploy there is NO /generate route, so
+# Generate will fail in production and Deploy Previews until a server route is
+# added. See the "Generate in production" proposal in README.md.
+
+[build]
+  # Vite build → static assets in dist/.
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Match CI (Node 20) for reproducible builds.
+  NODE_VERSION = "20"
+
+# SPA fallback: serve index.html for client-side routes. This is a catch-all
+# 200 rewrite, so it intentionally does NOT touch real asset files (Netlify
+# serves those first). Note: with no /generate function deployed, a POST to
+# /generate also falls through to this rewrite and returns index.html (HTML,
+# not JSON) — which is why Generate cannot work on a static-only deploy.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# --- PROPOSAL (not active): Generate in production ---------------------------
+# To make Generate work in production/previews, host server/generate.js as a
+# Netlify Function and route /generate to it BEFORE the SPA fallback above.
+# This is documented in README.md and is intentionally left unimplemented
+# pending approval. When approved, add a function at netlify/functions/generate
+# and a redirect like:
+#
+# [[redirects]]
+#   from = "/generate"
+#   to = "/.netlify/functions/generate"
+#   status = 200
+#   force = true
+#
+# (Place it above the /* SPA rule so it wins.)
