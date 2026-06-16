@@ -358,7 +358,7 @@ test('MRI smoke: each account renders its contribution-appropriate wording', () 
   )
   assert.match(
     mriNote(enriched, 'Rental Inc. - Commercial').text,
-    /GL detail reflects related activity that appears materially larger than the reported variance during the current period\.$/
+    /GL detail reflects related activity that appears substantially larger than the reported variance during the current period\.$/
   )
   assert.match(
     mriNote(enriched, 'Fire Sprinkler - Contract').text,

@@ -77,6 +77,37 @@ export function approxMoney(total) {
   return `$${rounded.toLocaleString('en-US')}`
 }
 
+// --- Phase 20A.2: shared GL wording (single source) -----------------------
+// Wording/maintainability only — no category, threshold, or suppression-behavior
+// change. These constants/helpers replace literals that were duplicated across
+// the per-category branches so the prose is single-sourced.
+
+// The conservative review-only line, emitted when no quantified claim is safe.
+export const REVIEW_FALLBACK = 'Detailed account activity was available for review.'
+// The offset-heavy qualifier tail (shared by the two offset branches).
+const OFFSETTING_TAIL = 'including offsetting entries'
+
+// Deterministic, FIGURE-FREE magnitude band for a GL total that is larger than
+// the reported variance, graded by the contribution ratio (|GL total|/|variance|).
+// Approved Phase 20A.2 bands — never renders a raw dollar:
+//   ratio ≤ 3        → "modestly"
+//   3 < ratio ≤ 10   → "materially"
+//   ratio > 10       → "substantially"
+// A non-finite ratio degrades to the most conservative band ("modestly").
+export function magnitudeBand(ratio) {
+  const r = Number(ratio)
+  if (Number.isFinite(r) && r > 10) return 'substantially'
+  if (Number.isFinite(r) && r > 3) return 'materially'
+  return 'modestly'
+}
+
+// The shared "appears <band> larger than the reported variance <period>" clause,
+// single-sourced for the aligned render guard and the disproportionate
+// suppressed-dollar path. Never renders a dollar.
+function appearsLargerClause(ratio, during) {
+  return `appears ${magnitudeBand(ratio)} larger than the reported variance ${during}`
+}
+
 // Build the STANDALONE GL evidence sentence (Phase 17.1). It states what the GL
 // contains — context only — and never asserts or implies causation. Always
 // returns a full sentence (ending in a period) for a GL match. Tiers:
@@ -89,7 +120,7 @@ export function approxMoney(total) {
 //   • thin / name-only match → "Detailed account activity was available for
 //     review."
 export function glEvidenceSentence({ account, thick, detail, period } = {}) {
-  if (!thick) return 'Detailed account activity was available for review.'
+  if (!thick) return REVIEW_FALLBACK
 
   const d = detail || {}
   const count = Number(d.count) || 0
@@ -107,7 +138,7 @@ export function glEvidenceSentence({ account, thick, detail, period } = {}) {
     const noun = count === 1 ? 'transaction' : 'transactions'
     return `Detailed activity includes ${count} related ${noun} ${periodSuffix(period, 'during')}.`
   }
-  return 'Detailed account activity was available for review.'
+  return REVIEW_FALLBACK
 }
 
 // --- Phase 19A: classified GL commentary ----------------------------------
@@ -152,12 +183,13 @@ export function commentarySentence({ type, account, detail, period, contribution
 
     case 'OH': // Offset-heavy — a single line exceeds the net total; never show it.
       return suppress
-        ? `GL detail reflects substantially larger related activity ${during}, including offsetting entries.`
-        : `GL detail shows approximately ${approxMoney(total)} of related activity ${during}, including offsetting entries.`
+        ? `GL detail reflects substantially larger related activity ${during}, ${OFFSETTING_TAIL}.`
+        : `GL detail shows approximately ${approxMoney(total)} of related activity ${during}, ${OFFSETTING_TAIL}.`
 
     case 'DP': // Disproportionate — GL activity far larger than the variance.
+      // Suppressed-dollar path: figure-free, graded by the contribution ratio.
       return suppress
-        ? `GL detail reflects related activity that appears materially larger than the reported variance ${during}.`
+        ? `GL detail reflects related activity that ${appearsLargerClause(ratio, during)}.`
         : `GL detail shows approximately ${approxMoney(total)} of related activity ${during}, which is broader than this variance.`
 
     case 'PA': // Partial — GL activity far smaller than the variance.
@@ -165,12 +197,15 @@ export function commentarySentence({ type, account, detail, period, contribution
   }
 
   // Aligned render guard (#1): the dollar we would render is larger than the
-  // reported variance — drop the figure and state the relationship instead. The
-  // Unbudgeted (D) lead is preserved because it is a structural fact, not a size.
+  // reported variance — drop the figure and state the relationship instead,
+  // graded (figure-free) by the magnitude band. The Unbudgeted (D) lead is
+  // preserved because it is a structural fact, not a size.
   if (exceedsVariance && type !== 'G') {
+    const guardRatio = Number.isFinite(ratio) ? ratio : v > 0 ? Math.abs(total) / v : NaN
+    const clause = appearsLargerClause(guardRatio, during)
     return type === 'D'
-      ? `Activity occurred without a budget allocation; related activity appears larger than the reported variance ${during}.`
-      : `Related activity appears larger than the reported variance ${during}.`
+      ? `Activity occurred without a budget allocation; related activity ${clause}.`
+      : `Related activity ${clause}.`
   }
 
   // Phase 19B: on an aligned, quantified shape, optionally embed a clean vendor
@@ -229,7 +264,7 @@ function shapeSentence({ type, account, count, total, reliableTotal, maxTxn, dur
       return `GL detail shows approximately ${approxMoney(total)} across two related transactions ${during}.`
 
     case 'G': // Low-confidence / thin
-      return 'Detailed account activity was available for review.'
+      return REVIEW_FALLBACK
 
     case 'F': // Quantified fallback
     default: {
@@ -238,7 +273,7 @@ function shapeSentence({ type, account, count, total, reliableTotal, maxTxn, dur
           const noun = count === 1 ? 'transaction' : 'transactions'
           return `Detailed activity includes ${count} related ${noun} ${during}.`
         }
-        return 'Detailed account activity was available for review.'
+        return REVIEW_FALLBACK
       }
       const descriptor = descriptorFor(account)
       const kind = descriptor ? `${descriptor} ` : ''

@@ -29,6 +29,7 @@ import {
   accountCode,
   CONFIDENCE_FLOOR
 } from '../src/lib/enrich/index.js'
+import { magnitudeBand } from '../src/lib/enrich/templates.js'
 
 // --- helpers ---------------------------------------------------------------
 
@@ -444,7 +445,8 @@ test('Contribution: disproportionate GL (ratio > 10) suppresses the dollar figur
     account: 'Repairs Expense', actual: 7189, budget: 5000,
     columns: ['Account', 'Amount'], rows: [['Repairs Expense', '265000']]
   })
-  assert.match(note.text, /\. GL detail reflects related activity that appears materially larger than the reported variance during the current period\.$/)
+  // ratio ≈ 121 (> 10) → "substantially"; still figure-free.
+  assert.match(note.text, /\. GL detail reflects related activity that appears substantially larger than the reported variance during the current period\.$/)
   assert.doesNotMatch(note.text, /265|\$265,000/)
 })
 
@@ -504,7 +506,8 @@ test('Render guard: an aligned GL total larger than the variance suppresses the 
     account: 'Repairs Expense', actual: 6000, budget: 5000,
     columns: ['Account', 'Amount'], rows: [['Repairs Expense', '2000']]
   })
-  assert.match(note.text, /\. Related activity appears larger than the reported variance during the current period\.$/)
+  // ratio 2.0 (≤ 3) → "modestly"; figure-free.
+  assert.match(note.text, /\. Related activity appears modestly larger than the reported variance during the current period\.$/)
   assert.doesNotMatch(note.text, /\$2,000|GL detail shows a single transaction/)
 })
 
@@ -534,6 +537,45 @@ test('Expense credit still reads as a credit / true-up (softening is non-expense
     columns: ['Account', 'Amount'], rows: [['Insurance Expense', '-3000']]
   })
   assert.match(note.text, /\. GL detail shows a single credit of approximately \$3,000 during the current period\.$/)
+})
+
+// --- Phase 20A.2: graded magnitude band + figure-free suppression ----------
+
+test('magnitudeBand grades the contribution ratio into the approved bands', () => {
+  for (const r of [0.5, 1, 2, 3]) assert.equal(magnitudeBand(r), 'modestly', `ratio ${r}`)
+  for (const r of [3.01, 5, 10]) assert.equal(magnitudeBand(r), 'materially', `ratio ${r}`)
+  for (const r of [10.01, 37, 121]) assert.equal(magnitudeBand(r), 'substantially', `ratio ${r}`)
+  // Non-finite ratio degrades to the most conservative band.
+  for (const r of [null, undefined, NaN]) assert.equal(magnitudeBand(r), 'modestly', `ratio ${r}`)
+})
+
+test('no suppressed-dollar "larger than variance" phrase ever renders a raw dollar', () => {
+  // The two paths that emit a figure-free "larger than the reported variance"
+  // phrase: the aligned render guard (ratio 1–2 → modestly) and the
+  // disproportionate suppression (ratio > 10 → substantially).
+  const cases = [
+    { account: 'A Expense', actual: 6000, budget: 5000, amounts: ['2000'], band: 'modestly' },
+    { account: 'C Expense', actual: 7189, budget: 5000, amounts: ['265000'], band: 'substantially' }
+  ]
+  for (const c of cases) {
+    const note = enrichedWith({ account: c.account, actual: c.actual, budget: c.budget, columns: ['Account', 'Amount'], rows: c.amounts.map((a) => [c.account, a]) })
+    const gl = note.text.slice(note.text.indexOf('. ') + 2)
+    assert.match(gl, new RegExp(`appears ${c.band} larger than the reported variance`))
+    assert.doesNotMatch(gl, /\$[\d,]+/, `suppressed phrase leaked a dollar: ${gl}`)
+  }
+})
+
+test('offset-heavy wording still names offsetting entries (dedup preserves meaning)', () => {
+  const note = enrichedWith({
+    account: 'Fire Sprinkler Expense', actual: 12186, budget: 5000,
+    columns: ['Account', 'Amount'], rows: [['Fire Sprinkler Expense', '23200'], ['Fire Sprinkler Expense', '-12500']]
+  })
+  assert.match(note.text, /including offsetting entries\.$/)
+})
+
+test('commentary is deterministic — same input yields the same string', () => {
+  const build = () => enrichedWith({ account: 'Repairs Expense', actual: 6000, budget: 5000, columns: ['Account', 'Amount'], rows: [['Repairs Expense', '6000']] }).text
+  assert.equal(build(), build())
 })
 
 // --- Phase 17.1: no causation / implied-causation language -----------------
