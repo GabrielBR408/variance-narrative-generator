@@ -1,12 +1,16 @@
 import React, { useMemo, useState } from 'react'
-import { computeVariance } from '../lib/variance/index.js'
 import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
+import { buildVariancePreview } from '../lib/previewNarrative.js'
 
-// --- Variance preview — Phase 8 -------------------------------------------
-// Presentation only. It runs the deterministic variance engine over the
-// normalized extractions and renders a collapsed, capped table per file. All
-// math lives in src/lib/variance; this component never calculates inline, never
-// generates text, and never persists anything.
+// --- Variance preview — Phase 8 / 22.1 ------------------------------------
+// Presentation only. It renders the deterministic variance engine's output as a
+// collapsed, capped table. All math lives in src/lib/variance; this component
+// never calculates inline, never generates text, and never persists anything.
+//
+// Phase 22.1: variance is computed for the BASE report only. Supporting files
+// (GL / Budget / Prior / …) are listed as enrichment context but never get a
+// variance table, so a supporting file can never read as a variance driver. The
+// preview uses the user's CURRENT thresholds, matching the generate path.
 
 const PREVIEW_ROWS = 12 // bound the rendered rows; calculation already capped upstream
 
@@ -172,29 +176,52 @@ function VarianceItem({ result }) {
   )
 }
 
-// `items` is the ordered list of extraction objects (same list the extraction
-// preview renders). Variance is computed here, in a memo, from those objects.
-export default function VariancePreview({ items }) {
-  const results = useMemo(() => {
-    if (!items || items.length === 0) return []
-    return items
-      .filter((ex) => ex && ex.status === 'ok')
-      .map((ex) => computeVariance(ex, DEFAULT_THRESHOLDS))
-  }, [items])
+// A supporting file line: visible for context, explicitly NOT variance-computed.
+function SupportingItem({ extraction }) {
+  return (
+    <div className="variance variance--supporting">
+      <div className="variance-summary">
+        <span className="variance-name">{extraction.fileName}</span>
+        {extraction.classification && extraction.classification.type && (
+          <span className="variance-class">{extraction.classification.type}</span>
+        )}
+        <span className="variance-badge variance-badge--support">Enriches narrative</span>
+      </div>
+    </div>
+  )
+}
 
-  if (results.length === 0) return null
+// `items` is the ordered list of extraction objects (same list the extraction
+// preview renders). Phase 22.1: variance is computed for the BASE report only,
+// using the user's current `thresholds`; supporting files are listed without a
+// variance table. Memoized so it recomputes the instant a threshold changes.
+export default function VariancePreview({ items, thresholds = DEFAULT_THRESHOLDS }) {
+  const { base, supporting } = useMemo(
+    () => buildVariancePreview({ items, thresholds }),
+    [items, thresholds]
+  )
+
+  // Nothing extracted yet, or no base report uploaded → no variance to preview.
+  if (!base && supporting.length === 0) return null
 
   return (
     <div className="card variance-card">
       <div className="card-label">Variance Preview</div>
       <p className="card-sub">
-        Actual vs. Budget/Prior, calculated in your browser. Thresholds: $
-        {DEFAULT_THRESHOLDS.amount.toLocaleString()} or {DEFAULT_THRESHOLDS.percent}%. Preview only —
-        nothing is saved or sent.
+        Actual vs. Budget/Prior for the base report, calculated in your browser. Thresholds:{' '}
+        {fmtMoney(thresholds.amount)} or {thresholds.percent}%. Supporting files enrich the
+        narrative and are not variance-computed. Preview only — nothing is saved or sent.
       </p>
       <div className="variance-list">
-        {results.map((r) => (
-          <VarianceItem key={r.fileId} result={r} />
+        {base ? (
+          <VarianceItem result={base.variance} />
+        ) : (
+          <p className="variance-msg">
+            No base report yet. Upload a Base Variance Report to compute variances.
+          </p>
+        )}
+        {supporting.map((ex) => (
+          <SupportingItem key={ex.fileId} extraction={ex} />
         ))}
       </div>
     </div>

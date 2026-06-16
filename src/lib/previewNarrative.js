@@ -15,7 +15,7 @@
 // extractions and runs the same in-memory engines the rest of the app uses.
 
 import { computeVariance } from './variance/index.js'
-import { DEFAULT_THRESHOLDS } from './variance/thresholds.js'
+import { DEFAULT_THRESHOLDS, thresholdsFromSettings } from './variance/thresholds.js'
 import { generateNarrative } from './narrative/index.js'
 import { enrichNarrative } from './enrich/index.js'
 import { scopeNarrative, DEFAULT_PERIOD_SCOPE } from './narrative/periodScope.js'
@@ -32,23 +32,34 @@ export function findBaseExtraction(items = []) {
   return ok.find((ex) => ex.classification && ex.classification.type === BASE_TYPE) || null
 }
 
+// Split the OK extractions into the single base report and its supporting files.
+// Centralizes the base-vs-supporting rule so every preview surface agrees on
+// which file drives the variance and which files only enrich it.
+function splitBaseSupporting(items = []) {
+  const ok = (Array.isArray(items) ? items : []).filter((ex) => ex && ex.status === 'ok')
+  const base = findBaseExtraction(ok)
+  const supporting = ok.filter((ex) => ex !== base)
+  return { ok, base, supporting }
+}
+
 // Build the single preview narrative from the uploaded extractions. Returns the
 // scoped, enriched base narrative, or null when there is no base or the base
 // produced no comparable period. Same inputs always yield the same result.
+//
+// Phase 22.1: `thresholds` is threaded through so the live preview flags rows
+// with the user's CURRENT thresholds — the same numbers the generate path uses —
+// instead of a hardcoded default. Defaults to the central thresholds for
+// backward compatibility.
 export function buildPreviewNarrative({
   items = [],
   periodScope = DEFAULT_PERIOD_SCOPE,
-  commentaryMode = 'conservative'
+  commentaryMode = 'conservative',
+  thresholds = DEFAULT_THRESHOLDS
 } = {}) {
-  const ok = (Array.isArray(items) ? items : []).filter((ex) => ex && ex.status === 'ok')
-  const base = findBaseExtraction(ok)
+  const { base, supporting } = splitBaseSupporting(items)
   if (!base) return null
 
-  // Every other OK file is supporting evidence — exactly what the generate flow
-  // hands to enrichNarrative.
-  const supporting = ok.filter((ex) => ex !== base)
-
-  const variance = computeVariance(base, DEFAULT_THRESHOLDS)
+  const variance = computeVariance(base, thresholds)
   const baseNarrative = generateNarrative(variance)
   const enriched = enrichNarrative(baseNarrative, { supporting, mode: commentaryMode })
   const scoped = scopeNarrative(enriched, periodScope)
@@ -57,3 +68,39 @@ export function buildPreviewNarrative({
   if (!scoped || !Array.isArray(scoped.periods) || scoped.periods.length === 0) return null
   return scoped
 }
+
+// Build the BASE-ONLY variance preview (Phase 22.1). Variance is computed solely
+// for the Base Variance Report; supporting files (GL / Budget / Prior / …) are
+// returned untouched and visible, but are NEVER variance-computed — so the UI
+// can never present a supporting file as a variance driver. Uses the exact same
+// `computeVariance(base, thresholds)` the generate pipeline runs, guaranteeing
+// the previewed rows match the generated rows 1:1 at the same thresholds.
+export function buildVariancePreview({ items = [], thresholds = DEFAULT_THRESHOLDS } = {}) {
+  const { base, supporting } = splitBaseSupporting(items)
+  return {
+    base: base ? { extraction: base, variance: computeVariance(base, thresholds) } : null,
+    supporting
+  }
+}
+
+// A tiny, deterministic causality model for the preview header: which single
+// file drives the variance (the base report) and which files only enrich it.
+// Pure data so the indicator's wording is testable and can never drift from the
+// base-only routing above.
+export function previewBasis({ items = [] } = {}) {
+  const { base, supporting } = splitBaseSupporting(items)
+  const hasBase = !!base
+  const supportingNames = supporting.map((ex) => ex.fileName).filter(Boolean)
+  return {
+    hasBase,
+    baseName: hasBase ? base.fileName || null : null,
+    supportingCount: supporting.length,
+    supportingNames,
+    summary: hasBase
+      ? 'Variance is computed from the base report only. Supporting files enrich the narrative.'
+      : 'Add a base report to compute variances. Supporting files only enrich the narrative.'
+  }
+}
+
+// Re-exported for callers that resolve UI settings into engine thresholds.
+export { thresholdsFromSettings }
