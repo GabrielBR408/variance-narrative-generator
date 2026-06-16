@@ -13,6 +13,7 @@ import {
   pendingSupportingCount
 } from './lib/generateState.js'
 import { enrichNarrative } from './lib/enrich/index.js'
+import { clientGenerate } from './lib/clientGenerate.js'
 import { DEFAULT_COMMENTARY_DETAIL, commentaryModeFromStyle } from './lib/enrich/commentaryMode.js'
 import { enrichmentDiagnostic } from './lib/enrichmentDiagnostic.js'
 import { computeVariance } from './lib/variance/index.js'
@@ -235,20 +236,36 @@ export default function App() {
       JSON.stringify({ base: baseExtraction, supporting: supportingExtractions })
     )
 
+    // Compact file metadata for the static fallback's response (mirrors what the
+    // server reports back as `files`).
+    const clientFiles = [
+      { name: baseReport.name, size: baseReport.size, type: baseReport.type || '', role: 'baseReport' },
+      ...supportingFiles.map((f) => ({ name: f.name, size: f.size, type: f.type || '', role: 'supportingFile' }))
+    ]
+
     // Sending. Do not set Content-Type — the browser adds the multipart
     // boundary automatically.
     setStatus('sending')
     try {
-      const res = await fetch('/generate', { method: 'POST', body: form })
-
-      let data
+      // Try the real /generate endpoint (present in dev/preview and any server
+      // deploy). On a static host (e.g., GitHub Pages) there is no endpoint, so
+      // the request yields no usable JSON — fall back to computing the SAME
+      // response in-browser with the same pure pipeline. A server that responds
+      // with a structured error is still authoritative (surfaced below).
+      let data = null
       try {
+        const res = await fetch('/generate', { method: 'POST', body: form })
         data = await res.json()
       } catch {
-        throw new Error('The server returned an unexpected response.')
+        data = clientGenerate({
+          baseExtraction,
+          files: clientFiles,
+          thresholds: previewThresholds,
+          settingsReceived: Boolean(style && variance)
+        })
       }
 
-      if (!res.ok || !data || data.success !== true || !data.narrative) {
+      if (!data || data.success !== true || !data.narrative) {
         throw new Error((data && data.error) || 'Generation could not be completed. Try again.')
       }
 

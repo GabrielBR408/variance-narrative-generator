@@ -25,7 +25,13 @@ function generateEndpoint() {
   }
 }
 
+// Base public path. Defaults to '/' for local dev/preview and any server deploy;
+// the GitHub Pages workflow sets VITE_BASE to the project sub-path
+// ('/variance-narrative-generator/') so built asset URLs resolve there.
+const base = process.env.VITE_BASE || '/'
+
 export default defineConfig({
+  base,
   plugins: [
     react(),
     generateEndpoint(),
@@ -39,7 +45,10 @@ export default defineConfig({
         theme_color: '#1c2a3a',
         background_color: '#f4f5f7',
         display: 'standalone',
-        start_url: '/',
+        // Keep start_url within the (base-derived) scope so the manifest stays
+        // installable under a project sub-path on GitHub Pages.
+        start_url: base,
+        scope: base,
         icons: [
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
