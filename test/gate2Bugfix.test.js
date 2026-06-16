@@ -75,12 +75,14 @@ test('owner-facing detailed commentary does not contain "GL Detail shows"', () =
   }
 })
 
-test('the GL evidence sentence still reads naturally (Detail …) after relabeling', () => {
+test('the GL evidence sentence still reads naturally (owner-facing) after relabeling', () => {
   const base = narrativeFor({ amount: 1000, percent: 10 })
   const enriched = enrichNarrative(base, { supporting: [GL_SUPPORTING], mode: 'detailed' })
   const repairs = enriched.periods[0].highVariances.find((n) => /Repairs/.test(n.account))
   assert.ok(repairs, 'Repairs note is present and enriched')
-  assert.match(repairs.text, /Detail (shows|includes|reflects)\b/)
+  // NQ-1A: owner-facing prose, never the old extraction-style "Detail …" label.
+  assert.doesNotMatch(repairs.text, /Detail (shows|includes|reflects)|Detailed (activity|account)/)
+  assert.match(repairs.text, /(reflects|Related activity|movement)\b/i)
 })
 
 // --- Finding 3: the export carries the entire variance report --------------

@@ -31,13 +31,14 @@ export function displayAccount(account = '') {
   return stripped || String(account).trim()
 }
 
-// The period phrase for an evidence sentence. YTD is always "year-to-date";
-// the current/unknown period uses a "<prep> the [current] period" form. Never
-// emits the hyphenated "current-period" used by older clause wording.
-function periodSuffix(period, prep = 'during') {
-  if (period === 'ytd') return 'year-to-date'
-  if (period === 'current') return `${prep} the current period`
-  return `${prep} the period`
+// The period phrase appended to an evidence sentence. YTD is still called out as
+// "year-to-date"; the current/unknown period now OMITS the mechanical
+// "during the current period" suffix entirely, so owner-facing commentary reads
+// as plain business prose instead of period-stamped extraction notes. Returns a
+// leading-space clause (or '') ready to drop in just before the closing period.
+function periodClause(period) {
+  if (period === 'ytd') return ' year-to-date'
+  return ''
 }
 
 // A small, deterministic lexicon mapping well-known account-name tokens to a
@@ -79,35 +80,35 @@ export function approxMoney(total) {
 
 // Build the STANDALONE GL evidence sentence (Phase 17.1). It states what the GL
 // contains — context only — and never asserts or implies causation. Always
-// returns a full sentence (ending in a period) for a GL match. Tiers:
-//   • reliable total → "Detail shows approximately $X of related <type>
-//     activity <period>."
-//   • descriptions present (no reliable total) → "Related transactions appear in
-//     detailed activity <period>."
-//   • count only (amounts ambiguous, no descriptions) → "Detailed activity
-//     includes N related transactions <period>."
-//   • thin / name-only match → "Detailed account activity was available for
-//     review."
+// returns a full sentence (ending in a period) for a GL match. NQ-1A reworks the
+// wording from extraction-style ("Detail shows…") to owner-facing prose:
+//   • reliable total → "Related <type> activity totaled approximately $X."
+//   • descriptions present (no reliable total) → "The movement reflects related
+//     transaction activity."
+//   • count only (amounts ambiguous, no descriptions) → "Activity was spread
+//     across N related transactions."
+//   • thin / name-only match → "Account-level activity was available for review."
 export function glEvidenceSentence({ account, thick, detail, period } = {}) {
-  if (!thick) return 'Detailed account activity was available for review.'
+  if (!thick) return 'Account-level activity was available for review.'
 
   const d = detail || {}
   const count = Number(d.count) || 0
   const totalReliable = typeof d.total === 'number' && Number.isFinite(d.total) && d.total !== 0
+  const yp = periodClause(period)
 
   if (totalReliable) {
     const descriptor = descriptorFor(account)
-    const activity = descriptor ? `${descriptor} activity` : 'activity'
-    return `Detail shows approximately ${approxMoney(d.total)} of related ${activity} ${periodSuffix(period, 'during')}.`
+    const activity = descriptor ? `${descriptor} activity` : 'account activity'
+    return `Related ${activity} totaled approximately ${approxMoney(d.total)}${yp}.`
   }
   if (d.topVendor) {
-    return `Related transactions appear in detailed activity ${periodSuffix(period, 'for')}.`
+    return `The movement reflects related transaction activity${yp}.`
   }
   if (count > 0) {
     const noun = count === 1 ? 'transaction' : 'transactions'
-    return `Detailed activity includes ${count} related ${noun} ${periodSuffix(period, 'during')}.`
+    return `Activity was spread across ${count} related ${noun}${yp}.`
   }
-  return 'Detailed account activity was available for review.'
+  return 'Account-level activity was available for review.'
 }
 
 // --- Phase 19A: classified GL commentary ----------------------------------
@@ -124,7 +125,7 @@ export function commentarySentence({ type, account, detail, period, contribution
   const total = d.total
   const reliableTotal = typeof total === 'number' && Number.isFinite(total) && total !== 0
   const maxTxn = typeof d.maxTxn === 'number' && Number.isFinite(d.maxTxn) ? Math.abs(d.maxTxn) : null
-  const during = periodSuffix(period, 'during')
+  const yp = periodClause(period)
 
   // Render guard (render-only; contribution categories are unchanged). Within the
   // aligned band the GL total can be up to 2× the variance, which reads as if the
@@ -143,25 +144,27 @@ export function commentarySentence({ type, account, detail, period, contribution
 
   switch (type) {
     case 'DC': // Direction conflict — GL net sign opposes the variance direction.
+      // Caution preserved (the GL ran the other way) without the mechanical
+      // "runs counter to the variance direction and warrants review" boilerplate.
       if (suppress) {
-        return `Detail reflects a large net credit that runs counter to the variance direction and warrants review.`
+        return `Related activity reflects a large net credit running opposite to the reported movement, which may be worth a closer look.`
       }
       return total < 0
-        ? `Detail shows a net credit of approximately ${approxMoney(Math.abs(total))} ${during}, which runs counter to the variance direction and warrants review.`
-        : `Detail shows net activity of approximately ${approxMoney(total)} ${during}, which runs counter to the variance direction and warrants review.`
+        ? `Related activity reflects a net credit of approximately ${approxMoney(Math.abs(total))}${yp}, running opposite to the reported movement and worth a closer look.`
+        : `Related activity of approximately ${approxMoney(total)}${yp} runs opposite to the reported movement and may be worth a closer look.`
 
     case 'OH': // Offset-heavy — a single line exceeds the net total; never show it.
       return suppress
-        ? `Detail reflects substantially larger related activity ${during}, including offsetting entries.`
-        : `Detail shows approximately ${approxMoney(total)} of related activity ${during}, including offsetting entries.`
+        ? `Related activity was substantially larger and includes offsetting entries${yp}.`
+        : `Related activity of approximately ${approxMoney(total)} includes offsetting entries${yp}.`
 
     case 'DP': // Disproportionate — GL activity far larger than the variance.
       return suppress
-        ? `Detail reflects related activity that appears materially larger than the reported variance ${during}.`
-        : `Detail shows approximately ${approxMoney(total)} of related activity ${during}, which is broader than this variance.`
+        ? `Related activity was materially larger than the reported variance, indicating the variance reflects only part of the account movement${yp}.`
+        : `Related activity totaled approximately ${approxMoney(total)}${yp}, indicating the variance reflects only part of the account movement.`
 
     case 'PA': // Partial — GL activity far smaller than the variance.
-      return `Detail shows approximately ${approxMoney(total)} of related activity ${during}, a portion of the total movement.`
+      return `Related activity totaled approximately ${approxMoney(total)}${yp}, accounting for a portion of the total movement.`
   }
 
   // Aligned render guard (#1): the dollar we would render is larger than the
@@ -169,8 +172,8 @@ export function commentarySentence({ type, account, detail, period, contribution
   // Unbudgeted (D) lead is preserved because it is a structural fact, not a size.
   if (exceedsVariance && type !== 'G') {
     return type === 'D'
-      ? `Activity occurred without a budget allocation; related activity appears larger than the reported variance ${during}.`
-      : `Related activity appears larger than the reported variance ${during}.`
+      ? `This activity occurred without a budget allocation, and related activity exceeded the reported variance${yp}, suggesting offsetting entries or account-level timing also affected the result.`
+      : `Related activity exceeded the reported variance${yp}, suggesting offsetting entries or account-level timing also affected the result.`
   }
 
   // Phase 19B: on an aligned, quantified shape, optionally embed a clean vendor
@@ -180,15 +183,15 @@ export function commentarySentence({ type, account, detail, period, contribution
   const ALIGNED_QUANTIFIED = new Set(['A', 'B', 'C', 'I', 'F'])
   if (reliableTotal && contribution && ALIGNED_QUANTIFIED.has(type)) {
     if (contribution.vendorRenderable && d.vendor) {
-      return `Detail shows approximately ${approxMoney(total)} of related ${d.vendor} activity ${during}.`
+      return `The movement reflects approximately ${approxMoney(total)} of related ${d.vendor} activity${yp}.`
     }
     if (contribution.descriptionRenderable && d.description) {
-      const base = shapeSentence({ type, account, count, total, reliableTotal, maxTxn, during, accountType })
+      const base = shapeSentence({ type, account, count, total, reliableTotal, maxTxn, yp, accountType })
       return `${base.replace(/\.\s*$/, '')} (${d.description}).`
     }
   }
 
-  return shapeSentence({ type, account, count, total, reliableTotal, maxTxn, during, accountType })
+  return shapeSentence({ type, account, count, total, reliableTotal, maxTxn, yp, accountType })
 }
 
 // --- Phase 21.3: detailed commentary (opt-in) -----------------------------
@@ -312,11 +315,11 @@ export function detailedCommentarySentence({ evidence, contribution, period } = 
   const memo = memoRenderable ? polishMemo(evidence.memo) : ''
   if (!vendor && !memo) return null
 
-  const during = periodSuffix(period, 'during')
+  const yp = periodClause(period)
   const contributionType = contribution && contribution.contributionType
 
-  // A direction conflict carries an important "runs counter / warrants review"
-  // signal — prefer the conservative sentence over a softer detail phrase.
+  // A direction conflict carries an important "ran the other way / worth a closer
+  // look" signal — prefer the conservative sentence over a softer detail phrase.
   if (contributionType === 'direction-conflict') return null
 
   // Exactly one vendor/memo phrase; memo + vendor preferred, then vendor, then
@@ -325,12 +328,12 @@ export function detailedCommentarySentence({ evidence, contribution, period } = 
 
   let sentence
   if (contributionType === 'offset-heavy') {
-    sentence = `Detail includes ${subject}, with offsetting entries ${during}.`
+    sentence = `The variance reflects ${subject}, partially offset by related entries${yp}.`
   } else if (contributionType === 'disproportionate') {
-    // Phase 21.4: reworded to avoid repeating "related activity".
-    sentence = `Detail reflects ${subject}, though the related activity is larger than the reported variance ${during}.`
+    // Reworded to avoid repeating "related activity" within one sentence.
+    sentence = `The variance reflects ${subject}, though related activity exceeded the reported variance${yp}.`
   } else {
-    sentence = `Detail includes ${subject} ${during}.`
+    sentence = `The variance reflects ${subject}${yp}.`
   }
 
   // Reject-on-doubt: never emit causal language even if wording changes later.
@@ -340,59 +343,59 @@ export function detailedCommentarySentence({ evidence, contribution, period } = 
 
 // The Phase 19A shape sentence (A–I). Factored out so Phase 19B can embed a
 // vendor/description around it without duplicating the per-shape wording.
-function shapeSentence({ type, account, count, total, reliableTotal, maxTxn, during, accountType }) {
+function shapeSentence({ type, account, count, total, reliableTotal, maxTxn, yp, accountType }) {
   switch (type) {
     case 'A': // One-time
       return reliableTotal
-        ? `Detail shows a single transaction of approximately ${approxMoney(total)} ${during}.`
-        : `Detail shows a single related transaction ${during}.`
+        ? `The movement reflects a single transaction of approximately ${approxMoney(total)}${yp}.`
+        : `The movement reflects a single related transaction${yp}.`
 
     case 'B': // One-time-dominated
       return (
-        `Detail shows approximately ${approxMoney(total)} across ${count} transactions, ` +
-        `with one of about ${approxMoney(maxTxn)} ${during}.`
+        `The movement reflects approximately ${approxMoney(total)} across ${count} transactions, ` +
+        `concentrated in one of about ${approxMoney(maxTxn)}${yp}.`
       )
 
     case 'C': // Recurring
-      return `Detail shows approximately ${approxMoney(total)} across ${count} recurring transactions ${during}.`
+      return `The movement reflects approximately ${approxMoney(total)} across ${count} recurring transactions${yp}.`
 
     case 'D': // Unbudgeted
       return reliableTotal
-        ? `Activity occurred without a budget allocation; detail shows approximately ${approxMoney(total)} ${during}.`
-        : 'Activity occurred without a budget allocation and should be reviewed for future forecasting.'
+        ? `This activity occurred without a budget allocation and totaled approximately ${approxMoney(total)}${yp}.`
+        : 'This activity occurred without a budget allocation and should be reviewed for future forecasting.'
 
     case 'E': // Credit / true-up
       // #3 Revenue credit softening: on a revenue (or untyped income-like) line a
       // net credit is normal income, so avoid "single credit"/"net credits" and
       // phrase it as related credit activity. Expense true-ups keep "credit".
       if (accountType !== 'expense') {
-        return `Detail shows related credit activity of approximately ${approxMoney(Math.abs(total))} ${during}.`
+        return `The movement reflects related credit activity of approximately ${approxMoney(Math.abs(total))}${yp}.`
       }
       return count === 1
-        ? `Detail shows a single credit of approximately ${approxMoney(Math.abs(total))} ${during}.`
-        : `Detail shows net credits of approximately ${approxMoney(Math.abs(total))} across ${count} transactions ${during}.`
+        ? `The movement reflects a single credit of approximately ${approxMoney(Math.abs(total))}${yp}.`
+        : `The movement reflects net credits of approximately ${approxMoney(Math.abs(total))} across ${count} transactions${yp}.`
 
     case 'I': // Concentrated activity
-      return `Detail shows approximately ${approxMoney(total)} across two related transactions ${during}.`
+      return `The movement was concentrated in approximately ${approxMoney(total)} across two related transactions${yp}.`
 
     case 'G': // Low-confidence / thin
-      return 'Detailed account activity was available for review.'
+      return 'Account-level activity was available for review.'
 
     case 'F': // Quantified fallback
     default: {
       if (!reliableTotal) {
         if (count > 0) {
           const noun = count === 1 ? 'transaction' : 'transactions'
-          return `Detailed activity includes ${count} related ${noun} ${during}.`
+          return `Activity was spread across ${count} related ${noun}${yp}.`
         }
-        return 'Detailed account activity was available for review.'
+        return 'Account-level activity was available for review.'
       }
       const descriptor = descriptorFor(account)
       const kind = descriptor ? `${descriptor} ` : ''
       if (count === 1) {
-        return `Detail shows approximately ${approxMoney(total)} of related ${kind}activity ${during}.`
+        return `The movement reflects approximately ${approxMoney(total)} of related ${kind}activity${yp}.`
       }
-      return `Detail shows approximately ${approxMoney(total)} across ${count} related ${kind}transactions ${during}.`
+      return `The movement reflects approximately ${approxMoney(total)} across ${count} related ${kind}transactions${yp}.`
     }
   }
 }

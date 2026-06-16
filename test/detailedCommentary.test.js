@@ -101,34 +101,34 @@ test('detailed mode actually differs from conservative (opt-in has an effect)', 
 
 test('detailed mode renders vendor + memo for a high-confidence note', () => {
   const note = findNote(build('detailed'), '51252 Janitorial Supplies')
-  assert.match(note.text, /Detail includes janitorial supplies from Trinity Building Services during the current period\.$/)
+  assert.match(note.text, /The variance reflects janitorial supplies from Trinity Building Services\.$/)
 })
 
 test('detailed mode renders vendor + memo for a medium-confidence note', () => {
   const note = findNote(build('detailed'), '51020 Utility-Building Water')
-  assert.match(note.text, /Detail includes monthly water from City Water Dept during the current period\.$/)
+  assert.match(note.text, /The variance reflects monthly water from City Water Dept\.$/)
 })
 
 test('detailed mode renders a memo-only phrase', () => {
   const note = findNote(build('detailed'), '51256 Trash Removal')
-  assert.match(note.text, /Detail includes monthly trash pickup during the current period\.$/)
+  assert.match(note.text, /The variance reflects monthly trash pickup\.$/)
 })
 
 test('detailed mode renders a vendor-only phrase', () => {
   const note = findNote(build('detailed'), '51257 Recology Hauling')
-  assert.match(note.text, /Detail includes activity from Recology Golden Gate during the current period\.$/)
+  assert.match(note.text, /The variance reflects activity from Recology Golden Gate\.$/)
 })
 
 // --- offset-heavy and disproportionate variants ----------------------------
 
 test('detailed mode renders the offset-heavy variant', () => {
   const note = findNote(build('detailed'), '51400 Fire Sprinkler Contract')
-  assert.match(note.text, /Detail includes annual fire contract from Acme Fire LLC, with offsetting entries during the current period\.$/)
+  assert.match(note.text, /The variance reflects annual fire contract from Acme Fire LLC, partially offset by related entries\.$/)
 })
 
 test('detailed mode renders the disproportionate variant without a dollar', () => {
   const note = findNote(build('detailed'), '54200 Insurance')
-  assert.match(note.text, /Detail reflects annual premium from Blue Shield Insurance, though the related activity is larger than the reported variance during the current period\.$/)
+  assert.match(note.text, /The variance reflects annual premium from Blue Shield Insurance, though related activity exceeded the reported variance\.$/)
   assert.doesNotMatch(note.text, /\$25,000|25,000/)
   // Phase 21.4: "related activity" must not be repeated within one sentence.
   assert.equal((note.text.match(/related activity/gi) || []).length, 1)
@@ -219,5 +219,5 @@ test('detailedCommentarySentence is period-aware (year-to-date)', () => {
     contribution: { contributionType: 'aligned' },
     period: 'ytd'
   })
-  assert.equal(out, 'Detail includes activity from Recology Golden Gate year-to-date.')
+  assert.equal(out, 'The variance reflects activity from Recology Golden Gate year-to-date.')
 })

@@ -346,23 +346,23 @@ test('MRI smoke: each account renders its contribution-appropriate wording', () 
 
   assert.match(
     mriNote(enriched, 'Utility-Elect-Building').text,
-    /Detail shows approximately \$300 of related activity during the current period, a portion of the total movement\.$/
+    /Related activity totaled approximately \$300, accounting for a portion of the total movement\.$/
   )
   assert.match(
     mriNote(enriched, 'Utility-Building Water').text,
-    /Detail shows approximately \$2,100 of related City Water activity during the current period\.$/
+    /The movement reflects approximately \$2,100 of related City Water activity\.$/
   )
   assert.match(
     mriNote(enriched, 'Rental Inc-Parking Gar').text,
-    /Detail shows approximately \$4,800 across 4 recurring transactions during the current period \(Parking\)\.$/
+    /The movement reflects approximately \$4,800 across 4 recurring transactions \(Parking\)\.$/
   )
   assert.match(
     mriNote(enriched, 'Rental Inc. - Commercial').text,
-    /Detail reflects related activity that appears materially larger than the reported variance during the current period\.$/
+    /Related activity was materially larger than the reported variance, indicating the variance reflects only part of the account movement\.$/
   )
   assert.match(
     mriNote(enriched, 'Fire Sprinkler - Contract').text,
-    /Detail shows approximately \$10,700 of related activity during the current period, including offsetting entries\.$/
+    /Related activity of approximately \$10,700 includes offsetting entries\.$/
   )
 })
 
