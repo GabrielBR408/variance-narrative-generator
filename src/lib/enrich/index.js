@@ -33,6 +33,7 @@ import { explanationClause, glEvidenceSentence, commentarySentence } from './tem
 import { classifyGLCommentary } from './classify.js'
 import { rankContribution } from './contribution.js'
 import { reconstructDetail } from './reconstructDetail.js'
+import { selectDetailEvidence } from './detailEvidence.js'
 
 // Only these sections hold flagged variance notes — they are the only ones we
 // enrich. Executive Summary (a roll-up) and Missing Data (no comparison) are
@@ -97,6 +98,13 @@ function enrichNote(note, index, options, period) {
       entry.reconstructed = reconstructDetail({
         vendor: c.detail && c.detail.vendor,
         description: c.detail && c.detail.description,
+        account: note.account
+      })
+      // Phase 21.2: select whether the reconstructed vendor/memo is render-safe
+      // for a future detailed mode. This is METADATA ONLY — no template reads
+      // `detailEvidence`, so narrative text stays byte-identical.
+      entry.detailEvidence = selectDetailEvidence({
+        reconstructed: entry.reconstructed,
         account: note.account
       })
     }
@@ -192,6 +200,7 @@ export {
   RECURRING_MIN_COUNT,
   RECURRING_MAX_COUNT
 } from './classify.js'
+export { selectDetailEvidence, VENDOR_RENDER_MAX_LEN, MEMO_RENDER_MAX_LEN } from './detailEvidence.js'
 export {
   rankContribution,
   ALIGN_LOW,
