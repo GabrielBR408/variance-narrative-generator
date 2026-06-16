@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { DEFAULT_PERIOD_SCOPE } from '../lib/narrative/periodScope.js'
+import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
 import { buildPreviewNarrative } from '../lib/previewNarrative.js'
 import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
 
@@ -95,10 +96,15 @@ function NarrativeItem({ narrative }) {
 // narrative is built from the Base Variance Report and enriched with the
 // supporting files. With no base report there is no preview. Phase 21.4: the
 // commentary mode defaults to 'detailed' (Conservative is still selectable).
-export default function NarrativeSummary({ items, periodScope = DEFAULT_PERIOD_SCOPE, commentaryMode = 'detailed' }) {
+export default function NarrativeSummary({
+  items,
+  periodScope = DEFAULT_PERIOD_SCOPE,
+  commentaryMode = 'detailed',
+  thresholds = DEFAULT_THRESHOLDS
+}) {
   const narrative = useMemo(
-    () => buildPreviewNarrative({ items, periodScope, commentaryMode }),
-    [items, periodScope, commentaryMode]
+    () => buildPreviewNarrative({ items, periodScope, commentaryMode, thresholds }),
+    [items, periodScope, commentaryMode, thresholds]
   )
 
   if (!narrative) return null

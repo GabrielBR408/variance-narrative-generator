@@ -1,6 +1,8 @@
 import React, { useRef } from 'react'
 import { classifyFile, confidenceTier } from '../lib/classify.js'
+import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
 import ExtractionPreview from './ExtractionPreview.jsx'
+import PreviewBasis from './PreviewBasis.jsx'
 import VariancePreview from './VariancePreview.jsx'
 import NarrativeSummary from './NarrativeSummary.jsx'
 
@@ -49,7 +51,8 @@ export default function SourceFiles({
   extractions = {},
   fileKey,
   periodScope,
-  commentaryMode = 'detailed'
+  commentaryMode = 'detailed',
+  thresholds = DEFAULT_THRESHOLDS
 }) {
   const baseInput = useRef(null)
   const supportInput = useRef(null)
@@ -123,9 +126,15 @@ export default function SourceFiles({
         </details>
       </div>
 
+      <PreviewBasis items={previewItems} />
       <ExtractionPreview items={previewItems} />
-      <VariancePreview items={previewItems} />
-      <NarrativeSummary items={previewItems} periodScope={periodScope} commentaryMode={commentaryMode} />
+      <VariancePreview items={previewItems} thresholds={thresholds} />
+      <NarrativeSummary
+        items={previewItems}
+        periodScope={periodScope}
+        commentaryMode={commentaryMode}
+        thresholds={thresholds}
+      />
     </section>
   )
 }

@@ -28,3 +28,17 @@ export function isTriggered(varianceAmount, variancePercent, thresholds = DEFAUL
 
   return byAmount || byPercent
 }
+
+// Map the UI's Variance-Detail settings ({ dollarThreshold, percentThreshold },
+// which arrive as strings from the form) to engine thresholds ({ amount, percent }).
+// Only finite, non-negative values are honored; anything else falls back to the
+// central defaults. Pure and deterministic so the live preview and the generate
+// path can flag rows with the SAME numbers (Phase 22.1 preview fidelity).
+export function thresholdsFromSettings(settings) {
+  const amount = Number(settings?.dollarThreshold)
+  const percent = Number(settings?.percentThreshold)
+  if (Number.isFinite(amount) && amount >= 0 && Number.isFinite(percent) && percent >= 0) {
+    return { amount, percent }
+  }
+  return DEFAULT_THRESHOLDS
+}

@@ -11,7 +11,7 @@ import { enrichNarrative } from './lib/enrich/index.js'
 import { DEFAULT_COMMENTARY_DETAIL, commentaryModeFromStyle } from './lib/enrich/commentaryMode.js'
 import { enrichmentDiagnostic } from './lib/enrichmentDiagnostic.js'
 import { computeVariance } from './lib/variance/index.js'
-import { DEFAULT_THRESHOLDS } from './lib/variance/thresholds.js'
+import { DEFAULT_THRESHOLDS, thresholdsFromSettings } from './lib/variance/thresholds.js'
 import { generateNarrative } from './lib/narrative/index.js'
 import { periodScopeAvailable, DEFAULT_PERIOD_SCOPE } from './lib/narrative/periodScope.js'
 
@@ -95,6 +95,15 @@ export default function App() {
     const narrative = generateNarrative(computeVariance(baseExtraction, DEFAULT_THRESHOLDS))
     return periodScopeAvailable(narrative)
   }, [baseExtraction])
+
+  // Phase 22.1: the live preview flags rows with the user's CURRENT thresholds —
+  // the same numbers the generate path will use — so changing a threshold updates
+  // the preview immediately, with no Generate. Memoized on the raw inputs so the
+  // object identity only changes when a threshold actually changes.
+  const previewThresholds = useMemo(
+    () => thresholdsFromSettings(variance),
+    [variance.dollarThreshold, variance.percentThreshold]
+  )
 
   // Extraction pipeline: classify (Phase 6) → extract → normalize → preview.
   // Runs whenever the uploaded files change. Each file is opened at most once;
@@ -250,6 +259,7 @@ export default function App() {
           fileKey={fileKey}
           periodScope={periodScope}
           commentaryMode={commentaryModeFromStyle(style)}
+          thresholds={previewThresholds}
         />
         <StylePanel style={style} setStyle={setStyle} />
         <VarianceDetail
