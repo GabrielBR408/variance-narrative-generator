@@ -1,14 +1,15 @@
 import React from 'react'
+import { STYLE_ACTIVE_FIELDS, STYLE_COMING_SOON_FIELDS } from '../lib/uiControls.js'
 
-const FIELDS = [
-  { key: 'audience', label: 'Audience', options: ['Owner', 'Asset Manager', 'Internal'] },
-  { key: 'reportStyle', label: 'Report Style', options: ['Executive', 'Detailed', 'Narrative'] },
-  { key: 'tone', label: 'Tone', options: ['Neutral', 'Formal', 'Plain'] },
-  { key: 'length', label: 'Length', options: ['Standard', 'Brief', 'Expanded'] },
-  // Phase 21.3: opt-in detailed GL commentary. Conservative (default) keeps the
-  // current owner-facing output; Detailed may add a sanitized vendor/memo phrase.
-  { key: 'commentaryDetail', label: 'Commentary detail', options: ['Conservative', 'Detailed'] }
-]
+// --- Style panel — Phase 2 / 22.2 -----------------------------------------
+// Only controls that actually affect output are interactive. Commentary detail
+// drives the enrichment mode (Conservative vs Detailed). The remaining style
+// selects are planned but NOT yet wired, so Phase 22.2 renders them disabled and
+// clearly labelled "Coming soon" rather than implying control they don't have.
+// (Audience / Report Style / Tone / Length would shape narrative wording, which
+// is intentionally deferred.) "Learn from uploads" and the free-text notes field
+// were removed entirely — UI, state, and request wiring. The control lists live
+// in src/lib/uiControls.js so the panels and the tests share one source.
 
 export default function StylePanel({ style, setStyle }) {
   const set = (key, value) => setStyle((prev) => ({ ...prev, [key]: value }))
@@ -21,7 +22,7 @@ export default function StylePanel({ style, setStyle }) {
         <span className="step-note">Control how the report reads.</span>
       </summary>
       <div className="panel-body">
-        {FIELDS.map((f) => (
+        {STYLE_ACTIVE_FIELDS.map((f) => (
           <label className="field" key={f.key}>
             <span className="field-label">{f.label}</span>
             <select className="field-control" value={style[f.key]} onChange={(e) => set(f.key, e.target.value)}>
@@ -30,25 +31,17 @@ export default function StylePanel({ style, setStyle }) {
           </label>
         ))}
 
-        <label className="field field--check">
-          <input
-            type="checkbox"
-            checked={style.learnFromUploads}
-            onChange={(e) => set('learnFromUploads', e.target.checked)}
-          />
-          <span className="field-label">Learn from uploaded reports</span>
-        </label>
-
-        <label className="field field--col">
-          <span className="field-label">Optional notes</span>
-          <textarea
-            className="field-control field-control--area"
-            rows={3}
-            placeholder="Anything specific you want reflected in the narrative."
-            value={style.notes}
-            onChange={(e) => set('notes', e.target.value)}
-          />
-        </label>
+        {STYLE_COMING_SOON_FIELDS.map((f) => (
+          <label className="field field--coming-soon" key={f.key}>
+            <span className="field-label">
+              {f.label}
+              <span className="coming-soon-tag">Coming soon</span>
+            </span>
+            <select className="field-control" value={f.options[0]} disabled aria-disabled="true">
+              {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </label>
+        ))}
       </div>
     </details>
   )

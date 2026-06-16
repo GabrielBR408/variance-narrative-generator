@@ -64,6 +64,37 @@ export function generateButtonState({ status, readiness } = {}) {
   }
 }
 
+// --- Result freshness (Phase 22.2) ----------------------------------------
+// A generated result reflects the settings in force WHEN it was generated. If the
+// user then changes a threshold or the commentary mode, the on-screen result and
+// its exports no longer match the current settings until they regenerate. This
+// pure comparator flags that drift.
+//
+// Tracked: dollar threshold, percent threshold, commentary mode. Period scope is
+// deliberately NOT tracked — it is applied live at render/export time, so changing
+// it never makes a result stale.
+//
+//   generated, current : { amountThreshold, percentThreshold, commentaryMode }
+// Returns { stale, changed } where `changed` lists which groups drifted
+// ('thresholds' and/or 'commentary'). Missing inputs are treated as "not stale".
+export function resultFreshness({ generated, current } = {}) {
+  if (!generated || !current) return { stale: false, changed: [] }
+  const changed = []
+  const thresholdsDiffer =
+    Number(generated.amountThreshold) !== Number(current.amountThreshold) ||
+    Number(generated.percentThreshold) !== Number(current.percentThreshold)
+  if (thresholdsDiffer) changed.push('thresholds')
+  if (generated.commentaryMode !== current.commentaryMode) changed.push('commentary')
+  return { stale: changed.length > 0, changed }
+}
+
+// Whether the "settings changed since generate" banner should be shown. Pure so
+// the visibility rule is testable without a DOM: only after a successful generate
+// that produced a result, when that result is stale and not yet dismissed.
+export function freshnessBannerVisible({ status, hasResult, stale, dismissed } = {}) {
+  return status === 'success' && !!hasResult && !!stale && !dismissed
+}
+
 // The single note shown beneath the button, if any. Priority:
 //   1. an active error from the last generate attempt (failure)
 //   2. a readiness hint (still extracting, or extraction failed)

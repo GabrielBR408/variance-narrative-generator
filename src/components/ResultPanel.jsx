@@ -1,9 +1,42 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { classifyFile, confidenceTier } from '../lib/classify.js'
 import { canExport } from '../lib/export/exportState.js'
+import { freshnessBannerVisible } from '../lib/generateState.js'
 import { scopeNarrative, DEFAULT_PERIOD_SCOPE } from '../lib/narrative/periodScope.js'
 import ExportActions from './ExportActions.jsx'
 import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
+
+const NO_FRESHNESS = { stale: false, changed: [] }
+
+// Phase 22.2: a small, dismissible banner shown when the displayed result was
+// generated with settings that have since changed (thresholds or commentary
+// mode), so the user knows the result/exports are out of date until they
+// regenerate. Pure visibility rule lives in generateState.freshnessBannerVisible;
+// dismissal is local and re-arms whenever a NEW change occurs.
+function ResultFreshnessBanner({ status, hasResult, freshness }) {
+  const changedKey = (freshness.changed || []).join(',')
+  const [dismissed, setDismissed] = useState(false)
+  // Re-show the banner whenever the set of changed settings changes.
+  useEffect(() => setDismissed(false), [changedKey])
+
+  if (!freshnessBannerVisible({ status, hasResult, stale: freshness.stale, dismissed })) return null
+
+  return (
+    <div className="freshness-banner" role="status">
+      <span className="freshness-banner-text">
+        Results were generated with previous settings. Regenerate to refresh exports and narratives.
+      </span>
+      <button
+        type="button"
+        className="freshness-banner-x"
+        aria-label="Dismiss"
+        onClick={() => setDismissed(true)}
+      >
+        ×
+      </button>
+    </div>
+  )
+}
 
 const STATUS_TEXT = {
   idle: 'Idle',
@@ -25,7 +58,7 @@ function prettySize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export default function ResultPanel({ status, result, periodScope = DEFAULT_PERIOD_SCOPE }) {
+export default function ResultPanel({ status, result, periodScope = DEFAULT_PERIOD_SCOPE, freshness = NO_FRESHNESS }) {
   const showResult = status === 'success' && result
   const files = (showResult && Array.isArray(result.files)) ? result.files : []
   // Phase 15.1: apply the selected period scope as a pure view transform over the
@@ -50,6 +83,8 @@ export default function ResultPanel({ status, result, periodScope = DEFAULT_PERI
         </p>
       ) : (
         <>
+          <ResultFreshnessBanner status={status} hasResult={!!result} freshness={freshness} />
+
           <div className="result">
             <div className="result-row"><span>Status</span><strong>Complete</strong></div>
             <div className="result-row"><span>Job ID</span><strong>{result.jobId}</strong></div>
