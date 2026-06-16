@@ -268,3 +268,60 @@ test('variance → narrative renders triggered rows from a real extraction shape
   // Every high-variance sentence is traceable and threshold-triggered only.
   for (const n of current.highVariances) assert.ok(n.sourceRows.length > 0)
 })
+
+// --- Phase 20A.1: base narrative cleanup -----------------------------------
+
+import { isRollupLabel } from '../src/lib/narrative/sections.js'
+import { displayAccountLabel } from '../src/lib/narrative/formatters.js'
+
+test('rollup detector flags uncoded TOTAL/NET/GROSS/SUBTOTAL lines only', () => {
+  for (const l of ['NET INCOME', 'TOTAL EXPENSES', 'Total Revenue', 'Gross Profit', 'Subtotal — Utilities', 'NET OPERATING INCOME'])
+    assert.equal(isRollupLabel(l), true, `${l} should be a rollup`)
+  // Coded real accounts are never rollups, even when they start with the words.
+  for (const l of ['54110 Real Estate Taxes', '40120 Rental Inc. - Commercial', '51999 Total Recovery Account'])
+    assert.equal(isRollupLabel(l), false, `${l} is a coded account`)
+  // Named accounts that merely contain the words later (or as a longer word) are
+  // not rollups: "Internet"/"Network" must not match the \bnet\b / leading rule.
+  for (const l of ['Internet Expense', 'Network Services', 'Grossman Catering'])
+    assert.equal(isRollupLabel(l), false, `${l} is a real account`)
+})
+
+test('rollup/subtotal lines are excluded from owner-facing variance notes', () => {
+  const r = result([
+    { period: 'current', comparisons: [
+      rec({ account: 'NET INCOME', actual: 200000, budget: 100000, accountType: 'unknown', category: 'neutral', sourceRows: [0] }),
+      rec({ account: 'TOTAL EXPENSES', actual: 80000, budget: 50000, accountType: 'expense', category: 'unfavorable', sourceRows: [1] }),
+      rec({ account: '54110 Real Estate Taxes', actual: 30000, budget: 20000, accountType: 'expense', category: 'unfavorable', sourceRows: [2] })
+    ] }
+  ])
+  const current = generateNarrative(r).periods[0]
+  const accounts = current.highVariances.map((n) => n.account)
+  assert.deepEqual(accounts, ['54110 Real Estate Taxes'], 'only the real coded account is narrated')
+  // Rollups also do not inflate the executive summary count.
+  assert.match(current.executiveSummary[0].text, /1 variance totaling/)
+  // And they appear in neither revenue nor expense notes.
+  for (const sec of ['revenueNotes', 'expenseNotes', 'highVariances'])
+    assert.ok(!current[sec].some((n) => /NET INCOME|TOTAL EXPENSES/.test(n.account)))
+})
+
+test('rendered prose strips the leading account code; metadata keeps the coded label', () => {
+  const r = result([
+    { period: 'current', comparisons: [
+      rec({ account: '54110 Real Estate Taxes', actual: 30000, budget: 20000, accountType: 'expense', category: 'unfavorable', sourceRows: [2] })
+    ] }
+  ])
+  const note = generateNarrative(r).periods[0].highVariances[0]
+  // Prose: no leading code.
+  assert.match(note.text, /^Real Estate Taxes exceeded budget by \$10,000/)
+  assert.doesNotMatch(note.text, /^54110|\b54110 Real Estate/)
+  // Traceability: the note still carries the original coded label and source row.
+  assert.equal(note.account, '54110 Real Estate Taxes')
+  assert.deepEqual(note.sourceRows, [2])
+})
+
+test('displayAccountLabel strips a leading code but leaves uncoded labels intact', () => {
+  assert.equal(displayAccountLabel('54110 Real Estate Taxes'), 'Real Estate Taxes')
+  assert.equal(displayAccountLabel('51023 Utility-Gas-Building'), 'Utility-Gas-Building')
+  assert.equal(displayAccountLabel('Rental Inc. - Commercial'), 'Rental Inc. - Commercial')
+  assert.equal(displayAccountLabel('54110'), '54110') // code-only → fallback, never empty
+})
