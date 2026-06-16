@@ -102,26 +102,64 @@ function triggeredRows(comparisons) {
   return comparisons.filter((c) => c && c.thresholdTriggered && !isRollupLabel(c.account))
 }
 
-// High Variances — every triggered row, unfavorable first then favorable, most
-// material within each group. This is the owner's "watch list", so problems lead.
-export function buildHighVariances(comparisons) {
-  return triggeredRows(comparisons).slice().sort(byOwnerPriority).map((c) => toNote(c))
+// NQ-1B — Section de-duplication.
+// Headline size for the High Variances section. The High Variances list is now a
+// CONCISE headline of the top material drivers across the whole report, not a
+// repeat of every triggered row. The N most material triggered rows (by absolute
+// dollar movement) lead High Variances and are NOT relisted in Revenue/Expense
+// Notes; every other triggered revenue/expense row lives ONLY in its category
+// note. So a variance appears exactly once. (Untyped rows have no category note,
+// so they always remain in High Variances — see buildHighVariances.)
+export const HIGH_VARIANCE_HEADLINE_LIMIT = 3
+
+// The headline set: the N most material triggered rows across the whole report,
+// chosen deterministically by materiality. Returned as a Set of the original
+// comparison object references. buildPeriodNarrative hands the SAME `comparisons`
+// array to every section builder, so identity membership is stable and the three
+// sections always agree on which rows were promoted to the headline.
+function headlineSet(comparisons) {
+  const ranked = triggeredRows(comparisons).slice().sort(byMateriality)
+  return new Set(ranked.slice(0, HIGH_VARIANCE_HEADLINE_LIMIT))
 }
 
-// Revenue Notes — triggered revenue lines only, most material first. (Within a
-// single account type the dollar movement is the clearest ordering.)
-export function buildRevenueNotes(comparisons) {
+// A row is "category-owned" when a dedicated notes section (Revenue or Expense)
+// can hold it. Untyped/unknown rows are not category-owned, so High Variances is
+// their only possible home and they are never dropped from it.
+function isCategoryOwned(c) {
+  return c.accountType === 'revenue' || c.accountType === 'expense'
+}
+
+// High Variances — the concise headline. It carries (a) the top material drivers
+// across the report and (b) every untyped row (which has no category note),
+// unfavorable first then favorable, most material within each group. Category
+// rows that did NOT make the headline are deferred to their Revenue/Expense Note.
+export function buildHighVariances(comparisons) {
+  const headline = headlineSet(comparisons)
   return triggeredRows(comparisons)
-    .filter((c) => c.accountType === 'revenue')
+    .filter((c) => headline.has(c) || !isCategoryOwned(c))
+    .slice()
+    .sort(byOwnerPriority)
+    .map((c) => toNote(c))
+}
+
+// Revenue Notes — triggered revenue lines that did NOT lead the headline, most
+// material first. (A revenue line promoted to High Variances is not repeated
+// here, so each variance appears exactly once.)
+export function buildRevenueNotes(comparisons) {
+  const headline = headlineSet(comparisons)
+  return triggeredRows(comparisons)
+    .filter((c) => c.accountType === 'revenue' && !headline.has(c))
     .slice()
     .sort(byMateriality)
     .map((c) => toNote(c))
 }
 
-// Expense Notes — triggered expense lines only, most material first.
+// Expense Notes — triggered expense lines that did NOT lead the headline, most
+// material first.
 export function buildExpenseNotes(comparisons) {
+  const headline = headlineSet(comparisons)
   return triggeredRows(comparisons)
-    .filter((c) => c.accountType === 'expense')
+    .filter((c) => c.accountType === 'expense' && !headline.has(c))
     .slice()
     .sort(byMateriality)
     .map((c) => toNote(c))

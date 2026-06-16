@@ -131,11 +131,23 @@ test('GL thick reliable total renders as a standalone evidence sentence (no caus
   assert.doesNotMatch(note.text, /General Ledger\.pdf/)
 })
 
-test('the same evidence appears on the matching expense-notes entry too', () => {
-  const n = baseNarrative(FLAGGED)
+test('NQ-1B: a non-headline expense line is enriched in Expense Notes, not duplicated', () => {
+  // Three larger drivers fill the High Variances headline, so the matched
+  // Utility line (variance $7,366) falls to Expense Notes — where the same GL
+  // evidence must attach — and is NOT also repeated in High Variances.
+  const n = baseNarrative([
+    rec({ account: 'Big Driver A', actual: 60000, budget: 5000, accountType: 'expense', category: 'unfavorable', sourceRows: [1] }),
+    rec({ account: 'Big Driver B', actual: 55000, budget: 5000, accountType: 'expense', category: 'unfavorable', sourceRows: [2] }),
+    rec({ account: 'Big Driver C', actual: 50000, budget: 5000, accountType: 'expense', category: 'unfavorable', sourceRows: [3] }),
+    rec({ account: 'Utility Expense Recovery', actual: 12700, budget: 5334, accountType: 'expense', category: 'unfavorable', sourceRows: [4] })
+  ])
   const enriched = enrichNarrative(n, { supporting: [GL()] })
-  const note = enriched.periods[0].expenseNotes.find((x) => x.account === 'Utility Expense Recovery')
-  assert.ok(note.support && note.support.length === 1)
+  const inExpense = enriched.periods[0].expenseNotes.find((x) => x.account === 'Utility Expense Recovery')
+  assert.ok(inExpense && inExpense.support && inExpense.support.length === 1, 'evidence attaches in Expense Notes')
+  assert.ok(
+    !enriched.periods[0].highVariances.some((x) => x.account === 'Utility Expense Recovery'),
+    'de-duplicated: the line is not also in High Variances'
+  )
 })
 
 // --- gating: only flagged variance notes are enriched ----------------------
