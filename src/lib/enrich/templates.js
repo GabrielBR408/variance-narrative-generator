@@ -191,6 +191,59 @@ export function commentarySentence({ type, account, detail, period, contribution
   return shapeSentence({ type, account, count, total, reliableTotal, maxTxn, during, accountType })
 }
 
+// --- Phase 21.3: detailed commentary (opt-in) -----------------------------
+// Build an OPT-IN detailed GL sentence from the render-safe detail evidence
+// selected in Phase 21.2 (`detailEvidence`). Conservative mode NEVER calls this
+// — it is reached only when the caller passes mode: 'detailed'. It renders at
+// most ONE sanitized vendor/memo phrase per note, never lists multiple vendors,
+// never asserts causation, and renders nothing unsafe (the 21.2 gate already
+// stripped dates / references / money / page-bleed / codes / account numbers).
+//
+// Returns null whenever it should fall back to the conservative sentence:
+//   • no evidence, or evidenceConfidence is 'low' / 'none' (do not over-render)
+//   • neither a render-safe vendor nor memo survived selection
+//   • a direction-conflict (the conservative "runs counter" warning must win)
+// The final causal-language guard is a belt-and-suspenders reject-on-doubt net;
+// the wording below is causation-free by construction.
+const CAUSAL_RE = /\b(caused by|due to|because of|driven by|drove|resulting from|result of|explains?|attributable to)\b/i
+
+export function detailedCommentarySentence({ evidence, contribution, period } = {}) {
+  if (!evidence) return null
+  const { evidenceConfidence, vendorRenderable, memoRenderable } = evidence
+  // Do not render detail when confidence is low/none (4. Do not over-render).
+  if (evidenceConfidence !== 'high' && evidenceConfidence !== 'medium') return null
+
+  const vendor = vendorRenderable ? String(evidence.vendor || '').trim() : ''
+  const memo = memoRenderable ? String(evidence.memo || '').trim() : ''
+  if (!vendor && !memo) return null
+
+  const during = periodSuffix(period, 'during')
+  const contributionType = contribution && contribution.contributionType
+
+  // A direction conflict carries an important "runs counter / warrants review"
+  // signal — prefer the conservative sentence over a softer detail phrase.
+  if (contributionType === 'direction-conflict') return null
+
+  // Exactly one vendor/memo phrase; memo + vendor preferred, then vendor, then
+  // memo. `full` reads as a clause subject; `short` trims the "activity" filler
+  // for the offset / disproportionate tails.
+  const full = vendor && memo ? `${memo} from ${vendor}` : vendor ? `activity from ${vendor}` : memo
+  const short = vendor && memo ? `${memo} from ${vendor}` : vendor || memo
+
+  let sentence
+  if (contributionType === 'offset-heavy') {
+    sentence = `GL detail includes ${short}, with offsetting entries ${during}.`
+  } else if (contributionType === 'disproportionate') {
+    sentence = `Related GL activity includes ${short}, but the related activity is larger than the reported variance ${during}.`
+  } else {
+    sentence = `GL detail includes ${full} ${during}.`
+  }
+
+  // Reject-on-doubt: never emit causal language even if wording changes later.
+  if (CAUSAL_RE.test(sentence)) return null
+  return sentence
+}
+
 // The Phase 19A shape sentence (A–I). Factored out so Phase 19B can embed a
 // vendor/description around it without duplicating the per-shape wording.
 function shapeSentence({ type, account, count, total, reliableTotal, maxTxn, during, accountType }) {

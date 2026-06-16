@@ -29,7 +29,7 @@
 //         revenueNotes, expenseNotes, sourceRows }, ... ] }
 
 import { buildEvidenceIndex, matchAccount, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
-import { explanationClause, glEvidenceSentence, commentarySentence } from './templates.js'
+import { explanationClause, glEvidenceSentence, commentarySentence, detailedCommentarySentence } from './templates.js'
 import { classifyGLCommentary } from './classify.js'
 import { rankContribution } from './contribution.js'
 import { reconstructDetail } from './reconstructDetail.js'
@@ -95,9 +95,11 @@ function enrichNote(note, index, options, period) {
       detail: c.detail
     }
     if (isGL(c.classificationType)) {
+      // Coerce null/undefined to '' so a dropped Description never reconstructs
+      // the literal string "null"/"undefined" (which detailed mode would render).
       entry.reconstructed = reconstructDetail({
-        vendor: c.detail && c.detail.vendor,
-        description: c.detail && c.detail.description,
+        vendor: (c.detail && c.detail.vendor) || '',
+        description: (c.detail && c.detail.description) || '',
         account: note.account
       })
       // Phase 21.2: select whether the reconstructed vendor/memo is render-safe
@@ -140,7 +142,7 @@ function enrichNote(note, index, options, period) {
       accountType: note.accountType,
       contribution
     })
-    const sentence = commentarySentence({
+    let sentence = commentarySentence({
       type,
       account: note.account,
       detail,
@@ -149,6 +151,19 @@ function enrichNote(note, index, options, period) {
       varianceAmount: note.varianceAmount,
       accountType: note.accountType
     })
+    // Phase 21.3: opt-in detailed mode renders a sanitized vendor/memo phrase
+    // from the render-safe `detailEvidence` (Phase 21.2). Default mode is
+    // 'conservative', which never reaches this branch, so output is unchanged.
+    // Detailed rendering falls back to the conservative sentence whenever the
+    // evidence is not safe enough to render (detailedCommentarySentence → null).
+    if (options.mode === 'detailed') {
+      const detailed = detailedCommentarySentence({
+        evidence: primary.detailEvidence,
+        contribution,
+        period
+      })
+      if (detailed) sentence = detailed
+    }
     if (sentence) text = appendSentence(note.text, sentence)
   } else {
     const clause = explanationClause({ classificationType: primary.classificationType })
@@ -160,13 +175,13 @@ function enrichNote(note, index, options, period) {
 // Enrich a generated narrative with supporting-file evidence. Returns the SAME
 // narrative reference when nothing is added, guaranteeing byte-identical
 // base-only output.
-export function enrichNarrative(narrative, { supporting = [], floor = CONFIDENCE_FLOOR, cap = MAX_CITATIONS_PER_NOTE } = {}) {
+export function enrichNarrative(narrative, { supporting = [], floor = CONFIDENCE_FLOOR, cap = MAX_CITATIONS_PER_NOTE, mode = 'conservative' } = {}) {
   if (!narrative || !Array.isArray(narrative.periods) || narrative.periods.length === 0) return narrative
 
   const index = buildEvidenceIndex(supporting)
   if (index.length === 0) return narrative
 
-  const options = { floor, cap }
+  const options = { floor, cap, mode }
   let changed = false
 
   const periods = narrative.periods.map((period) => {
@@ -189,7 +204,7 @@ export function enrichNarrative(narrative, { supporting = [], floor = CONFIDENCE
 }
 
 export { buildEvidenceIndex, matchAccount, scoreMatch, normalizeName, accountCode, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
-export { explanationClause, glEvidenceSentence, commentarySentence, displayAccount, descriptorFor, approxMoney } from './templates.js'
+export { explanationClause, glEvidenceSentence, commentarySentence, detailedCommentarySentence, displayAccount, descriptorFor, approxMoney } from './templates.js'
 export {
   classifyGLCommentary,
   CONF_G_MAX,
