@@ -186,7 +186,7 @@ test('supporting-file enrichment still applies after scope filtering', () => {
   assert.equal(note.support[0].fileName, 'General Ledger.pdf')
   // Phase 17.1 / 19A: a standalone GL evidence sentence (context only) — no file
   // name, no causal language. A single matching transaction → one-time (A).
-  assert.match(note.text, /\. Detail shows a single transaction of approximately \$7,400 during the current period\.$/)
+  assert.match(note.text, /\. The movement reflects a single transaction of approximately \$7,400\.$/)
   assert.doesNotMatch(note.text, /Supporting file|General Ledger\.pdf|due to|driven by/)
 })
 
