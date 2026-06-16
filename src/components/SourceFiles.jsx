@@ -48,7 +48,8 @@ export default function SourceFiles({
   setSupportingFiles,
   extractions = {},
   fileKey,
-  periodScope
+  periodScope,
+  commentaryMode = 'conservative'
 }) {
   const baseInput = useRef(null)
   const supportInput = useRef(null)
@@ -124,7 +125,7 @@ export default function SourceFiles({
 
       <ExtractionPreview items={previewItems} />
       <VariancePreview items={previewItems} />
-      <NarrativeSummary items={previewItems} periodScope={periodScope} />
+      <NarrativeSummary items={previewItems} periodScope={periodScope} commentaryMode={commentaryMode} />
     </section>
   )
 }

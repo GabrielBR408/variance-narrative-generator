@@ -4,7 +4,10 @@ const FIELDS = [
   { key: 'audience', label: 'Audience', options: ['Owner', 'Asset Manager', 'Internal'] },
   { key: 'reportStyle', label: 'Report Style', options: ['Executive', 'Detailed', 'Narrative'] },
   { key: 'tone', label: 'Tone', options: ['Neutral', 'Formal', 'Plain'] },
-  { key: 'length', label: 'Length', options: ['Standard', 'Brief', 'Expanded'] }
+  { key: 'length', label: 'Length', options: ['Standard', 'Brief', 'Expanded'] },
+  // Phase 21.3: opt-in detailed GL commentary. Conservative (default) keeps the
+  // current owner-facing output; Detailed may add a sanitized vendor/memo phrase.
+  { key: 'commentaryDetail', label: 'Commentary detail', options: ['Conservative', 'Detailed'] }
 ]
 
 export default function StylePanel({ style, setStyle }) {

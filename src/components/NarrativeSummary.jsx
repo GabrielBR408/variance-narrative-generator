@@ -94,7 +94,7 @@ function NarrativeItem({ narrative }) {
 
 // `items` is the ordered list of extraction objects (same list the variance
 // preview renders). Variance → narrative is computed here, in a memo.
-export default function NarrativeSummary({ items, periodScope = DEFAULT_PERIOD_SCOPE }) {
+export default function NarrativeSummary({ items, periodScope = DEFAULT_PERIOD_SCOPE, commentaryMode = 'conservative' }) {
   const narratives = useMemo(() => {
     if (!items || items.length === 0) return []
     const ok = items.filter((ex) => ex && ex.status === 'ok')
@@ -104,8 +104,10 @@ export default function NarrativeSummary({ items, periodScope = DEFAULT_PERIOD_S
         const narrative = generateNarrative(variance)
         // Phase 15: enrich with every OTHER uploaded file as supporting evidence,
         // so the preview matches the enriched result the generate flow produces.
+        // Phase 21.3: honor the selected commentary mode so the preview tracks
+        // exactly what the generated result and exports will show.
         const supporting = ok.filter((o) => o !== ex)
-        const enriched = enrichNarrative(narrative, { supporting })
+        const enriched = enrichNarrative(narrative, { supporting, mode: commentaryMode })
         // Phase 15.1: narrow to the selected period scope (no-op unless the file
         // carries both Current and YTD periods), so the preview tracks exactly
         // what the generated result and exports will show.
@@ -113,7 +115,7 @@ export default function NarrativeSummary({ items, periodScope = DEFAULT_PERIOD_S
       })
       // Only surface files that actually produced at least one comparable period.
       .filter((n) => Array.isArray(n.periods) && n.periods.length > 0)
-  }, [items, periodScope])
+  }, [items, periodScope, commentaryMode])
 
   if (narratives.length === 0) return null
 

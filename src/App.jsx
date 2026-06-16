@@ -40,6 +40,7 @@ const DEFAULT_STYLE = {
   reportStyle: 'Executive',
   tone: 'Neutral',
   length: 'Standard',
+  commentaryDetail: 'Conservative',
   learnFromUploads: false,
   notes: ''
 }
@@ -203,7 +204,10 @@ export default function App() {
       // evidence from the supporting files (which the browser already extracted).
       // With no supporting files or no confident match, this is a no-op and the
       // narrative is byte-identical to the server's.
-      const narrative = enrichNarrative(data.narrative, { supporting: supportingExtractions })
+      // Phase 21.3: opt-in detailed commentary mode (default Conservative keeps
+      // the output byte-identical to today).
+      const mode = style.commentaryDetail === 'Detailed' ? 'detailed' : 'conservative'
+      const narrative = enrichNarrative(data.narrative, { supporting: supportingExtractions, mode })
 
       // UI-only enrichment diagnostic (deterministic; reads counts only, never
       // amounts/rows). Tells the user whether GL enrichment actually ran.
@@ -243,6 +247,7 @@ export default function App() {
           extractions={extractions}
           fileKey={fileKey}
           periodScope={periodScope}
+          commentaryMode={style.commentaryDetail === 'Detailed' ? 'detailed' : 'conservative'}
         />
         <StylePanel style={style} setStyle={setStyle} />
         <VarianceDetail
