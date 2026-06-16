@@ -6,7 +6,12 @@ import GeneratePanel from './components/GeneratePanel.jsx'
 import ResultPanel from './components/ResultPanel.jsx'
 import { classifyFile } from './lib/classify.js'
 import { extractFile } from './lib/extract/extract.js'
-import { extractionReadiness, resultFreshness } from './lib/generateState.js'
+import {
+  extractionReadiness,
+  resultFreshness,
+  shouldDiscardResult,
+  pendingSupportingCount
+} from './lib/generateState.js'
 import { enrichNarrative } from './lib/enrich/index.js'
 import { DEFAULT_COMMENTARY_DETAIL, commentaryModeFromStyle } from './lib/enrich/commentaryMode.js'
 import { enrichmentDiagnostic } from './lib/enrichmentDiagnostic.js'
@@ -108,21 +113,41 @@ export default function App() {
     [variance.dollarThreshold, variance.percentThreshold]
   )
 
-  // Phase 22.2: is the displayed result (and its exports) still in sync with the
-  // current settings? Compares the snapshot taken at generate time against the
-  // live thresholds + commentary mode. Period scope is deliberately excluded — it
-  // is applied live, so changing it never makes a result stale.
+  // Supporting extractions currently in memory (used for the "still processing"
+  // warning and the file-set freshness snapshot).
+  const supportingExtractionList = supportingFiles
+    .map((f) => extractions[fileKey(f)])
+    .filter(Boolean)
+  const pendingSupporting = pendingSupportingCount(supportingExtractionList)
+
+  // Phase 22.2/22.3: is the displayed result (and its exports) still in sync with
+  // the current inputs? Compares the snapshot taken at generate time against the
+  // live thresholds, commentary mode, and uploaded file set. Period scope is
+  // deliberately excluded — it is applied live, so changing it never makes a
+  // result stale.
   const freshness = useMemo(() => {
     if (!result || !result.settings) return { stale: false, changed: [] }
     return resultFreshness({
-      generated: result.settings,
+      generated: { ...result.settings, ...result.source },
       current: {
         amountThreshold: previewThresholds.amount,
         percentThreshold: previewThresholds.percent,
-        commentaryMode: commentaryModeFromStyle(style)
+        commentaryMode: commentaryModeFromStyle(style),
+        baseKey: baseReport ? fileKey(baseReport) : null,
+        supportingKeys: supportingFiles.map(fileKey).sort()
       }
     })
-  }, [result, previewThresholds, style])
+  }, [result, previewThresholds, style, baseReport, supportingFiles])
+
+  // Phase 22.3: a result with no base report cannot be valid — its source is
+  // gone. Clear it (and its export availability) so nothing stale lingers.
+  useEffect(() => {
+    if (shouldDiscardResult({ hasBase: !!baseReport, hasResult: !!result })) {
+      setResult(null)
+      setStatus('idle')
+      setMessage('')
+    }
+  }, [baseReport, result])
 
   // Extraction pipeline: classify (Phase 6) → extract → normalize → preview.
   // Runs whenever the uploaded files change. Each file is opened at most once;
@@ -260,6 +285,12 @@ export default function App() {
           amountThreshold: previewThresholds.amount,
           percentThreshold: previewThresholds.percent,
           commentaryMode: mode
+        },
+        // Phase 22.3: snapshot the file set too (base + sorted supporting), so the
+        // same freshness banner fires when files are added, removed, or replaced.
+        source: {
+          baseKey: fileKey(baseReport),
+          supportingKeys: supportingFiles.map(fileKey).sort()
         }
       })
       setStatus('success')
@@ -294,7 +325,13 @@ export default function App() {
           setPeriodScope={setPeriodScope}
           periodScopeOffered={periodScopeOffered}
         />
-        <GeneratePanel status={status} message={message} readiness={readiness} onGenerate={generate} />
+        <GeneratePanel
+          status={status}
+          message={message}
+          readiness={readiness}
+          pendingSupporting={pendingSupporting}
+          onGenerate={generate}
+        />
         <ResultPanel status={status} result={result} periodScope={periodScope} freshness={freshness} />
       </div>
     </main>
