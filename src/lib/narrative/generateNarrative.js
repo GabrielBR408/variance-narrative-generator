@@ -23,6 +23,7 @@ import {
   buildMissingData,
   buildRevenueNotes,
   buildExpenseNotes,
+  buildAllVariances,
   unionSourceRows
 } from './sections.js'
 import { periodLabel } from './formatters.js'
@@ -51,6 +52,10 @@ export function buildPeriodNarrative(set, thresholds) {
   const missingData = buildMissingData(comparisons)
   const revenueNotes = buildRevenueNotes(comparisons)
   const expenseNotes = buildExpenseNotes(comparisons)
+  // The complete variance table for the Excel export (Phase 21.6). Additive and
+  // export-only — no owner-facing narrative section reads it, so Markdown/DOCX
+  // and the on-screen summary stay byte-identical.
+  const allVariances = buildAllVariances(comparisons)
 
   // Top-level traceability: every source row any sentence in this period drew on.
   const sourceRows = unionSourceRows([
@@ -69,6 +74,7 @@ export function buildPeriodNarrative(set, thresholds) {
     missingData,
     revenueNotes,
     expenseNotes,
+    allVariances,
     sourceRows
   }
 }

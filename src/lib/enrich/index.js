@@ -8,8 +8,8 @@
 //
 // Phase 17.1 — accounting rule: the COMPARATIVE REPORT determines the variance;
 // supporting files provide CONTEXT ONLY. So the language never asserts or implies
-// causation. GL evidence renders as a STANDALONE evidence sentence (e.g. "GL
-// detail shows approximately $17,400 of related electric activity during the
+// causation. GL evidence renders as a STANDALONE evidence sentence (e.g. "Detail
+// shows approximately $17,400 of related electric activity during the
 // period."); non-GL evidence stays a short conservative clause. It never renders
 // a file name or "Supporting file" language, is period-aware (current vs
 // year-to-date), and never invents or quotes a figure from a supporting file.

@@ -80,7 +80,7 @@ export function approxMoney(total) {
 // Build the STANDALONE GL evidence sentence (Phase 17.1). It states what the GL
 // contains — context only — and never asserts or implies causation. Always
 // returns a full sentence (ending in a period) for a GL match. Tiers:
-//   • reliable total → "GL detail shows approximately $X of related <type>
+//   • reliable total → "Detail shows approximately $X of related <type>
 //     activity <period>."
 //   • descriptions present (no reliable total) → "Related transactions appear in
 //     detailed activity <period>."
@@ -98,7 +98,7 @@ export function glEvidenceSentence({ account, thick, detail, period } = {}) {
   if (totalReliable) {
     const descriptor = descriptorFor(account)
     const activity = descriptor ? `${descriptor} activity` : 'activity'
-    return `GL detail shows approximately ${approxMoney(d.total)} of related ${activity} ${periodSuffix(period, 'during')}.`
+    return `Detail shows approximately ${approxMoney(d.total)} of related ${activity} ${periodSuffix(period, 'during')}.`
   }
   if (d.topVendor) {
     return `Related transactions appear in detailed activity ${periodSuffix(period, 'for')}.`
@@ -144,24 +144,24 @@ export function commentarySentence({ type, account, detail, period, contribution
   switch (type) {
     case 'DC': // Direction conflict — GL net sign opposes the variance direction.
       if (suppress) {
-        return `GL detail reflects a large net credit that runs counter to the variance direction and warrants review.`
+        return `Detail reflects a large net credit that runs counter to the variance direction and warrants review.`
       }
       return total < 0
-        ? `GL detail shows a net credit of approximately ${approxMoney(Math.abs(total))} ${during}, which runs counter to the variance direction and warrants review.`
-        : `GL detail shows net activity of approximately ${approxMoney(total)} ${during}, which runs counter to the variance direction and warrants review.`
+        ? `Detail shows a net credit of approximately ${approxMoney(Math.abs(total))} ${during}, which runs counter to the variance direction and warrants review.`
+        : `Detail shows net activity of approximately ${approxMoney(total)} ${during}, which runs counter to the variance direction and warrants review.`
 
     case 'OH': // Offset-heavy — a single line exceeds the net total; never show it.
       return suppress
-        ? `GL detail reflects substantially larger related activity ${during}, including offsetting entries.`
-        : `GL detail shows approximately ${approxMoney(total)} of related activity ${during}, including offsetting entries.`
+        ? `Detail reflects substantially larger related activity ${during}, including offsetting entries.`
+        : `Detail shows approximately ${approxMoney(total)} of related activity ${during}, including offsetting entries.`
 
     case 'DP': // Disproportionate — GL activity far larger than the variance.
       return suppress
-        ? `GL detail reflects related activity that appears materially larger than the reported variance ${during}.`
-        : `GL detail shows approximately ${approxMoney(total)} of related activity ${during}, which is broader than this variance.`
+        ? `Detail reflects related activity that appears materially larger than the reported variance ${during}.`
+        : `Detail shows approximately ${approxMoney(total)} of related activity ${during}, which is broader than this variance.`
 
     case 'PA': // Partial — GL activity far smaller than the variance.
-      return `GL detail shows approximately ${approxMoney(total)} of related activity ${during}, a portion of the total movement.`
+      return `Detail shows approximately ${approxMoney(total)} of related activity ${during}, a portion of the total movement.`
   }
 
   // Aligned render guard (#1): the dollar we would render is larger than the
@@ -180,7 +180,7 @@ export function commentarySentence({ type, account, detail, period, contribution
   const ALIGNED_QUANTIFIED = new Set(['A', 'B', 'C', 'I', 'F'])
   if (reliableTotal && contribution && ALIGNED_QUANTIFIED.has(type)) {
     if (contribution.vendorRenderable && d.vendor) {
-      return `GL detail shows approximately ${approxMoney(total)} of related ${d.vendor} activity ${during}.`
+      return `Detail shows approximately ${approxMoney(total)} of related ${d.vendor} activity ${during}.`
     }
     if (contribution.descriptionRenderable && d.description) {
       const base = shapeSentence({ type, account, count, total, reliableTotal, maxTxn, during, accountType })
@@ -325,12 +325,12 @@ export function detailedCommentarySentence({ evidence, contribution, period } = 
 
   let sentence
   if (contributionType === 'offset-heavy') {
-    sentence = `GL detail includes ${subject}, with offsetting entries ${during}.`
+    sentence = `Detail includes ${subject}, with offsetting entries ${during}.`
   } else if (contributionType === 'disproportionate') {
     // Phase 21.4: reworded to avoid repeating "related activity".
-    sentence = `GL detail reflects ${subject}, though the related activity is larger than the reported variance ${during}.`
+    sentence = `Detail reflects ${subject}, though the related activity is larger than the reported variance ${during}.`
   } else {
-    sentence = `GL detail includes ${subject} ${during}.`
+    sentence = `Detail includes ${subject} ${during}.`
   }
 
   // Reject-on-doubt: never emit causal language even if wording changes later.
@@ -344,21 +344,21 @@ function shapeSentence({ type, account, count, total, reliableTotal, maxTxn, dur
   switch (type) {
     case 'A': // One-time
       return reliableTotal
-        ? `GL detail shows a single transaction of approximately ${approxMoney(total)} ${during}.`
-        : `GL detail shows a single related transaction ${during}.`
+        ? `Detail shows a single transaction of approximately ${approxMoney(total)} ${during}.`
+        : `Detail shows a single related transaction ${during}.`
 
     case 'B': // One-time-dominated
       return (
-        `GL detail shows approximately ${approxMoney(total)} across ${count} transactions, ` +
+        `Detail shows approximately ${approxMoney(total)} across ${count} transactions, ` +
         `with one of about ${approxMoney(maxTxn)} ${during}.`
       )
 
     case 'C': // Recurring
-      return `GL detail shows approximately ${approxMoney(total)} across ${count} recurring transactions ${during}.`
+      return `Detail shows approximately ${approxMoney(total)} across ${count} recurring transactions ${during}.`
 
     case 'D': // Unbudgeted
       return reliableTotal
-        ? `Activity occurred without a budget allocation; GL detail shows approximately ${approxMoney(total)} ${during}.`
+        ? `Activity occurred without a budget allocation; detail shows approximately ${approxMoney(total)} ${during}.`
         : 'Activity occurred without a budget allocation and should be reviewed for future forecasting.'
 
     case 'E': // Credit / true-up
@@ -366,14 +366,14 @@ function shapeSentence({ type, account, count, total, reliableTotal, maxTxn, dur
       // net credit is normal income, so avoid "single credit"/"net credits" and
       // phrase it as related credit activity. Expense true-ups keep "credit".
       if (accountType !== 'expense') {
-        return `GL detail shows related credit activity of approximately ${approxMoney(Math.abs(total))} ${during}.`
+        return `Detail shows related credit activity of approximately ${approxMoney(Math.abs(total))} ${during}.`
       }
       return count === 1
-        ? `GL detail shows a single credit of approximately ${approxMoney(Math.abs(total))} ${during}.`
-        : `GL detail shows net credits of approximately ${approxMoney(Math.abs(total))} across ${count} transactions ${during}.`
+        ? `Detail shows a single credit of approximately ${approxMoney(Math.abs(total))} ${during}.`
+        : `Detail shows net credits of approximately ${approxMoney(Math.abs(total))} across ${count} transactions ${during}.`
 
     case 'I': // Concentrated activity
-      return `GL detail shows approximately ${approxMoney(total)} across two related transactions ${during}.`
+      return `Detail shows approximately ${approxMoney(total)} across two related transactions ${during}.`
 
     case 'G': // Low-confidence / thin
       return 'Detailed account activity was available for review.'
@@ -390,9 +390,9 @@ function shapeSentence({ type, account, count, total, reliableTotal, maxTxn, dur
       const descriptor = descriptorFor(account)
       const kind = descriptor ? `${descriptor} ` : ''
       if (count === 1) {
-        return `GL detail shows approximately ${approxMoney(total)} of related ${kind}activity ${during}.`
+        return `Detail shows approximately ${approxMoney(total)} of related ${kind}activity ${during}.`
       }
-      return `GL detail shows approximately ${approxMoney(total)} across ${count} related ${kind}transactions ${during}.`
+      return `Detail shows approximately ${approxMoney(total)} across ${count} related ${kind}transactions ${during}.`
     }
   }
 }

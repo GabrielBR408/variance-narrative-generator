@@ -87,7 +87,7 @@ function allNotes(enriched) {
 }
 
 const isGL = (n) => Array.isArray(n.support) && n.support.some((s) => /general\s*ledger|\bgl\b/i.test(s.classificationType))
-const DETAILED_RE = /GL detail includes|Related GL activity includes/
+const DETAILED_RE = /Detail includes|Related GL activity includes/
 
 const conservative = enrichNarrative(baseNarrative(), { supporting: [GL] })
 const detailed = enrichNarrative(baseNarrative(), { supporting: [GL], mode: 'detailed' })
@@ -98,7 +98,7 @@ const detNotes = allNotes(detailed)
 const glNotes = detNotes.filter(isGL)
 const detailedNotes = detNotes.filter((n) => DETAILED_RE.test(n.text))
 const vendorRendered = detNotes.filter((n) => /includes .*from [A-Z]/.test(n.text))
-const memoRendered = detNotes.filter((n) => /GL detail includes [a-z]/.test(n.text)) // memo phrases start lowercase
+const memoRendered = detNotes.filter((n) => /Detail includes [a-z]/.test(n.text)) // memo phrases start lowercase
 
 console.log('=== Phase 21.3 — Detailed Commentary Validation ===\n')
 console.log(`Total notes:            ${detNotes.length}`)

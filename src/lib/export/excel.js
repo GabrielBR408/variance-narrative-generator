@@ -148,29 +148,97 @@ function ownerSupportSummary(note) {
   return 'Matching detail'
 }
 
+// Stable key linking a full-table row to its narrated note: the account label
+// plus its originating source-row index (each aligned row carries a unique
+// index, so this disambiguates repeated account names).
+function rowKey(account, sourceRows) {
+  const first = Array.isArray(sourceRows) && sourceRows.length ? sourceRows[0] : ''
+  return `${account || ''}#${first}`
+}
+
+// One owner row built directly from a narrated note (legacy/fallback shape).
+function ownerRowFromNote(section, periodLabel, note) {
+  return {
+    section,
+    period: periodLabel,
+    account: note.account || '',
+    actual: typeof note.actual === 'number' ? note.actual : null,
+    comparison: typeof note.comparison === 'number' ? note.comparison : null,
+    varianceAmount: typeof note.varianceAmount === 'number' ? note.varianceAmount : null,
+    variancePercent: typeof note.variancePercent === 'number' ? note.variancePercent : null,
+    category: note.category ? capitalize(note.category) : '',
+    narrative: note.text || '',
+    supporting: ownerSupportSummary(note)
+  }
+}
+
 // Build the PURE owner-presentation rows from a (possibly enriched/scoped)
-// narrative. One row per High-Variance note and per Missing-Data note, in the
-// engine's deterministic order, across every period present.
+// narrative.
+//
+// Phase 21.6 bugfix: the Excel export carries the ENTIRE variance report — one
+// row for every line of the base report, across every period — not only the
+// rows that crossed a threshold. The threshold governs solely whether a row
+// receives a narrative/commentary: below-threshold rows still appear, with blank
+// Narrative and Supporting Detail. The narrated text and GL supporting summary
+// for triggered rows are merged in from the (enriched) High-Variance notes; the
+// Missing-Data explanation is merged from the Missing-Data notes.
+//
+// Narratives produced before this field existed (or hand-built fixtures) fall
+// back to the original triggered + missing-only view.
 export function buildOwnerRows(narrative) {
   const rows = []
   for (const period of periodsOf(narrative)) {
     const periodLabel = period?.periodLabel || 'Current'
-    for (const { key, label } of SECTIONS) {
-      const notes = Array.isArray(period?.[key]) ? period[key] : []
-      for (const note of notes) {
-        rows.push({
-          section: label,
-          period: periodLabel,
-          account: note.account || '',
-          actual: typeof note.actual === 'number' ? note.actual : null,
-          comparison: typeof note.comparison === 'number' ? note.comparison : null,
-          varianceAmount: typeof note.varianceAmount === 'number' ? note.varianceAmount : null,
-          variancePercent: typeof note.variancePercent === 'number' ? note.variancePercent : null,
-          category: note.category ? capitalize(note.category) : '',
-          narrative: note.text || '',
-          supporting: ownerSupportSummary(note)
-        })
+    const all = Array.isArray(period?.allVariances) ? period.allVariances : null
+
+    // Fallback: no full-table metadata — emit the original notes-only view.
+    if (!all) {
+      for (const { key, label } of SECTIONS) {
+        const notes = Array.isArray(period?.[key]) ? period[key] : []
+        for (const note of notes) rows.push(ownerRowFromNote(label, periodLabel, note))
       }
+      continue
+    }
+
+    // Index the narrated notes so each full-table row can pull its text/support.
+    const triggered = new Map()
+    for (const note of Array.isArray(period.highVariances) ? period.highVariances : []) {
+      triggered.set(rowKey(note.account, note.sourceRows), note)
+    }
+    const missing = new Map()
+    for (const note of Array.isArray(period.missingData) ? period.missingData : []) {
+      missing.set(rowKey(note.account, note.sourceRows), note)
+    }
+
+    for (const row of all) {
+      const key = rowKey(row.account, row.sourceRows)
+      let section = 'Within Threshold'
+      let narrative = ''
+      let supporting = ''
+      if (row.missingData) {
+        section = 'Missing Data'
+        const note = missing.get(key)
+        narrative = (note && note.text) || ''
+      } else if (row.thresholdTriggered) {
+        section = 'High Variance'
+        const note = triggered.get(key)
+        narrative = (note && note.text) || ''
+        supporting = note ? ownerSupportSummary(note) : ''
+      } else if (row.rollup) {
+        section = 'Total'
+      }
+      rows.push({
+        section,
+        period: periodLabel,
+        account: row.account || '',
+        actual: typeof row.actual === 'number' ? row.actual : null,
+        comparison: typeof row.comparison === 'number' ? row.comparison : null,
+        varianceAmount: typeof row.varianceAmount === 'number' ? row.varianceAmount : null,
+        variancePercent: typeof row.variancePercent === 'number' ? row.variancePercent : null,
+        category: row.category ? capitalize(row.category) : '',
+        narrative,
+        supporting
+      })
     }
   }
   return rows

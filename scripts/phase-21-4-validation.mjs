@@ -68,7 +68,7 @@ function allNotes(enriched) {
 }
 
 const isGL = (n) => Array.isArray(n.support) && n.support.some((s) => /general\s*ledger|\bgl\b/i.test(s.classificationType))
-const DETAILED_RE = /GL detail includes|GL detail reflects/
+const DETAILED_RE = /Detail includes|Detail reflects/
 const glSupport = (n) => n.support.find((s) => /general\s*ledger|\bgl\b/i.test(s.classificationType))
 
 // Detailed is the default app mode (commentaryModeFromStyle); pass it explicitly.

@@ -146,7 +146,7 @@ test('High Variances leads with the unfavorable expense before the favorable rev
 // through the real enrichment path, then classified and measured against the
 // PM release targets (A ≥5, B ≥5, C ≥10, D ≥3, E ≥1, F ≤30%, G no increase,
 // generic-line reduction ≥70%). Phase 18A baseline: every reliable-total GL
-// note rendered the single generic line "GL detail shows approximately $X of
+// note rendered the single generic line "Detail shows approximately $X of
 // related activity" → 100% generic, 0 specific.
 
 // One self-consistent triggered comparison record (variance-engine shape).
@@ -261,7 +261,7 @@ test('generic-line usage is reduced ≥70% vs the Phase 18A baseline', () => {
   assert.ok(baselineGeneric > 0, 'corpus must contain reliable-total GL notes')
 
   // After: count notes still rendering the old generic phrasing.
-  const GENERIC = /GL detail shows approximately \$[\d,]+ of related (?:\w+ )?activity/
+  const GENERIC = /Detail shows approximately \$[\d,]+ of related (?:\w+ )?activity/
   const afterGeneric = notes.filter((x) => GENERIC.test(x.note.text)).length
 
   const reduction = (baselineGeneric - afterGeneric) / baselineGeneric
@@ -346,23 +346,23 @@ test('MRI smoke: each account renders its contribution-appropriate wording', () 
 
   assert.match(
     mriNote(enriched, 'Utility-Elect-Building').text,
-    /GL detail shows approximately \$300 of related activity during the current period, a portion of the total movement\.$/
+    /Detail shows approximately \$300 of related activity during the current period, a portion of the total movement\.$/
   )
   assert.match(
     mriNote(enriched, 'Utility-Building Water').text,
-    /GL detail shows approximately \$2,100 of related City Water activity during the current period\.$/
+    /Detail shows approximately \$2,100 of related City Water activity during the current period\.$/
   )
   assert.match(
     mriNote(enriched, 'Rental Inc-Parking Gar').text,
-    /GL detail shows approximately \$4,800 across 4 recurring transactions during the current period \(Parking\)\.$/
+    /Detail shows approximately \$4,800 across 4 recurring transactions during the current period \(Parking\)\.$/
   )
   assert.match(
     mriNote(enriched, 'Rental Inc. - Commercial').text,
-    /GL detail reflects related activity that appears materially larger than the reported variance during the current period\.$/
+    /Detail reflects related activity that appears materially larger than the reported variance during the current period\.$/
   )
   assert.match(
     mriNote(enriched, 'Fire Sprinkler - Contract').text,
-    /GL detail shows approximately \$10,700 of related activity during the current period, including offsetting entries\.$/
+    /Detail shows approximately \$10,700 of related activity during the current period, including offsetting entries\.$/
   )
 })
 

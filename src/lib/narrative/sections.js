@@ -127,6 +127,38 @@ export function buildExpenseNotes(comparisons) {
     .map((c) => toNote(c))
 }
 
+// The COMPLETE variance table for export (Phase 21.6 bugfix). Every comparison
+// row from the base report — in source order — carrying the structured figures
+// plus flags. The threshold governs ONLY whether a row is narrated/commented
+// (`thresholdTriggered`), never whether it appears here, so the Excel export can
+// list every line of the base report (below-threshold rows with a blank
+// narrative). This is presentation metadata for the export; the owner-facing
+// narrative sections (High Variances, etc.) are unchanged. Rollup/subtotal lines
+// are flagged so the export can label them without narrating them.
+export function buildAllVariances(comparisons) {
+  return (Array.isArray(comparisons) ? comparisons : [])
+    .filter((c) => c && typeof c === 'object')
+    .map((c) => {
+      const comparison = c.comparisonType === 'prior' ? c.prior : c.budget
+      return {
+        account: c.account || '',
+        sourceRows: sourceRowsOf(c),
+        actual: c.actual ?? null,
+        comparison: comparison ?? null,
+        varianceAmount: c.varianceAmount ?? null,
+        variancePercent: c.variancePercent ?? null,
+        category: c.category,
+        accountType: c.accountType,
+        comparisonType: c.comparisonType,
+        // A row is narrated only when it crossed a threshold AND is a real account
+        // line (statement rollups are excluded from owner notes — see below).
+        thresholdTriggered: !!c.thresholdTriggered && !isRollupLabel(c.account),
+        rollup: isRollupLabel(c.account),
+        missingData: !!c.missingData
+      }
+    })
+}
+
 // Missing Data — rows that could not be fully compared. Reported, never
 // assumed. Kept in source order so the list mirrors the statement.
 export function buildMissingData(comparisons) {
