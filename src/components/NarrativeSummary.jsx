@@ -1,17 +1,15 @@
 import React, { useMemo, useState } from 'react'
-import { computeVariance } from '../lib/variance/index.js'
-import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
-import { generateNarrative } from '../lib/narrative/index.js'
-import { enrichNarrative } from '../lib/enrich/index.js'
-import { scopeNarrative, DEFAULT_PERIOD_SCOPE } from '../lib/narrative/periodScope.js'
+import { DEFAULT_PERIOD_SCOPE } from '../lib/narrative/periodScope.js'
+import { buildPreviewNarrative } from '../lib/previewNarrative.js'
 import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
 
-// --- Narrative Summary — Phase 9A -----------------------------------------
-// Presentation only. Runs the deterministic variance engine over the normalized
-// extractions, then the narrative engine over each result, and renders the
-// owner-ready sections with a Current / YTD toggle. No text is generated in this
-// component — every sentence comes from src/lib/narrative. Nothing is saved,
-// sent, or exported.
+// --- Narrative Summary — Phase 9A / 21.5 ----------------------------------
+// Presentation only. It mirrors the generate path: one narrative is built from
+// the Base Variance Report and enriched with the supporting files, then rendered
+// with the owner-ready sections and a Current / YTD toggle. Supporting files
+// (GL, budget, prior, …) never produce their own preview narrative — they only
+// enrich the base. All routing/math lives in src/lib/previewNarrative; this
+// component generates no text. Nothing is saved, sent, or exported.
 
 const SECTIONS = [
   { key: 'executiveSummary', title: 'Executive Summary' },
@@ -93,45 +91,29 @@ function NarrativeItem({ narrative }) {
 }
 
 // `items` is the ordered list of extraction objects (same list the variance
-// preview renders). Variance → narrative is computed here, in a memo.
+// preview renders). Phase 21.5: the preview mirrors the generate path — a single
+// narrative is built from the Base Variance Report and enriched with the
+// supporting files. With no base report there is no preview.
 export default function NarrativeSummary({ items, periodScope = DEFAULT_PERIOD_SCOPE, commentaryMode = 'conservative' }) {
-  const narratives = useMemo(() => {
-    if (!items || items.length === 0) return []
-    const ok = items.filter((ex) => ex && ex.status === 'ok')
-    return ok
-      .map((ex) => {
-        const variance = computeVariance(ex, DEFAULT_THRESHOLDS)
-        const narrative = generateNarrative(variance)
-        // Phase 15: enrich with every OTHER uploaded file as supporting evidence,
-        // so the preview matches the enriched result the generate flow produces.
-        // Phase 21.3: honor the selected commentary mode so the preview tracks
-        // exactly what the generated result and exports will show.
-        const supporting = ok.filter((o) => o !== ex)
-        const enriched = enrichNarrative(narrative, { supporting, mode: commentaryMode })
-        // Phase 15.1: narrow to the selected period scope (no-op unless the file
-        // carries both Current and YTD periods), so the preview tracks exactly
-        // what the generated result and exports will show.
-        return scopeNarrative(enriched, periodScope)
-      })
-      // Only surface files that actually produced at least one comparable period.
-      .filter((n) => Array.isArray(n.periods) && n.periods.length > 0)
-  }, [items, periodScope, commentaryMode])
+  const narrative = useMemo(
+    () => buildPreviewNarrative({ items, periodScope, commentaryMode }),
+    [items, periodScope, commentaryMode]
+  )
 
-  if (narratives.length === 0) return null
+  if (!narrative) return null
 
   return (
     <div className="card narrative-card">
       <div className="card-label">Narrative Preview</div>
       <p className="card-sub">
-        A live preview computed in your browser from the variance results above — it updates as you
-        add files. Press <strong>Generate Narrative</strong> to produce the final version below.
-        Every line traces back to a source row. Nothing is saved, sent, or exported.
+        A live preview of the base report's narrative, computed in your browser and enriched with
+        your supporting files — it updates as you add files. Press <strong>Generate Narrative</strong>{' '}
+        to produce the final version below. Every line traces back to a source row. Nothing is saved,
+        sent, or exported.
       </p>
-      <EnrichmentDiagnostic extractions={items} narratives={narratives} />
+      <EnrichmentDiagnostic extractions={items} narratives={[narrative]} />
       <div className="narrative-list">
-        {narratives.map((n) => (
-          <NarrativeItem key={n.fileId} narrative={n} />
-        ))}
+        <NarrativeItem narrative={narrative} />
       </div>
     </div>
   )
