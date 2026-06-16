@@ -6,7 +6,7 @@ import GeneratePanel from './components/GeneratePanel.jsx'
 import ResultPanel from './components/ResultPanel.jsx'
 import { classifyFile } from './lib/classify.js'
 import { extractFile } from './lib/extract/extract.js'
-import { extractionReadiness } from './lib/generateState.js'
+import { extractionReadiness, resultFreshness } from './lib/generateState.js'
 import { enrichNarrative } from './lib/enrich/index.js'
 import { DEFAULT_COMMENTARY_DETAIL, commentaryModeFromStyle } from './lib/enrich/commentaryMode.js'
 import { enrichmentDiagnostic } from './lib/enrichmentDiagnostic.js'
@@ -36,23 +36,26 @@ function slimExtraction(ex) {
   }
 }
 
+// Phase 22.2: only `commentaryDetail` affects output today. The remaining style
+// fields are rendered disabled ("Coming soon") and kept here purely so those
+// previews display a sensible default; "learn from uploads" and free-text notes
+// were removed entirely (UI + state + request wiring).
 const DEFAULT_STYLE = {
   audience: 'Owner',
   reportStyle: 'Executive',
   tone: 'Neutral',
   length: 'Standard',
-  commentaryDetail: DEFAULT_COMMENTARY_DETAIL,
-  learnFromUploads: false,
-  notes: ''
+  commentaryDetail: DEFAULT_COMMENTARY_DETAIL
 }
 const DEFAULT_VARIANCE = {
   // A row is flagged when it crosses EITHER threshold (dollar OR percent) — the
   // variance engine's only rule (see src/lib/variance/thresholds.js). There is
   // no AND/OR toggle: the semantics are always OR, so the UI exposes only the
   // two threshold values. Default is $1,000 OR 10%, matching DEFAULT_THRESHOLDS.
+  // The include/ignore groups are rendered disabled ("Coming soon") — not yet
+  // wired into the engine. ("Narrative Detail" was removed entirely.)
   dollarThreshold: '1000',
   percentThreshold: '10',
-  narrativeDetail: 'Standard',
   include: { glResearch: true, suggestedCauses: true, questions: true, priorComparison: true },
   ignore: { zeroVariances: true, smallRepeatItems: true }
 }
@@ -104,6 +107,22 @@ export default function App() {
     () => thresholdsFromSettings(variance),
     [variance.dollarThreshold, variance.percentThreshold]
   )
+
+  // Phase 22.2: is the displayed result (and its exports) still in sync with the
+  // current settings? Compares the snapshot taken at generate time against the
+  // live thresholds + commentary mode. Period scope is deliberately excluded — it
+  // is applied live, so changing it never makes a result stale.
+  const freshness = useMemo(() => {
+    if (!result || !result.settings) return { stale: false, changed: [] }
+    return resultFreshness({
+      generated: result.settings,
+      current: {
+        amountThreshold: previewThresholds.amount,
+        percentThreshold: previewThresholds.percent,
+        commentaryMode: commentaryModeFromStyle(style)
+      }
+    })
+  }, [result, previewThresholds, style])
 
   // Extraction pipeline: classify (Phase 6) → extract → normalize → preview.
   // Runs whenever the uploaded files change. Each file is opened at most once;
@@ -173,13 +192,11 @@ export default function App() {
     setMessage('')
     setResult(null)
 
-    const { notes, ...styleSettings } = style
     const form = new FormData()
     form.append('baseReport', baseReport) // real File object
     supportingFiles.forEach((f) => form.append('supportingFiles', f)) // real File objects
-    form.append('style', JSON.stringify(styleSettings))
+    form.append('style', JSON.stringify(style))
     form.append('variance', JSON.stringify(variance))
-    form.append('notes', notes || '')
 
     // Phase 9B: extraction is browser-first, so the normalized result the
     // browser already computed travels with the request. The server runs the
@@ -235,7 +252,15 @@ export default function App() {
         extraction: data.extraction,
         variance: data.variance,
         narrative,
-        diagnostic
+        diagnostic,
+        // Phase 22.2: snapshot the settings this result was generated with, so the
+        // UI can warn when the live settings drift from it (period scope excluded —
+        // it is applied live at render/export time, so it never makes a result stale).
+        settings: {
+          amountThreshold: previewThresholds.amount,
+          percentThreshold: previewThresholds.percent,
+          commentaryMode: mode
+        }
       })
       setStatus('success')
     } catch (err) {
@@ -270,7 +295,7 @@ export default function App() {
           periodScopeOffered={periodScopeOffered}
         />
         <GeneratePanel status={status} message={message} readiness={readiness} onGenerate={generate} />
-        <ResultPanel status={status} result={result} periodScope={periodScope} />
+        <ResultPanel status={status} result={result} periodScope={periodScope} freshness={freshness} />
       </div>
     </main>
   )

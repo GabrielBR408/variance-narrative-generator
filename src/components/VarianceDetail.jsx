@@ -4,17 +4,12 @@ import {
   PERIOD_SCOPE_OPTIONS,
   PERIOD_SCOPE_HELP
 } from '../lib/narrative/periodScope.js'
+import { VARIANCE_INCLUDE_FILTERS, VARIANCE_IGNORE_FILTERS } from '../lib/uiControls.js'
 
-const INCLUDE = [
-  { key: 'glResearch', label: 'GL Research' },
-  { key: 'suggestedCauses', label: 'Suggested Causes' },
-  { key: 'questions', label: 'Questions' },
-  { key: 'priorComparison', label: 'Prior Comparison' }
-]
-const IGNORE = [
-  { key: 'zeroVariances', label: 'Zero Variances' },
-  { key: 'smallRepeatItems', label: 'Small Repeat Items' }
-]
+// The Include/Ignore filters are planned but NOT yet wired into the variance
+// engine, so Phase 22.2 renders them disabled and flagged "Coming soon" instead
+// of implying behavior they don't have. (The free-form narrative-detail select
+// was removed entirely.) The lists live in src/lib/uiControls.js, shared w/ tests.
 
 export default function VarianceDetail({
   variance,
@@ -24,8 +19,6 @@ export default function VarianceDetail({
   periodScopeOffered = false
 }) {
   const set = (key, value) => setVariance((prev) => ({ ...prev, [key]: value }))
-  const toggle = (group, key) =>
-    setVariance((prev) => ({ ...prev, [group]: { ...prev[group], [key]: !prev[group][key] } }))
 
   return (
     <details className="step step--panel">
@@ -85,30 +78,21 @@ export default function VarianceDetail({
           </>
         )}
 
-        <label className="field">
-          <span className="field-label">Narrative Detail</span>
-          <select className="field-control" value={variance.narrativeDetail} onChange={(e) => set('narrativeDetail', e.target.value)}>
-            <option value="Standard">Standard</option>
-            <option value="Concise">Concise</option>
-            <option value="Thorough">Thorough</option>
-          </select>
-        </label>
-
-        <fieldset className="checkgroup">
-          <legend>Include</legend>
-          {INCLUDE.map((c) => (
-            <label className="field field--check" key={c.key}>
-              <input type="checkbox" checked={variance.include[c.key]} onChange={() => toggle('include', c.key)} />
+        <fieldset className="checkgroup checkgroup--coming-soon">
+          <legend>Include <span className="coming-soon-tag">Coming soon</span></legend>
+          {VARIANCE_INCLUDE_FILTERS.map((c) => (
+            <label className="field field--check field--coming-soon" key={c.key}>
+              <input type="checkbox" checked={variance.include[c.key]} disabled aria-disabled="true" readOnly />
               <span className="field-label">{c.label}</span>
             </label>
           ))}
         </fieldset>
 
-        <fieldset className="checkgroup">
-          <legend>Ignore</legend>
-          {IGNORE.map((c) => (
-            <label className="field field--check" key={c.key}>
-              <input type="checkbox" checked={variance.ignore[c.key]} onChange={() => toggle('ignore', c.key)} />
+        <fieldset className="checkgroup checkgroup--coming-soon">
+          <legend>Ignore <span className="coming-soon-tag">Coming soon</span></legend>
+          {VARIANCE_IGNORE_FILTERS.map((c) => (
+            <label className="field field--check field--coming-soon" key={c.key}>
+              <input type="checkbox" checked={variance.ignore[c.key]} disabled aria-disabled="true" readOnly />
               <span className="field-label">{c.label}</span>
             </label>
           ))}
