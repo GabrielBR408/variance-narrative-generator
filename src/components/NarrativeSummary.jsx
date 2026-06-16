@@ -4,6 +4,7 @@ import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
 import { generateNarrative } from '../lib/narrative/index.js'
 import { enrichNarrative } from '../lib/enrich/index.js'
 import { scopeNarrative, DEFAULT_PERIOD_SCOPE } from '../lib/narrative/periodScope.js'
+import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
 
 // --- Narrative Summary — Phase 9A -----------------------------------------
 // Presentation only. Runs the deterministic variance engine over the normalized
@@ -124,6 +125,7 @@ export default function NarrativeSummary({ items, periodScope = DEFAULT_PERIOD_S
         add files. Press <strong>Generate Narrative</strong> to produce the final version below.
         Every line traces back to a source row. Nothing is saved, sent, or exported.
       </p>
+      <EnrichmentDiagnostic extractions={items} narratives={narratives} />
       <div className="narrative-list">
         {narratives.map((n) => (
           <NarrativeItem key={n.fileId} narrative={n} />
