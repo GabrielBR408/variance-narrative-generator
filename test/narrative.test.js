@@ -9,6 +9,7 @@ import assert from 'node:assert/strict'
 
 import { computeVariance } from '../src/lib/variance/index.js'
 import { generateNarrative } from '../src/lib/narrative/index.js'
+import { HIGH_VARIANCE_HEADLINE_LIMIT } from '../src/lib/narrative/sections.js'
 
 // --- helpers ---------------------------------------------------------------
 
@@ -54,42 +55,56 @@ function result(comparisonSets) {
 
 // --- favorable / unfavorable ----------------------------------------------
 
+// NQ-1B: the top material drivers lead High Variances and are not relisted in
+// the category notes, so these category-note tests use three larger drivers to
+// push the asserted line out of the headline and into its Revenue/Expense Note.
+const HEADLINE_FILLERS = [
+  rec({ account: 'Driver A', actual: 70000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [20] }),
+  rec({ account: 'Driver B', actual: 65000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [21] }),
+  rec({ account: 'Driver C', actual: 60000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [22] })
+]
+
 test('favorable revenue reads as exceeding budget and keeps the category', () => {
   const r = result([
     { period: 'current', comparisons: [
+      ...HEADLINE_FILLERS,
       rec({ account: 'Revenue', actual: 12000, budget: 10000, accountType: 'revenue', category: 'favorable', sourceRows: [3] })
     ] }
   ])
   const { periods } = generateNarrative(r)
-  const note = periods[0].highVariances[0]
+  const note = periods[0].revenueNotes[0]
   assert.match(note.text, /Revenue exceeded budget by \$2,000/)
   assert.match(note.text, /\(20\.0%\)/)
   assert.equal(note.category, 'favorable')
-  assert.deepEqual(periods[0].revenueNotes.map((n) => n.text), [note.text])
+  // De-duplicated: a non-headline revenue line lives only in Revenue Notes.
+  assert.ok(!periods[0].highVariances.some((n) => n.account === 'Revenue'))
 })
 
 test('unfavorable expense reads as exceeding budget and surfaces in expense notes', () => {
   const r = result([
     { period: 'ytd', comparisons: [
+      ...HEADLINE_FILLERS,
       rec({ account: 'Operating expense', actual: 15000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [5] })
     ] }
   ])
   const { periods } = generateNarrative(r)
-  const note = periods[0].expenseNotes[0]
+  const note = periods[0].expenseNotes.find((n) => n.account === 'Operating expense')
   // Phase 14: the line keeps every figure but no longer repeats the period —
   // that is carried by the YTD section heading and the executive summary.
   assert.match(note.text, /Operating expense exceeded budget by \$5,000 \(50\.0%\)\./)
   assert.doesNotMatch(note.text, /year-to-date|current period/)
   assert.equal(note.category, 'unfavorable')
+  assert.ok(!periods[0].highVariances.some((n) => n.account === 'Operating expense'))
 })
 
 test('favorable expense reads as coming in under budget', () => {
   const r = result([
     { period: 'current', comparisons: [
+      ...HEADLINE_FILLERS,
       rec({ account: 'Payroll expense', actual: 8000, budget: 10000, accountType: 'expense', category: 'favorable', sourceRows: [2] })
     ] }
   ])
-  const note = generateNarrative(r).periods[0].expenseNotes[0]
+  const note = generateNarrative(r).periods[0].expenseNotes.find((n) => n.account === 'Payroll expense')
   assert.match(note.text, /came in under budget by \$2,000/)
 })
 
@@ -193,6 +208,60 @@ test('high variances lead with unfavorable rows even when a favorable row is lar
   ])
   const order = generateNarrative(r).periods[0].highVariances.map((n) => n.account)
   assert.deepEqual(order, ['Small Unfavorable', 'Big Favorable'])
+})
+
+// --- NQ-1B: section de-duplication -----------------------------------------
+
+// Six triggered rows so the headline (top-N by materiality) and the category
+// notes are both populated, plus an untyped row that has no category note.
+function dedupeFixture() {
+  return result([
+    { period: 'current', comparisons: [
+      rec({ account: 'Exp Big',   actual: 60000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [1] }), // 50k headline
+      rec({ account: 'Exp Mid',   actual: 50000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [2] }), // 40k headline
+      rec({ account: 'Rev Big',   actual: 40000, budget: 10000, accountType: 'revenue', category: 'favorable',   sourceRows: [3] }), // 30k headline
+      rec({ account: 'Exp Small', actual: 30000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [4] }), // 20k expense note
+      rec({ account: 'Rev Small', actual: 25000, budget: 10000, accountType: 'revenue', category: 'favorable',   sourceRows: [5] }), // 15k revenue note
+      rec({ account: 'Untyped',   actual: 20000, budget: 10000, accountType: 'unknown', category: 'neutral',     sourceRows: [6] })  // 10k → High Variances (no note)
+    ] }
+  ])
+}
+
+test('a variance appears in exactly one section (no High/Revenue/Expense overlap)', () => {
+  const p = generateNarrative(dedupeFixture()).periods[0]
+  const counts = {}
+  for (const sec of ['highVariances', 'revenueNotes', 'expenseNotes'])
+    for (const n of p[sec]) counts[n.account] = (counts[n.account] || 0) + 1
+  for (const [account, c] of Object.entries(counts))
+    assert.equal(c, 1, `${account} should appear once, appeared ${c}×`)
+  // No data loss: every triggered account is still narrated somewhere.
+  assert.deepEqual(
+    Object.keys(counts).sort(),
+    ['Exp Big', 'Exp Mid', 'Exp Small', 'Rev Big', 'Rev Small', 'Untyped'].sort()
+  )
+})
+
+test('High Variances is the top-N material drivers plus any untyped rows', () => {
+  assert.equal(HIGH_VARIANCE_HEADLINE_LIMIT, 3)
+  const p = generateNarrative(dedupeFixture()).periods[0]
+  const high = p.highVariances.map((n) => n.account).sort()
+  // Top 3 by materiality (Exp Big 50k, Exp Mid 40k, Rev Big 30k) + the untyped row.
+  assert.deepEqual(high, ['Exp Big', 'Exp Mid', 'Rev Big', 'Untyped'].sort())
+})
+
+test('headline rows are deferred out of their category notes; the rest remain', () => {
+  const p = generateNarrative(dedupeFixture()).periods[0]
+  assert.deepEqual(p.revenueNotes.map((n) => n.account), ['Rev Small'])
+  assert.deepEqual(p.expenseNotes.map((n) => n.account), ['Exp Small'])
+  // Promoted drivers are not relisted in their category note.
+  assert.ok(!p.revenueNotes.some((n) => n.account === 'Rev Big'))
+  assert.ok(!p.expenseNotes.some((n) => /Exp Big|Exp Mid/.test(n.account)))
+})
+
+test('Executive Summary still counts and totals every triggered row, regardless of section', () => {
+  const p = generateNarrative(dedupeFixture()).periods[0]
+  // 6 triggered rows; totals are unchanged by the de-duplication (thresholds intact).
+  assert.match(p.executiveSummary[0].text, /6 variances totaling \$165,000 crossed/)
 })
 
 // --- missing data ----------------------------------------------------------

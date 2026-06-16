@@ -215,9 +215,15 @@ function buildCorpus() {
   return { specs, enriched: enrichNarrative(narrative, { supporting: [gl] }) }
 }
 
-// Every GL-enriched high-variance note, with its classified category.
+// Every GL-enriched variance note, with its classified category. NQ-1B: a
+// variance now appears once across High Variances / Revenue Notes / Expense
+// Notes, so gather all three enrichable sections to see the whole corpus.
+function enrichableNotes(period) {
+  return ['highVariances', 'revenueNotes', 'expenseNotes'].flatMap((k) => period[k] || [])
+}
+
 function classifiedNotes(enriched) {
-  return enriched.periods[0].highVariances
+  return enrichableNotes(enriched.periods[0])
     .filter((n) => Array.isArray(n.support) && n.support.some((s) => /general\s*ledger|\bgl\b/i.test(s.classificationType)))
     .map((n) => {
       const gl = n.support.find((s) => /general\s*ledger|\bgl\b/i.test(s.classificationType))
@@ -338,7 +344,8 @@ function buildMRISmoke() {
 }
 
 function mriNote(enriched, account) {
-  return enriched.periods[0].highVariances.find((n) => n.account === account)
+  // NQ-1B: a line lives in exactly one section, so search all enrichable ones.
+  return enrichableNotes(enriched.periods[0]).find((n) => n.account === account)
 }
 
 test('MRI smoke: each account renders its contribution-appropriate wording', () => {
