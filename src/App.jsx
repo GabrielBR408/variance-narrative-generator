@@ -8,6 +8,7 @@ import { classifyFile } from './lib/classify.js'
 import { extractFile } from './lib/extract/extract.js'
 import { extractionReadiness } from './lib/generateState.js'
 import { enrichNarrative } from './lib/enrich/index.js'
+import { DEFAULT_COMMENTARY_DETAIL, commentaryModeFromStyle } from './lib/enrich/commentaryMode.js'
 import { enrichmentDiagnostic } from './lib/enrichmentDiagnostic.js'
 import { computeVariance } from './lib/variance/index.js'
 import { DEFAULT_THRESHOLDS } from './lib/variance/thresholds.js'
@@ -40,7 +41,7 @@ const DEFAULT_STYLE = {
   reportStyle: 'Executive',
   tone: 'Neutral',
   length: 'Standard',
-  commentaryDetail: 'Conservative',
+  commentaryDetail: DEFAULT_COMMENTARY_DETAIL,
   learnFromUploads: false,
   notes: ''
 }
@@ -204,9 +205,10 @@ export default function App() {
       // evidence from the supporting files (which the browser already extracted).
       // With no supporting files or no confident match, this is a no-op and the
       // narrative is byte-identical to the server's.
-      // Phase 21.3: opt-in detailed commentary mode (default Conservative keeps
-      // the output byte-identical to today).
-      const mode = style.commentaryDetail === 'Detailed' ? 'detailed' : 'conservative'
+      // Phase 21.3/21.4: commentary mode (Detailed is the default; Conservative
+      // is still selectable). The chosen mode flows into the generated result
+      // and the exports (which consume this enriched narrative).
+      const mode = commentaryModeFromStyle(style)
       const narrative = enrichNarrative(data.narrative, { supporting: supportingExtractions, mode })
 
       // UI-only enrichment diagnostic (deterministic; reads counts only, never
@@ -247,7 +249,7 @@ export default function App() {
           extractions={extractions}
           fileKey={fileKey}
           periodScope={periodScope}
-          commentaryMode={style.commentaryDetail === 'Detailed' ? 'detailed' : 'conservative'}
+          commentaryMode={commentaryModeFromStyle(style)}
         />
         <StylePanel style={style} setStyle={setStyle} />
         <VarianceDetail

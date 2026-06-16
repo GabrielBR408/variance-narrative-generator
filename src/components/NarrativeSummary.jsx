@@ -93,8 +93,9 @@ function NarrativeItem({ narrative }) {
 // `items` is the ordered list of extraction objects (same list the variance
 // preview renders). Phase 21.5: the preview mirrors the generate path — a single
 // narrative is built from the Base Variance Report and enriched with the
-// supporting files. With no base report there is no preview.
-export default function NarrativeSummary({ items, periodScope = DEFAULT_PERIOD_SCOPE, commentaryMode = 'conservative' }) {
+// supporting files. With no base report there is no preview. Phase 21.4: the
+// commentary mode defaults to 'detailed' (Conservative is still selectable).
+export default function NarrativeSummary({ items, periodScope = DEFAULT_PERIOD_SCOPE, commentaryMode = 'detailed' }) {
   const narrative = useMemo(
     () => buildPreviewNarrative({ items, periodScope, commentaryMode }),
     [items, periodScope, commentaryMode]

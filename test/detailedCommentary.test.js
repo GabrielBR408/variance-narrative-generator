@@ -101,17 +101,17 @@ test('detailed mode actually differs from conservative (opt-in has an effect)', 
 
 test('detailed mode renders vendor + memo for a high-confidence note', () => {
   const note = findNote(build('detailed'), '51252 Janitorial Supplies')
-  assert.match(note.text, /GL detail includes Janitorial supply from Trinity Building Services during the current period\.$/)
+  assert.match(note.text, /GL detail includes janitorial supplies from Trinity Building Services during the current period\.$/)
 })
 
 test('detailed mode renders vendor + memo for a medium-confidence note', () => {
   const note = findNote(build('detailed'), '51020 Utility-Building Water')
-  assert.match(note.text, /GL detail includes Monthly water from City Water Dept during the current period\.$/)
+  assert.match(note.text, /GL detail includes monthly water from City Water Dept during the current period\.$/)
 })
 
 test('detailed mode renders a memo-only phrase', () => {
   const note = findNote(build('detailed'), '51256 Trash Removal')
-  assert.match(note.text, /GL detail includes Monthly trash pickup during the current period\.$/)
+  assert.match(note.text, /GL detail includes monthly trash pickup during the current period\.$/)
 })
 
 test('detailed mode renders a vendor-only phrase', () => {
@@ -123,13 +123,15 @@ test('detailed mode renders a vendor-only phrase', () => {
 
 test('detailed mode renders the offset-heavy variant', () => {
   const note = findNote(build('detailed'), '51400 Fire Sprinkler Contract')
-  assert.match(note.text, /GL detail includes Annual fire contract from Acme Fire LLC, with offsetting entries during the current period\.$/)
+  assert.match(note.text, /GL detail includes annual fire contract from Acme Fire LLC, with offsetting entries during the current period\.$/)
 })
 
 test('detailed mode renders the disproportionate variant without a dollar', () => {
   const note = findNote(build('detailed'), '54200 Insurance')
-  assert.match(note.text, /Related GL activity includes Annual premium from Blue Shield Insurance, but the related activity is larger than the reported variance during the current period\.$/)
+  assert.match(note.text, /GL detail reflects annual premium from Blue Shield Insurance, though the related activity is larger than the reported variance during the current period\.$/)
   assert.doesNotMatch(note.text, /\$25,000|25,000/)
+  // Phase 21.4: "related activity" must not be repeated within one sentence.
+  assert.equal((note.text.match(/related activity/gi) || []).length, 1)
 })
 
 // --- 3. low-confidence / generic evidence does not render -------------------

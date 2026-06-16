@@ -207,14 +207,109 @@ export function commentarySentence({ type, account, detail, period, contribution
 // the wording below is causation-free by construction.
 const CAUSAL_RE = /\b(caused by|due to|because of|driven by|drove|resulting from|result of|explains?|attributable to)\b/i
 
+// --- Phase 21.4: deterministic vendor / memo polish ------------------------
+// Render-time normalization (the reconstructed metadata is left untouched). The
+// reconstruction layer (21.1) title-cases generically, which mangles acronyms
+// and hyphenated names (e.g. "Sfpuc-water Department", "Pyro-comm Systems INC.").
+// These helpers fix the casing/wording for the rendered phrase only, with a
+// small known-vendor canon table and conservative general rules — unknown
+// vendors are NOT aggressively rewritten.
+
+// Acronyms kept all-caps; corporate suffixes given a canonical form.
+const VENDOR_ACRONYMS = new Set(['SFPUC', 'PAC', 'PG&E', 'AT&T', 'FA', 'HVAC', 'LLC', 'LLP', 'LP'])
+const VENDOR_SUFFIX_CASE = { inc: 'Inc.', corp: 'Corp.', co: 'Co.', ltd: 'Ltd.', company: 'Company' }
+
+// Normalized lookup key: lowercase, collapse any non-alphanumeric (except &) to a
+// single space. So "SFPUC-WATER DEPT", "Sfpuc-water Department" → same key.
+function normKey(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9&]+/g, ' ').trim()
+}
+
+// Known vendors → canonical rendered form (keyed on normKey).
+const VENDOR_CANON = {
+  'pg&e': 'PG&E',
+  'pg e': 'PG&E',
+  'sfpuc water department': 'SFPUC Water Department',
+  'sfpuc water dept': 'SFPUC Water Department',
+  'sfpuc water': 'SFPUC Water Department',
+  'pyro comm systems inc': 'Pyro-Comm Systems Inc.',
+  'pyro comm systems': 'Pyro-Comm Systems Inc.',
+  'bay city mechanical service llc': 'Bay City Mechanical Service LLC',
+  'trinity building services': 'Trinity Building Services',
+  'recology golden gate': 'Recology Golden Gate',
+  'foliate llc': 'Foliate LLC',
+  'san francisco tax collector': 'San Francisco Tax Collector',
+  'franchise tax board': 'Franchise Tax Board',
+  'pac integrations': 'PAC Integrations',
+  'armada security': 'Armada Security',
+  'heise s plumbing': "Heise's Plumbing",
+  'heises plumbing': "Heise's Plumbing"
+}
+
+// Case one hyphen/space part of a vendor token.
+function caseVendorPart(p) {
+  if (!p) return p
+  const trailingDot = /\.$/.test(p)
+  const bare = p.replace(/\.+$/, '')
+  const up = bare.toUpperCase()
+  if (VENDOR_ACRONYMS.has(up)) return up + (trailingDot ? '.' : '')
+  const lc = bare.toLowerCase()
+  if (VENDOR_SUFFIX_CASE[lc]) return VENDOR_SUFFIX_CASE[lc]
+  if (bare.includes('&')) return up // e.g. AT&T, PG&E
+  return bare.charAt(0).toUpperCase() + bare.slice(1).toLowerCase() + (trailingDot ? '.' : '')
+}
+
+export function polishVendor(vendor) {
+  const v = String(vendor || '').trim()
+  if (!v) return v
+  const canon = VENDOR_CANON[normKey(v)]
+  if (canon) return canon
+  // General, conservative rule: title-case each space- and hyphen-separated part,
+  // preserving known acronyms and canonical suffixes. Keeps hyphens for unknowns.
+  return v
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((tok) => tok.split('-').map(caseVendorPart).join('-'))
+    .join(' ')
+}
+
+// Common memo fragments → cleaner owner-facing wording (keyed on normKey).
+const MEMO_CANON = {
+  'elec & gas': 'electric and gas',
+  'elec gas': 'electric and gas',
+  'rent commercial': 'commercial rent',
+  'rent parking': 'parking rent',
+  'annual fa testing': 'annual fire alarm testing',
+  water: 'water service',
+  'hvac repair': 'HVAC repair',
+  'janitorial supply': 'janitorial supplies'
+}
+
+export function polishMemo(memo) {
+  const m = String(memo || '').trim()
+  if (!m) return m
+  const canon = MEMO_CANON[normKey(m)]
+  if (canon) return canon
+  // General: read naturally mid-sentence (lowercase the first letter) unless the
+  // memo leads with an acronym we must preserve (e.g. "HVAC").
+  const firstWord = (m.split(/\s+/)[0] || '').toUpperCase()
+  if (VENDOR_ACRONYMS.has(firstWord)) return m
+  return m.charAt(0).toLowerCase() + m.slice(1)
+}
+
+// Build the opt-in detailed GL sentence from the render-safe detail evidence
+// (Phase 21.2 `detailEvidence`), with Phase 21.4 vendor/memo polish applied at
+// render time. Renders at most ONE vendor/memo phrase per note, never lists
+// multiple vendors, and never asserts causation. Returns null to fall back to
+// the conservative sentence when the evidence is not safe enough to render.
 export function detailedCommentarySentence({ evidence, contribution, period } = {}) {
   if (!evidence) return null
   const { evidenceConfidence, vendorRenderable, memoRenderable } = evidence
-  // Do not render detail when confidence is low/none (4. Do not over-render).
+  // Do not render detail when confidence is low/none (do not over-render).
   if (evidenceConfidence !== 'high' && evidenceConfidence !== 'medium') return null
 
-  const vendor = vendorRenderable ? String(evidence.vendor || '').trim() : ''
-  const memo = memoRenderable ? String(evidence.memo || '').trim() : ''
+  const vendor = vendorRenderable ? polishVendor(evidence.vendor) : ''
+  const memo = memoRenderable ? polishMemo(evidence.memo) : ''
   if (!vendor && !memo) return null
 
   const during = periodSuffix(period, 'during')
@@ -225,18 +320,17 @@ export function detailedCommentarySentence({ evidence, contribution, period } = 
   if (contributionType === 'direction-conflict') return null
 
   // Exactly one vendor/memo phrase; memo + vendor preferred, then vendor, then
-  // memo. `full` reads as a clause subject; `short` trims the "activity" filler
-  // for the offset / disproportionate tails.
-  const full = vendor && memo ? `${memo} from ${vendor}` : vendor ? `activity from ${vendor}` : memo
-  const short = vendor && memo ? `${memo} from ${vendor}` : vendor || memo
+  // memo. `subject` reads as a clause head for every variant.
+  const subject = vendor && memo ? `${memo} from ${vendor}` : vendor ? `activity from ${vendor}` : memo
 
   let sentence
   if (contributionType === 'offset-heavy') {
-    sentence = `GL detail includes ${short}, with offsetting entries ${during}.`
+    sentence = `GL detail includes ${subject}, with offsetting entries ${during}.`
   } else if (contributionType === 'disproportionate') {
-    sentence = `Related GL activity includes ${short}, but the related activity is larger than the reported variance ${during}.`
+    // Phase 21.4: reworded to avoid repeating "related activity".
+    sentence = `GL detail reflects ${subject}, though the related activity is larger than the reported variance ${during}.`
   } else {
-    sentence = `GL detail includes ${full} ${during}.`
+    sentence = `GL detail includes ${subject} ${during}.`
   }
 
   // Reject-on-doubt: never emit causal language even if wording changes later.
