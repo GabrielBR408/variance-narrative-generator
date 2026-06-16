@@ -164,6 +164,7 @@ body {
 .generate-msg { font-size: 0.86rem; margin-top: 0.8rem; }
 .generate-msg--error { color: var(--danger); }
 .generate-msg--info { color: var(--muted, #5b6675); }
+.generate-msg--warn { color: #8a6d1c; }
 
 /* Loading indication while a generate request is in flight. */
 .generate-progress {

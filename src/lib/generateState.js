@@ -64,19 +64,31 @@ export function generateButtonState({ status, readiness } = {}) {
   }
 }
 
-// --- Result freshness (Phase 22.2) ----------------------------------------
-// A generated result reflects the settings in force WHEN it was generated. If the
-// user then changes a threshold or the commentary mode, the on-screen result and
-// its exports no longer match the current settings until they regenerate. This
-// pure comparator flags that drift.
+// --- Result freshness (Phase 22.2 / 22.3) ---------------------------------
+// A generated result reflects the settings AND the files in force WHEN it was
+// generated. If the user then changes a threshold, the commentary mode, or the
+// uploaded file set, the on-screen result and its exports no longer match the
+// current inputs until they regenerate. This pure comparator flags that drift.
 //
-// Tracked: dollar threshold, percent threshold, commentary mode. Period scope is
+// Tracked: dollar threshold, percent threshold, commentary mode, and the file
+// set (base identity + sorted supporting identities, Phase 22.3). Period scope is
 // deliberately NOT tracked — it is applied live at render/export time, so changing
 // it never makes a result stale.
 //
-//   generated, current : { amountThreshold, percentThreshold, commentaryMode }
+//   generated, current :
+//     { amountThreshold, percentThreshold, commentaryMode, baseKey?, supportingKeys? }
 // Returns { stale, changed } where `changed` lists which groups drifted
-// ('thresholds' and/or 'commentary'). Missing inputs are treated as "not stale".
+// ('thresholds', 'commentary', and/or 'files'). Missing inputs → "not stale".
+// File drift is only evaluated when the snapshot actually carried file identities,
+// so results generated before this tracking existed are never falsely flagged.
+function sameKeys(a, b) {
+  const x = Array.isArray(a) ? a : []
+  const y = Array.isArray(b) ? b : []
+  if (x.length !== y.length) return false
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false
+  return true
+}
+
 export function resultFreshness({ generated, current } = {}) {
   if (!generated || !current) return { stale: false, changed: [] }
   const changed = []
@@ -85,7 +97,37 @@ export function resultFreshness({ generated, current } = {}) {
     Number(generated.percentThreshold) !== Number(current.percentThreshold)
   if (thresholdsDiffer) changed.push('thresholds')
   if (generated.commentaryMode !== current.commentaryMode) changed.push('commentary')
+
+  const tracksFiles = 'baseKey' in generated || 'supportingKeys' in generated
+  if (tracksFiles) {
+    const filesDiffer =
+      generated.baseKey !== current.baseKey ||
+      !sameKeys(generated.supportingKeys, current.supportingKeys)
+    if (filesDiffer) changed.push('files')
+  }
+
   return { stale: changed.length > 0, changed }
+}
+
+// Should a previously generated result be discarded? Phase 22.3: a result that
+// no longer has a base report cannot be valid (its source is gone), so the UI
+// clears it — removing the stale narrative AND its export availability. Pure so
+// the rule is testable; the App applies it in an effect.
+export function shouldDiscardResult({ hasBase, hasResult } = {}) {
+  return !!hasResult && !hasBase
+}
+
+// How many supporting files are still being read. Phase 22.3: used for a
+// non-blocking "still processing" warning — Generate stays enabled (base-only is
+// valid), but the user is told the in-flight files won't be included yet.
+export function pendingSupportingCount(extractions = []) {
+  return (Array.isArray(extractions) ? extractions : []).filter((ex) => ex && ex.status === 'pending').length
+}
+
+// Whether to show the "supporting files still processing" warning: only when the
+// base is ready to generate and at least one supporting file is still extracting.
+export function pendingSupportingWarningVisible({ ready, pendingCount } = {}) {
+  return !!ready && Number(pendingCount) > 0
 }
 
 // Whether the "settings changed since generate" banner should be shown. Pure so

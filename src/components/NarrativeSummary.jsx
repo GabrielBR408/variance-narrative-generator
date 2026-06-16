@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { DEFAULT_PERIOD_SCOPE } from '../lib/narrative/periodScope.js'
 import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
-import { buildPreviewNarrative } from '../lib/previewNarrative.js'
+import { previewNarrativeState } from '../lib/previewNarrative.js'
 import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
 
 // --- Narrative Summary — Phase 9A / 21.5 ----------------------------------
@@ -102,13 +102,29 @@ export default function NarrativeSummary({
   commentaryMode = 'detailed',
   thresholds = DEFAULT_THRESHOLDS
 }) {
-  const narrative = useMemo(
-    () => buildPreviewNarrative({ items, periodScope, commentaryMode, thresholds }),
+  const state = useMemo(
+    () => previewNarrativeState({ items, periodScope, commentaryMode, thresholds }),
     [items, periodScope, commentaryMode, thresholds]
   )
 
-  if (!narrative) return null
+  // No base report yet — other surfaces (PreviewBasis / Variance Preview) guide
+  // the user, so the narrative preview stays out of the way.
+  if (state.kind === 'none') return null
 
+  // Phase 22.3: a base extracted cleanly but has no comparable variance columns.
+  // Show an explicit empty state rather than rendering a silent null.
+  if (state.kind === 'empty') {
+    return (
+      <div className="card narrative-card">
+        <div className="card-label">Narrative Preview</div>
+        <p className="narrative-empty">
+          No narrative preview available because no comparable variance columns were found.
+        </p>
+      </div>
+    )
+  }
+
+  const narrative = state.narrative
   return (
     <div className="card narrative-card">
       <div className="card-label">Narrative Preview</div>

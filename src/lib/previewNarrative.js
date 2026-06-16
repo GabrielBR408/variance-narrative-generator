@@ -69,6 +69,35 @@ export function buildPreviewNarrative({
   return scoped
 }
 
+// Resolve what the Narrative Preview should show (Phase 22.3). Distinguishes an
+// explicit EMPTY state — a base report extracted cleanly but produced no
+// comparable period (no Actual vs Budget/Prior columns) — from simply having no
+// base yet, so the UI never renders a silent null when there IS a base to explain.
+//   kind: 'narrative' (render it) | 'empty' (base ok, nothing comparable) | 'none'
+//
+// "Comparable" is judged from the variance result, not from the narrative: an
+// uncomparable base still yields a degenerate single-period narrative, so the
+// presence of at least one computed comparison row is the honest signal.
+export function previewNarrativeState({
+  items = [],
+  periodScope = DEFAULT_PERIOD_SCOPE,
+  commentaryMode = 'conservative',
+  thresholds = DEFAULT_THRESHOLDS
+} = {}) {
+  const base = findBaseExtraction(items)
+  if (!base) return { kind: 'none', narrative: null }
+
+  const variance = computeVariance(base, thresholds)
+  const comparable =
+    (Array.isArray(variance.comparisonSets) && variance.comparisonSets.length > 0) ||
+    (Array.isArray(variance.comparisons) && variance.comparisons.length > 0)
+  if (!comparable) return { kind: 'empty', narrative: null }
+
+  const narrative = buildPreviewNarrative({ items, periodScope, commentaryMode, thresholds })
+  if (!narrative) return { kind: 'empty', narrative: null }
+  return { kind: 'narrative', narrative }
+}
+
 // Build the BASE-ONLY variance preview (Phase 22.1). Variance is computed solely
 // for the Base Variance Report; supporting files (GL / Budget / Prior / …) are
 // returned untouched and visible, but are NEVER variance-computed — so the UI

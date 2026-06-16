@@ -1,14 +1,24 @@
 import React from 'react'
-import { generateButtonState, generateHint, isBusy } from '../lib/generateState.js'
+import {
+  generateButtonState,
+  generateHint,
+  isBusy,
+  pendingSupportingWarningVisible
+} from '../lib/generateState.js'
 
-// --- Generate panel — Phase 9C --------------------------------------------
+// --- Generate panel — Phase 9C / 22.3 -------------------------------------
 // Presentation only. The readiness / loading / error decisions live in
 // src/lib/generateState.js (pure, tested); this component just renders them.
 
-export default function GeneratePanel({ status, message, readiness, onGenerate }) {
+export default function GeneratePanel({ status, message, readiness, pendingSupporting = 0, onGenerate }) {
   const button = generateButtonState({ status, readiness })
   const hint = generateHint({ status, message, readiness })
   const busy = isBusy(status)
+  // Phase 22.3: a non-blocking notice when supporting files are still extracting.
+  // Generate stays enabled — base-only generation is valid — but the user is told
+  // the in-flight files won't be included yet.
+  const showPending =
+    !busy && pendingSupportingWarningVisible({ ready: readiness && readiness.ready, pendingCount: pendingSupporting })
 
   return (
     <section className="step step--generate">
@@ -43,6 +53,13 @@ export default function GeneratePanel({ status, message, readiness, onGenerate }
           role={hint.tone === 'error' ? 'alert' : 'status'}
         >
           {hint.text}
+        </p>
+      )}
+
+      {/* Non-blocking: supporting files are still being read (Phase 22.3). */}
+      {showPending && (
+        <p className="generate-msg generate-msg--warn" role="status">
+          Supporting files are still processing. Generate now to continue without them.
         </p>
       )}
     </section>
