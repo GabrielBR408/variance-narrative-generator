@@ -101,34 +101,34 @@ test('detailed mode actually differs from conservative (opt-in has an effect)', 
 
 test('detailed mode renders vendor + memo for a high-confidence note', () => {
   const note = findNote(build('detailed'), '51252 Janitorial Supplies')
-  assert.match(note.text, /GL detail includes janitorial supplies from Trinity Building Services during the current period\.$/)
+  assert.match(note.text, /Detail includes janitorial supplies from Trinity Building Services during the current period\.$/)
 })
 
 test('detailed mode renders vendor + memo for a medium-confidence note', () => {
   const note = findNote(build('detailed'), '51020 Utility-Building Water')
-  assert.match(note.text, /GL detail includes monthly water from City Water Dept during the current period\.$/)
+  assert.match(note.text, /Detail includes monthly water from City Water Dept during the current period\.$/)
 })
 
 test('detailed mode renders a memo-only phrase', () => {
   const note = findNote(build('detailed'), '51256 Trash Removal')
-  assert.match(note.text, /GL detail includes monthly trash pickup during the current period\.$/)
+  assert.match(note.text, /Detail includes monthly trash pickup during the current period\.$/)
 })
 
 test('detailed mode renders a vendor-only phrase', () => {
   const note = findNote(build('detailed'), '51257 Recology Hauling')
-  assert.match(note.text, /GL detail includes activity from Recology Golden Gate during the current period\.$/)
+  assert.match(note.text, /Detail includes activity from Recology Golden Gate during the current period\.$/)
 })
 
 // --- offset-heavy and disproportionate variants ----------------------------
 
 test('detailed mode renders the offset-heavy variant', () => {
   const note = findNote(build('detailed'), '51400 Fire Sprinkler Contract')
-  assert.match(note.text, /GL detail includes annual fire contract from Acme Fire LLC, with offsetting entries during the current period\.$/)
+  assert.match(note.text, /Detail includes annual fire contract from Acme Fire LLC, with offsetting entries during the current period\.$/)
 })
 
 test('detailed mode renders the disproportionate variant without a dollar', () => {
   const note = findNote(build('detailed'), '54200 Insurance')
-  assert.match(note.text, /GL detail reflects annual premium from Blue Shield Insurance, though the related activity is larger than the reported variance during the current period\.$/)
+  assert.match(note.text, /Detail reflects annual premium from Blue Shield Insurance, though the related activity is larger than the reported variance during the current period\.$/)
   assert.doesNotMatch(note.text, /\$25,000|25,000/)
   // Phase 21.4: "related activity" must not be repeated within one sentence.
   assert.equal((note.text.match(/related activity/gi) || []).length, 1)
@@ -147,7 +147,7 @@ test('a generic / low-confidence note falls back to the conservative sentence', 
 test('a dropped Description (leading line number) never renders the literal "null"', () => {
   // The matcher's detail summarizer treats a Description that starts with a
   // numeric token as numeric and drops it (detail.description → null). Detailed
-  // mode must coerce that to a clean fallback, never "GL detail includes null".
+  // mode must coerce that to a clean fallback, never "Detail includes null".
   const comparisons = [rec({ account: '54110 Real Estate Taxes', actual: 9000, budget: 4000 })]
   const narrative = generateNarrative({
     fileId: 'base', fileName: 'Comparative Income Statement.xlsx', baseClassification: 'Base Variance Report',
@@ -219,5 +219,5 @@ test('detailedCommentarySentence is period-aware (year-to-date)', () => {
     contribution: { contributionType: 'aligned' },
     period: 'ytd'
   })
-  assert.equal(out, 'GL detail includes activity from Recology Golden Gate year-to-date.')
+  assert.equal(out, 'Detail includes activity from Recology Golden Gate year-to-date.')
 })

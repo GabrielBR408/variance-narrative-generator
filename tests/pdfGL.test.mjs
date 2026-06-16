@@ -287,7 +287,7 @@ test('reconstructed GL drives the existing thick sentence — no filename, no ca
   // (ratio ≈ 0.04 < 0.25) → contribution is "partial", so the owner sees the
   // figure framed as only a portion of the movement — not as concentrated
   // activity that explains the swing.
-  assert.match(note.text, /GL detail shows approximately \$300 of related activity during the current period, a portion of the total movement\./)
+  assert.match(note.text, /Detail shows approximately \$300 of related activity during the current period, a portion of the total movement\./)
   assert.doesNotMatch(note.text, /Detailed account activity was available for review/)
   assert.doesNotMatch(note.text, /General Ledger\.pdf|Supporting file/)
   assert.doesNotMatch(note.text, /due to|driven by|caused by|because of|explains|resulting from/)
