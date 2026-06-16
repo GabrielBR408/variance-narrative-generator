@@ -32,6 +32,7 @@ import { buildEvidenceIndex, matchAccount, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_N
 import { explanationClause, glEvidenceSentence, commentarySentence } from './templates.js'
 import { classifyGLCommentary } from './classify.js'
 import { rankContribution } from './contribution.js'
+import { reconstructDetail } from './reconstructDetail.js'
 
 // Only these sections hold flagged variance notes — they are the only ones we
 // enrich. Executive Summary (a roll-up) and Missing Data (no comparison) are
@@ -80,14 +81,27 @@ function enrichNote(note, index, options, period) {
 
   // Structured metadata for tooling/tests and the Excel export — never rendered
   // as final owner narrative text. `detail` carries the GL-detail summary.
-  const support = citations.map((c) => ({
-    fileName: c.fileName,
-    classificationType: c.classificationType,
-    confidence: c.confidence,
-    sourceRows: c.sourceRows,
-    thick: c.thick,
-    detail: c.detail
-  }))
+  // Phase 21.1: additionally attach a post-extraction `reconstructed` summary on
+  // GL citations (vendor + cleanMemo recovered from the dirty Description blob).
+  // This is METADATA ONLY — no template reads it, so narrative text is unchanged.
+  const support = citations.map((c) => {
+    const entry = {
+      fileName: c.fileName,
+      classificationType: c.classificationType,
+      confidence: c.confidence,
+      sourceRows: c.sourceRows,
+      thick: c.thick,
+      detail: c.detail
+    }
+    if (isGL(c.classificationType)) {
+      entry.reconstructed = reconstructDetail({
+        vendor: c.detail && c.detail.vendor,
+        description: c.detail && c.detail.description,
+        account: note.account
+      })
+    }
+    return entry
+  })
 
   // Phrase the supporting language from the single highest-priority match; all
   // matches stay in `support`. Stable sort keeps the existing file-name/source-row
