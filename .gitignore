@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 dist-ssr/
+*.zip
 
 # Local env / editor
 *.local
