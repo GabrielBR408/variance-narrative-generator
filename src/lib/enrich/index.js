@@ -204,7 +204,8 @@ export function enrichNarrative(narrative, { supporting = [], floor = CONFIDENCE
 }
 
 export { buildEvidenceIndex, matchAccount, scoreMatch, normalizeName, accountCode, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
-export { explanationClause, glEvidenceSentence, commentarySentence, detailedCommentarySentence, displayAccount, descriptorFor, approxMoney } from './templates.js'
+export { explanationClause, glEvidenceSentence, commentarySentence, detailedCommentarySentence, polishVendor, polishMemo, displayAccount, descriptorFor, approxMoney } from './templates.js'
+export { DEFAULT_COMMENTARY_DETAIL, commentaryModeFromStyle } from './commentaryMode.js'
 export {
   classifyGLCommentary,
   CONF_G_MAX,

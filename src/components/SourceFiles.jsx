@@ -49,7 +49,7 @@ export default function SourceFiles({
   extractions = {},
   fileKey,
   periodScope,
-  commentaryMode = 'conservative'
+  commentaryMode = 'detailed'
 }) {
   const baseInput = useRef(null)
   const supportInput = useRef(null)
