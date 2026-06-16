@@ -3,6 +3,7 @@ import { classifyFile, confidenceTier } from '../lib/classify.js'
 import { canExport } from '../lib/export/exportState.js'
 import { scopeNarrative, DEFAULT_PERIOD_SCOPE } from '../lib/narrative/periodScope.js'
 import ExportActions from './ExportActions.jsx'
+import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
 
 const STATUS_TEXT = {
   idle: 'Idle',
@@ -85,6 +86,8 @@ export default function ResultPanel({ status, result, periodScope = DEFAULT_PERI
               })}
             </ul>
           )}
+
+          {result.diagnostic && <EnrichmentDiagnostic diagnostic={result.diagnostic} />}
 
           <ResultNarrative narrative={scopedNarrative} />
 

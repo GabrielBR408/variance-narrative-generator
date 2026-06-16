@@ -8,6 +8,7 @@ import { classifyFile } from './lib/classify.js'
 import { extractFile } from './lib/extract/extract.js'
 import { extractionReadiness } from './lib/generateState.js'
 import { enrichNarrative } from './lib/enrich/index.js'
+import { enrichmentDiagnostic } from './lib/enrichmentDiagnostic.js'
 import { computeVariance } from './lib/variance/index.js'
 import { DEFAULT_THRESHOLDS } from './lib/variance/thresholds.js'
 import { generateNarrative } from './lib/narrative/index.js'
@@ -204,6 +205,13 @@ export default function App() {
       // narrative is byte-identical to the server's.
       const narrative = enrichNarrative(data.narrative, { supporting: supportingExtractions })
 
+      // UI-only enrichment diagnostic (deterministic; reads counts only, never
+      // amounts/rows). Tells the user whether GL enrichment actually ran.
+      const diagnostic = enrichmentDiagnostic({
+        extractions: supportingExtractions,
+        narratives: [narrative]
+      })
+
       setResult({
         jobId: data.jobId,
         filesReceived: data.filesReceived,
@@ -211,7 +219,8 @@ export default function App() {
         files: Array.isArray(data.files) ? data.files : [],
         extraction: data.extraction,
         variance: data.variance,
-        narrative
+        narrative,
+        diagnostic
       })
       setStatus('success')
     } catch (err) {

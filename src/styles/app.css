@@ -383,6 +383,23 @@ body {
 .narrative-note { font-size: 0.86rem; line-height: 1.45; margin: 0.15rem 0; }
 .narrative-empty { font-size: 0.82rem; color: var(--muted); margin: 0.15rem 0; font-style: italic; }
 
+/* Enrichment diagnostic banner (UI-only status; no figures rendered). */
+.enrich-diag {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem;
+  margin: 0.4rem 0 0.7rem; padding: 0.45rem 0.7rem;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); font-size: 0.78rem;
+}
+.enrich-diag-dot { width: 0.55rem; height: 0.55rem; border-radius: 999px; background: var(--muted); flex: none; }
+.enrich-diag-status { font-weight: 700; }
+.enrich-diag-counts { color: var(--muted); }
+.enrich-diag--active .enrich-diag-dot { background: var(--accent); }
+.enrich-diag--active .enrich-diag-status { color: var(--accent-ink); }
+.enrich-diag--pending .enrich-diag-dot { background: #c8901f; }
+.enrich-diag--pending .enrich-diag-status { color: #9a6c10; }
+.enrich-diag--none .enrich-diag-dot { background: var(--muted); }
+.enrich-diag--none .enrich-diag-status { color: var(--muted); }
+
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
