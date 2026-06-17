@@ -261,7 +261,8 @@ export {
   isImmaterialVariance,
   MATERIAL_DOLLAR,
   IMMATERIAL_DOLLAR,
-  IMMATERIAL_MAX_PCT
+  IMMATERIAL_MAX_PCT,
+  BORDERLINE_MATERIAL_MAX
 } from './commentaryIntent.js'
 export { accountSemanticType, accountSemanticCommentary, ACCOUNT_SEMANTIC } from './accountSemantics.js'
 export {

@@ -127,7 +127,9 @@ test('detailed mode renders a memo-only explanation', () => {
 
 test('detailed mode renders a vendor-only explanation', () => {
   const note = findNote(build('detailed'), '51257 Recology Hauling')
-  assert.match(note.text, /Activity from Recology Golden Gate was above plan for the period\.$/)
+  // NQ-4A.1: vendor-only evidence is medium confidence → the assertion softens
+  // ("appears to have been"); the high-confidence vendor+memo case stays "was".
+  assert.match(note.text, /Activity from Recology Golden Gate appears to have been above plan for the period\.$/)
 })
 
 // --- offset-heavy and disproportionate variants (NQ-2B: vendor leads) -------

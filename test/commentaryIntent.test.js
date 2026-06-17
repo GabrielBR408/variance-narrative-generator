@@ -143,7 +143,8 @@ test('a revenue line below budget reads as a below-plan explanation', () => {
     accountType: 'revenue', category: 'unfavorable',
     rows: [['Rent - Commercial', 3000]]
   })
-  assert.match(note.text, /Commercial rent activity was below plan for the period\.$/)
+  // NQ-4A.1: medium-confidence evidence softens the assertion.
+  assert.match(note.text, /Commercial rent activity appears to have been below plan for the period\.$/)
   assert.ok(sentenceCount(note.text) <= 2)
   assertSafe(note.text)
 })
@@ -153,7 +154,8 @@ test('an expense line above budget reads as an above-plan explanation', () => {
     account: '51999 Equipment Purchase', actual: 6000, budget: 5000,
     rows: [['Equipment purchase', 1000]]
   })
-  assert.match(note.text, /Equipment purchase activity was above plan for the period\.$/)
+  // NQ-4A.1: medium-confidence evidence softens the assertion.
+  assert.match(note.text, /Equipment purchase activity appears to have been above plan for the period\.$/)
 })
 
 // --- 5. explanation replacement (not appended) ------------------------------

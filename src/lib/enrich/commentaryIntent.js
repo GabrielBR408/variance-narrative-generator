@@ -50,6 +50,14 @@ export const MATERIAL_DOLLAR = 10000
 export const IMMATERIAL_DOLLAR = 100
 export const IMMATERIAL_MAX_PCT = 200
 
+// NQ-4A.1 — borderline materiality wording (ADJECTIVE ONLY). A material,
+// unexplained variance only just above the materiality floor reads as
+// "borderline material" rather than flatly "material"; anything at/above this
+// ceiling stays "material". This changes a single adjective in the existing
+// review flag — it does NOT move MATERIAL_DOLLAR, does NOT change which lines are
+// flagged (isMaterialVariance is unchanged), and adds no new selection.
+export const BORDERLINE_MATERIAL_MAX = 12000
+
 // Recurring-pattern signals. A hit means the activity reads as scheduled /
 // repeating service rather than a surprise. Deterministic, word-boundary only,
 // and deliberately conservative — bare "service" is excluded (too generic).
@@ -199,7 +207,9 @@ export function finalizeNoteCommentary({ note = {}, glSentence = null, hasCitati
   }
 
   if (!hasCitation && isMaterialVariance(note)) {
-    return safe('This is a material variance and should be reviewed with supporting detail.')
+    const dollar = Math.abs(num(note.varianceAmount) ?? 0)
+    const adjective = dollar < BORDERLINE_MATERIAL_MAX ? 'borderline material' : 'material'
+    return safe(`This is a ${adjective} variance and should be reviewed with supporting detail.`)
   }
   return null
 }
@@ -244,6 +254,12 @@ export function explanationCommentary({
   const contributionType = contribution && contribution.contributionType
   const subjectInfo = renderSafeSubject(detailEvidence)
   const subject = subjectInfo ? subjectInfo.subject : null
+  // NQ-4A.1 — confidence hedging. A render-safe subject exists only at high or
+  // medium evidence confidence (renderSafeSubject gates that). High confidence
+  // keeps the assertive wording; medium softens the one assertive explanation
+  // (the aligned "was above/below plan" claim). Uses the already-computed
+  // evidenceConfidence — no new signal, no new math.
+  const mediumConfidence = !!detailEvidence && detailEvidence.evidenceConfidence === 'medium'
 
   const text = detectionText({ account, detail, reconstructed, detailEvidence })
   const recurring = RECURRING_RE.test(text)
@@ -326,7 +342,11 @@ export function explanationCommentary({
         // A bare memo reads better as "<memo> activity"; a "… from <vendor>"
         // phrase or a vendor-only subject already names the activity.
         const head = subjectInfo.isMemo && !subject.includes(' from ') ? `${subject} activity` : subject
-        sentence = `${cap(head)} was ${dir} plan${planPeriod(period)}.`
+        // Medium confidence softens the assertion ("appears to have been …");
+        // high confidence keeps the direct "was …".
+        sentence = mediumConfidence
+          ? `${cap(head)} appears to have been ${dir} plan${planPeriod(period)}.`
+          : `${cap(head)} was ${dir} plan${planPeriod(period)}.`
       } else if (subject) {
         sentence = `${cap(subject)} appears to explain the variance and may not recur in future periods.`
       }
