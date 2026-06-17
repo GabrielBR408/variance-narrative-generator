@@ -85,9 +85,16 @@ function sectionBlocks(period, { key, title }) {
   return blocks
 }
 
+// Context Notes (NQ-3C) renders after the fixed five, but ONLY when non-empty, so
+// a narrative with nothing to re-home produces a byte-identical document.
+const CONTEXT_SECTION = { key: 'contextNotes', title: 'Context Notes' }
+
 function periodBlocks(period) {
   const blocks = [{ kind: 'period', text: period?.periodLabel || 'Current' }]
   for (const section of SECTIONS) blocks.push(...sectionBlocks(period, section))
+  if (notesOf(period, CONTEXT_SECTION.key).length > 0) {
+    blocks.push(...sectionBlocks(period, CONTEXT_SECTION))
+  }
   return blocks
 }
 

@@ -23,6 +23,7 @@ import {
   buildMissingData,
   buildRevenueNotes,
   buildExpenseNotes,
+  buildContextNotes,
   buildReviewItems,
   buildAllVariances,
   unionSourceRows
@@ -61,8 +62,14 @@ export function buildPeriodNarrative(set, thresholds) {
   const missingData = buildMissingData(comparisons)
   const revenueNotes = buildRevenueNotes(comparisons, plan)
   const expenseNotes = buildExpenseNotes(comparisons, plan)
-  // Review Items (NQ-3B, NEW) — rows the plan flags as needing a closer look
-  // (ownerQuestion === WHAT_TO_CHECK). Omitted entirely when empty (see below).
+  // Context Notes (NQ-3C, NEW) — the catch-all that re-homes every triggered,
+  // non-rollup row the three sections above did not place (e.g. grouped timing/
+  // non-cash expense lines), so no counted variance goes unnarrated. Omitted when
+  // empty (see below).
+  const contextNotes = buildContextNotes(comparisons, plan)
+  // Review Items (NQ-3B) — rows the plan flags as needing a closer look
+  // (ownerQuestion === WHAT_TO_CHECK). INERT in NQ-3C: computed for traceability
+  // but no surface renders it. Omitted entirely when empty (see below).
   const reviewItems = buildReviewItems(comparisons, plan)
   // The complete variance table for the Excel export (Phase 21.6). Additive and
   // export-only — no owner-facing narrative section reads it, so Markdown/DOCX
@@ -76,6 +83,7 @@ export function buildPeriodNarrative(set, thresholds) {
     ...missingData,
     ...revenueNotes,
     ...expenseNotes,
+    ...contextNotes,
     ...reviewItems
   ])
 
@@ -87,8 +95,11 @@ export function buildPeriodNarrative(set, thresholds) {
     missingData,
     revenueNotes,
     expenseNotes,
-    // Review Items renders after Expense Notes; omitted when empty so a period
-    // with nothing to review carries no empty section.
+    // Context Notes renders after Expense Notes; omitted when empty so a period
+    // with nothing left to re-home carries no empty section.
+    ...(contextNotes.length > 0 ? { contextNotes } : {}),
+    // Review Items is INERT (no surface renders it); kept on the object only when
+    // present, for traceability/tooling. Omitted when empty.
     ...(reviewItems.length > 0 ? { reviewItems } : {}),
     allVariances,
     plan,

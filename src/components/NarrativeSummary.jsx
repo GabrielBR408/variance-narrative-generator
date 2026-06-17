@@ -86,6 +86,11 @@ function NarrativeItem({ narrative }) {
         {SECTIONS.map(({ key, title }) => (
           <Section key={key} title={title} notes={active[key]} emptyMsg={EMPTY_MSG[key]} />
         ))}
+        {/* NQ-3C catch-all: rendered only when it carries re-homed rows, so an
+            empty preview stays unchanged. */}
+        {Array.isArray(active.contextNotes) && active.contextNotes.length > 0 && (
+          <Section title="Context Notes" notes={active.contextNotes} emptyMsg="" />
+        )}
       </div>
     </details>
   )
