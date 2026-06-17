@@ -58,6 +58,17 @@ const DESCRIPTOR_LEXICON = [
   [/clean|janitor/i, 'cleaning'],
   [/legal/i, 'legal'],
   [/advertis|marketing/i, 'marketing'],
+  // NQ-4A.1 — descriptor expansion. Friendly render words drawn ONLY from the
+  // base account name (never a figure, never a file name). Ordered most-specific
+  // first so e.g. "Lease Term Concessions" reads as a concession and
+  // "Parking Garage Rental" reads as parking, not the generic "rental".
+  [/concession/i, 'concession'],
+  [/reimburs/i, 'reimbursement'],
+  [/recover/i, 'recovery'],
+  [/\bcommon\s*area\b|\bcam\b/i, 'common area'],
+  [/parking/i, 'parking'],
+  [/storage/i, 'storage'],
+  [/\b(lease|leasing|occupancy|tenant)\b/i, 'leasing'],
   [/\brent\b|rental/i, 'rental']
 ]
 
@@ -262,14 +273,26 @@ function caseVendorPart(p) {
   return bare.charAt(0).toUpperCase() + bare.slice(1).toLowerCase() + (trailingDot ? '.' : '')
 }
 
+// NQ-4A.1 — generalize possessive recovery. Extraction commonly drops the
+// apostrophe, leaving a stray "s" token ("Heise S Plumbing"). The known-vendor
+// canon already fixes the named cases; this rejoins the general case so an UNSEEN
+// possessive vendor reads correctly. Conservative by construction: it only fires
+// when a lone "s" follows a real word (≥2 letters), so initials and ordinary
+// names are untouched, and it adds no digits/dates/references (reject-on-doubt
+// is unaffected — selection already gated the string upstream).
+function mergePossessives(name) {
+  return String(name).replace(/\b([A-Za-z]{2,})\s+s\b/gi, "$1's")
+}
+
 export function polishVendor(vendor) {
   const v = String(vendor || '').trim()
   if (!v) return v
   const canon = VENDOR_CANON[normKey(v)]
   if (canon) return canon
-  // General, conservative rule: title-case each space- and hyphen-separated part,
-  // preserving known acronyms and canonical suffixes. Keeps hyphens for unknowns.
-  return v
+  // General, conservative rule: rejoin a dropped possessive, then title-case each
+  // space- and hyphen-separated part, preserving known acronyms and canonical
+  // suffixes. Keeps hyphens for unknowns.
+  return mergePossessives(v)
     .split(/\s+/)
     .filter(Boolean)
     .map((tok) => tok.split('-').map(caseVendorPart).join('-'))
@@ -293,11 +316,15 @@ export function polishMemo(memo) {
   if (!m) return m
   const canon = MEMO_CANON[normKey(m)]
   if (canon) return canon
+  // NQ-4A.1: expand a standalone ampersand to "and" so an unseen memo reads as
+  // prose ("Repairs & Grounds" → "repairs and grounds"). Only a spaced "&" is
+  // touched, so embedded acronyms like AT&T / PG&E are preserved.
+  const expanded = m.replace(/\s+&\s+/g, ' and ')
   // General: read naturally mid-sentence (lowercase the first letter) unless the
   // memo leads with an acronym we must preserve (e.g. "HVAC").
-  const firstWord = (m.split(/\s+/)[0] || '').toUpperCase()
-  if (VENDOR_ACRONYMS.has(firstWord)) return m
-  return m.charAt(0).toLowerCase() + m.slice(1)
+  const firstWord = (expanded.split(/\s+/)[0] || '').toUpperCase()
+  if (VENDOR_ACRONYMS.has(firstWord)) return expanded
+  return expanded.charAt(0).toLowerCase() + expanded.slice(1)
 }
 
 // Build the opt-in detailed GL sentence from the render-safe detail evidence
@@ -351,9 +378,11 @@ function shapeSentence({ type, account, count, total, reliableTotal, maxTxn, yp,
         : `The movement reflects a single related transaction${yp}.`
 
     case 'B': // One-time-dominated
+      // NQ-4A.1: surface the top contributor explicitly. Uses the already-computed
+      // maxTxn / total / count — no new calculation, no causal claim.
       return (
         `The movement reflects approximately ${approxMoney(total)} across ${count} transactions, ` +
-        `concentrated in one of about ${approxMoney(maxTxn)}${yp}.`
+        `with the largest single item about ${approxMoney(maxTxn)} of the total${yp}.`
       )
 
     case 'C': // Recurring

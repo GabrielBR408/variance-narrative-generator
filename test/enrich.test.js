@@ -414,7 +414,7 @@ function enrichedNote({ account, actual, budget, category = 'unfavorable', amoun
 
 test('Category B: one transaction dominates a multi-transaction total', () => {
   const note = enrichedNote({ account: 'Repairs Expense', actual: 25000, budget: 5000, amounts: [18000, 1000, 1000] })
-  assert.match(note.text, /\. The movement reflects approximately \$20,000 across 3 transactions, concentrated in one of about \$18,000\.$/)
+  assert.match(note.text, /\. The movement reflects approximately \$20,000 across 3 transactions, with the largest single item about \$18,000 of the total\.$/)
 })
 
 test('Category C: several evenly-spread recurring transactions', () => {
