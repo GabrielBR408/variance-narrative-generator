@@ -123,12 +123,15 @@ test('recurring activity against a zero budget reads as a budget omission', () =
   assertSafe(note.text)
 })
 
-test('non-recurring activity against a zero budget warrants future budgeting', () => {
+test('non-recurring activity against a zero budget reads as recorded outside budget', () => {
+  // NQ-2B rule 1: the overused "may warrant future budgeting" recommendation is
+  // dropped in favor of a plain factual statement.
   const note = enriched({
     account: '51950 New One-Off Project', actual: 6000, budget: 0,
     rows: [['Project setup', 6000]]
   })
-  assert.match(note.text, /occurred outside the planned budget and may warrant future budgeting\.$/)
+  assert.match(note.text, /was recorded outside the planned budget for the period\.$/)
+  assert.doesNotMatch(note.text, /may warrant future budgeting/)
 })
 
 // --- 4. revenue shortfall ---------------------------------------------------

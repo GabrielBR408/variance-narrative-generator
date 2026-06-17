@@ -130,17 +130,21 @@ test('detailed mode renders a vendor-only explanation', () => {
   assert.match(note.text, /Activity from Recology Golden Gate was above plan for the period\.$/)
 })
 
-// --- offset-heavy and disproportionate variants ----------------------------
+// --- offset-heavy and disproportionate variants (NQ-2B: vendor leads) -------
 
-test('detailed mode renders the offset-heavy explanation', () => {
+test('detailed mode leads the offset-heavy explanation with the vendor/detail', () => {
   const note = findNote(build('detailed'), '51400 Fire Sprinkler Contract')
-  assert.match(note.text, /Activity exceeded the reported variance, suggesting offsetting entries or timing effects influenced the reported result\.$/)
+  // NQ-2B rules 1+2: a render-safe vendor/service replaces the generic
+  // "Activity exceeded the reported variance" boilerplate.
+  assert.match(note.text, /Annual fire contract from Acme Fire LLC appears in the account detail, partially offset by related entries in the period\.$/)
+  assert.doesNotMatch(note.text, /Activity exceeded the reported variance/)
   assert.ok(sentences(note.text) <= 2)
 })
 
-test('detailed mode renders the disproportionate explanation without a dollar', () => {
+test('detailed mode leads the disproportionate explanation with the vendor/detail (no dollar)', () => {
   const note = findNote(build('detailed'), '54200 Insurance')
-  assert.match(note.text, /Observed activity exceeded the reported variance, suggesting net account movement was influenced by additional offsets\.$/)
+  assert.match(note.text, /Annual premium from Blue Shield Insurance appears in the account detail, though related activity exceeded the reported variance\.$/)
+  assert.doesNotMatch(note.text, /Observed activity exceeded/)
   assert.doesNotMatch(note.text, /\$25,000|25,000/)
   assert.ok(sentences(note.text) <= 2)
 })
