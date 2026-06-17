@@ -36,6 +36,7 @@
 
 import { CONF_AE_MIN } from './classify.js'
 import { polishVendor, polishMemo } from './templates.js'
+import { accountSemanticCommentary } from './accountSemantics.js'
 
 // Materiality bands (NQ-2B). Deterministic absolute dollars so the same line
 // always reads the same way regardless of report size.
@@ -169,6 +170,9 @@ export function isImmaterialVariance(note = {}) {
 // Precedence (most specific / most certain first):
 //   3. zero-actual budgeted line   → factual "no activity" statement
 //   5a. negative actual            → explicit credit / reversal callout
+//   NQ-2C account semantics        → cautious type wording for non-cash /
+//                                    recovery / timing accounts, in place of the
+//                                    generic operating-expense fallback
 //   GL explanation                 → the vendor-led / figure-derived sentence,
 //                                    suppressed (rule 6) on immaterial lines
 //   4. material + no GL detail      → flag for review, never speculate
@@ -179,6 +183,15 @@ export function finalizeNoteCommentary({ note = {}, glSentence = null, hasCitati
 
   const credit = negativeActualCommentary(note)
   if (credit) return safe(credit)
+
+  // NQ-2C: for special account families (non-cash, recovery, timing / balance
+  // sheet) a generic operating-expense explanation is misleading, so cautious
+  // type wording replaces it. Still suppressed on operationally immaterial lines.
+  const semantic = accountSemanticCommentary(note)
+  if (semantic) {
+    if (isImmaterialVariance(note)) return null
+    return safe(semantic)
+  }
 
   if (glSentence) {
     if (isImmaterialVariance(note)) return null
@@ -251,26 +264,30 @@ export function explanationCommentary({
       : 'Account activity ran opposite to the reported movement, consistent with credits or reversals in the period.'
   }
   // 2. Disproportionate — GL activity materially larger than the variance.
+  //    NQ-2C rule 3: without a render-safe subject, use a tighter fallback that
+  //    drops the speculative "influenced by additional offsets" tail.
   else if (contributionType === 'disproportionate' || type === 'DP') {
     sentence = subject
       ? `${cap(subject)} appears in the account detail, though related activity exceeded the reported variance.`
-      : 'Observed activity exceeded the reported variance, suggesting net account movement was influenced by additional offsets.'
+      : 'Account activity was larger than the reported variance.'
   }
   // 3. Offset-heavy / exceeds-variance — the GL total runs past the variance.
+  //    NQ-2C rule 3: the no-subject fallback is shortened to a single clause.
   else if (contributionType === 'offset-heavy' || type === 'OH' || exceedsVariance) {
     if (subject) {
       sentence = `${cap(subject)} appears in the account detail, partially offset by related entries in the period.`
     } else {
       sentence = type === 'D'
-        ? 'Activity occurred outside the planned budget and exceeded the reported variance, suggesting offsetting entries or timing effects influenced the result.'
-        : 'Activity exceeded the reported variance, suggesting offsetting entries or timing effects influenced the reported result.'
+        ? 'Activity outside the planned budget exceeded the reported variance for the period.'
+        : 'Account activity exceeded the reported variance for the period.'
     }
   }
   // 4. Partial — the GL activity accounts for only part of the movement.
+  //    NQ-2C rule 3: the no-subject fallback is shortened to a single clause.
   else if (contributionType === 'partial' || type === 'PA') {
     sentence = subject
       ? `${cap(subject)} appears to explain part of the variance, with additional account activity in the period.`
-      : 'Activity appears to explain part of the variance, with additional account movement recorded during the period.'
+      : 'Account activity accounts for part of the reported variance.'
   }
   // ---- the remaining shapes are keyword / classifier driven (high confidence) --
   else if (highConf) {

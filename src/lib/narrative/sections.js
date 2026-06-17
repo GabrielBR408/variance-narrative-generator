@@ -94,12 +94,33 @@ export function isRollupLabel(label = '') {
   return ROLLUP_PREFIX_RE.test(s)
 }
 
+// NQ-2C — ZERO_NOISE suppression.
+// A variance whose absolute dollar movement is below this floor is "effectively
+// zero" — it renders as "$0" / "$0.09" noise (e.g. "came in under budget by $0",
+// "exceeded budget by $0.09") that crowds the owner narrative without telling
+// them anything. Such a row may still have crossed the PERCENT threshold (a tiny
+// base can produce a large percent on a sub-dollar move), so the threshold gate
+// alone does not remove it. We suppress it from every owner-facing section here,
+// at the narrative layer only — the variance math, the source rows, and the full
+// Excel variance table (buildAllVariances) are all untouched, preserving numeric
+// integrity. The floor is a hard $1: anything at/above $1 still renders.
+export const ZERO_NOISE_DOLLAR = 1
+export function isZeroNoiseVariance(c) {
+  const v = c && c.varianceAmount
+  return typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < ZERO_NOISE_DOLLAR
+}
+
 // Rows that crossed a threshold, by definition the only ones we narrate. Phase
 // 20A.1: statement rollups/subtotals are excluded from every owner-facing
 // section (high/revenue/expense notes and the executive summary count/total) so
 // the narrative reflects real account lines, not double-counted aggregates.
+// NQ-2C: effectively-zero (sub-$1) variances are also excluded so "$0"/"$0.09"
+// noise never reaches the narrative. Both filters are presentation-only — they
+// change no variance figure and no source-row index.
 function triggeredRows(comparisons) {
-  return comparisons.filter((c) => c && c.thresholdTriggered && !isRollupLabel(c.account))
+  return comparisons.filter(
+    (c) => c && c.thresholdTriggered && !isRollupLabel(c.account) && !isZeroNoiseVariance(c)
+  )
 }
 
 // NQ-1B — Section de-duplication.
