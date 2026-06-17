@@ -34,7 +34,7 @@ import { classifyGLCommentary } from './classify.js'
 import { rankContribution } from './contribution.js'
 import { reconstructDetail } from './reconstructDetail.js'
 import { selectDetailEvidence } from './detailEvidence.js'
-import { explanationCommentary } from './commentaryIntent.js'
+import { explanationCommentary, finalizeNoteCommentary } from './commentaryIntent.js'
 
 // Only these sections hold flagged variance notes — they are the only ones we
 // enrich. Executive Summary (a roll-up) and Missing Data (no comparison) are
@@ -79,7 +79,18 @@ function appendSentence(base, sentence) {
 function enrichNote(note, index, options, period) {
   if (!note || typeof note !== 'object' || !note.account || note.enriched) return note
   const citations = matchAccount(note.account, index, options)
-  if (citations.length === 0) return note
+  if (citations.length === 0) {
+    // NQ-2B: with no supporting match, a detailed-mode note may still carry a
+    // note-level factual explanation — a zero-actual budgeted line (rule 3), a
+    // negative/credit actual (rule 5), or a material unexplained variance flagged
+    // for review (rule 4). Conservative mode keeps the byte-identical identity
+    // invariant (the note is returned unchanged).
+    if (options.mode === 'detailed') {
+      const factual = finalizeNoteCommentary({ note, glSentence: null, hasCitation: false })
+      if (factual) return { ...note, text: appendSentence(note.text, factual), enriched: true }
+    }
+    return note
+  }
 
   // Structured metadata for tooling/tests and the Excel export — never rendered
   // as final owner narrative text. `detail` carries the GL-detail summary.
@@ -183,7 +194,10 @@ function enrichNote(note, index, options, period) {
         reconstructed: primary.reconstructed,
         detailEvidence: primary.detailEvidence
       })
-      if (explanation) sentence = explanation
+      // NQ-2B: route the GL explanation (or the conservative fallback) through the
+      // note-level rules — zero-actual override (rule 3), credit/reversal callout
+      // (rule 5), and operationally-immaterial suppression (rule 6).
+      sentence = finalizeNoteCommentary({ note, glSentence: explanation || sentence, hasCitation: true })
     }
     if (sentence) text = appendSentence(note.text, sentence)
   } else {
@@ -238,7 +252,17 @@ export {
   RECURRING_MAX_COUNT
 } from './classify.js'
 export { selectDetailEvidence, VENDOR_RENDER_MAX_LEN, MEMO_RENDER_MAX_LEN } from './detailEvidence.js'
-export { explanationCommentary } from './commentaryIntent.js'
+export {
+  explanationCommentary,
+  finalizeNoteCommentary,
+  zeroActualCommentary,
+  negativeActualCommentary,
+  isMaterialVariance,
+  isImmaterialVariance,
+  MATERIAL_DOLLAR,
+  IMMATERIAL_DOLLAR,
+  IMMATERIAL_MAX_PCT
+} from './commentaryIntent.js'
 export {
   rankContribution,
   ALIGN_LOW,

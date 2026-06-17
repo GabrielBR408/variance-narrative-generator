@@ -1,16 +1,24 @@
-// --- Commentary Intent Engine — NQ-2A / NQ-2A.1 ----------------------------
-// Builds the owner-facing EXPLANATION sentence (S2) for a GL-backed variance
-// note, on top of the WHAT the base variance sentence (S1) already states. The
-// desired structure is exactly two sentences:
+// --- Commentary Intent Engine — NQ-2A / NQ-2A.1 / NQ-2B --------------------
+// Builds the owner-facing EXPLANATION sentence (S2) for a variance note, on top
+// of the WHAT the base variance sentence (S1) already states. The desired
+// structure is exactly two sentences:
 //
 //   S1  variance observation              (base narrative — unchanged)
 //   S2  explanation + implication         (THIS module, detailed mode)
 //
-// NQ-2A.1 revision: the earlier NQ-2A appended a SEPARATE third "implication"
-// sentence on top of an evidence sentence. Acceptance testing found that too
-// subtle and too sparse — it still read "variance → evidence". So the evidence
-// narration is replaced with a single EXPLANATION that folds the implication in.
-// There is no third sentence: a note is never more than two sentences.
+// NQ-2A.1 replaced evidence narration with a single explanation. NQ-2B applies
+// the most common reviewer feedback on top, with small, safe rules:
+//   1. Reduce generic boilerplate ("Activity exceeded …", "may normalize …",
+//      "may warrant future budgeting").
+//   2. Prefer a render-safe vendor / service description over generic offset /
+//      timing language whenever GL detail provides one.
+//   3. Zero-actual budgeted lines get a clear factual statement.
+//   4. Material variances with NO supporting detail are flagged for review,
+//      never speculated about.
+//   5. Negative actuals / opposite-direction activity call out credit / reversal
+//      behavior explicitly.
+//   6. Operationally immaterial (very small dollar) variances get no detailed
+//      commentary at all.
 //
 // Pure and deterministic: the same inputs always yield the same sentence. It
 // performs NO extraction, NO matching, NO variance math, and NO AI/LLM — it only
@@ -20,21 +28,26 @@
 // is NEVER itself rendered.
 //
 // Hard boundaries carried from the rest of enrichment:
-//   • It NEVER asserts causation (no "due to / caused by / driven by / drove …"),
-//     never states certainty, never gives financial advice, and never recommends
-//     an action that needs human approval.
+//   • It NEVER asserts causation, certainty, or financial advice.
 //   • It NEVER renders a date, reference, money figure, or file name. A render-
 //     safe vendor / memo (already gated by Phase 21.2) may appear as the SUBJECT
 //     of the explanation; raw keyword signals are read only to DECIDE wording.
-//   • It returns null whenever no confident, supported explanation applies, so the
-//     caller keeps the conservative evidence sentence (explanation only).
-//
-// Phrasing is intentionally hedged ("appears", "suggests", "may", "indicates")
-// and never asserts that the GL caused the variance — the COMPARATIVE REPORT owns
-// the variance; the GL is context only.
+//   • It returns null whenever no confident, supported explanation applies.
 
 import { CONF_AE_MIN } from './classify.js'
 import { polishVendor, polishMemo } from './templates.js'
+
+// Materiality bands (NQ-2B). Deterministic absolute dollars so the same line
+// always reads the same way regardless of report size.
+//   MATERIAL_DOLLAR    — a variance at/above this is "material"; a material line
+//                        with no supporting detail is flagged for review (rule 4).
+//   IMMATERIAL_DOLLAR  — below this a variance is operationally trivial and gets
+//                        no detailed commentary (rule 6) …
+//   IMMATERIAL_MAX_PCT — … UNLESS its percentage swing is at/above this (a very
+//                        large percentage can still be worth a word).
+export const MATERIAL_DOLLAR = 10000
+export const IMMATERIAL_DOLLAR = 100
+export const IMMATERIAL_MAX_PCT = 200
 
 // Recurring-pattern signals. A hit means the activity reads as scheduled /
 // repeating service rather than a surprise. Deterministic, word-boundary only,
@@ -55,6 +68,13 @@ const CAUSAL_RE =
 function cap(s) {
   const str = String(s)
   return str ? str.charAt(0).toUpperCase() + str.slice(1) : str
+}
+
+// Reject-on-doubt: a final guard so no rule sentence can carry causal/certainty
+// language. Returns the sentence, or null when it trips the guard.
+function safe(sentence) {
+  if (!sentence) return null
+  return CAUSAL_RE.test(sentence) ? null : sentence
 }
 
 // Build a lowercase detection blob from fields that are NEVER rendered. Reading
@@ -98,9 +118,87 @@ function planPeriod(period) {
   return period === 'ytd' ? ' year-to-date' : ' for the period'
 }
 
+// --- NQ-2B note-level helpers (no GL detail required) ----------------------
+
+function num(x) {
+  const n = Number(x)
+  return Number.isFinite(n) ? n : null
+}
+
+// Rule 3 — a zero-actual budgeted line (actual = 0, budget > 0 on a budget
+// basis). Clear, factual, no speculation about WHY. Expense lines read as "no
+// service or expense"; everything else as "no activity posted".
+export function zeroActualCommentary(note = {}) {
+  if (note.comparisonType !== 'budget') return null
+  const actual = num(note.actual)
+  const budget = num(note.comparison)
+  if (actual !== 0 || budget === null || budget <= 0) return null
+  return note.accountType === 'expense'
+    ? 'No service or expense was recorded in the period.'
+    : 'No activity posted against the budgeted amount.'
+}
+
+// Rule 5a — a negative reported actual reads as a net credit / reversal. Stated
+// explicitly and factually (the sign is real), never as a cause.
+export function negativeActualCommentary(note = {}) {
+  const actual = num(note.actual)
+  if (actual === null || actual >= 0) return null
+  return 'This line reflects a net credit or reversal posted in the period.'
+}
+
+// Rule 4 — material variance threshold (used to decide when an UNexplained line
+// is flagged for review).
+export function isMaterialVariance(note = {}) {
+  const dollar = Math.abs(num(note.varianceAmount) ?? 0)
+  return dollar >= MATERIAL_DOLLAR
+}
+
+// Rule 6 — operationally immaterial: a very small dollar swing that is not also
+// a very large percentage swing. Such lines get no detailed commentary.
+export function isImmaterialVariance(note = {}) {
+  const dollar = Math.abs(num(note.varianceAmount) ?? 0)
+  if (dollar >= IMMATERIAL_DOLLAR) return false
+  const pct = Math.abs(num(note.variancePercent) ?? 0)
+  return pct < IMMATERIAL_MAX_PCT
+}
+
+// Finalize the detailed-mode S2 for ONE note, applying the NQ-2B note-level
+// rules around the GL-derived explanation (`glSentence`, which may be null).
+// Returns the sentence to append, or null to leave S1 standing alone.
+//
+// Precedence (most specific / most certain first):
+//   3. zero-actual budgeted line   → factual "no activity" statement
+//   5a. negative actual            → explicit credit / reversal callout
+//   GL explanation                 → the vendor-led / figure-derived sentence,
+//                                    suppressed (rule 6) on immaterial lines
+//   4. material + no GL detail      → flag for review, never speculate
+//   else                           → null (no commentary; reduces boilerplate)
+export function finalizeNoteCommentary({ note = {}, glSentence = null, hasCitation = false } = {}) {
+  const zero = zeroActualCommentary(note)
+  if (zero) return safe(zero)
+
+  const credit = negativeActualCommentary(note)
+  if (credit) return safe(credit)
+
+  if (glSentence) {
+    if (isImmaterialVariance(note)) return null
+    return safe(glSentence)
+  }
+
+  if (!hasCitation && isMaterialVariance(note)) {
+    return safe('This is a material variance and should be reviewed with supporting detail.')
+  }
+  return null
+}
+
 // Build the EXPLANATION sentence (S2) for one GL-backed note, folding the
 // implication into the explanation. Returns the sentence, or null to fall back
 // to the conservative evidence sentence.
+//
+// NQ-2B rule 2: when a render-safe vendor / memo SUBJECT exists, it LEADS the
+// explanation even for the figure-derived shapes (offset / disproportion /
+// partial / direction-conflict), so a real vendor or service description
+// replaces the generic "Activity exceeded the reported variance" boilerplate.
 //
 //   type            — the Phase 19A / 19B classifier category
 //   contribution    — the Phase 19B contribution result (or null)
@@ -118,7 +216,7 @@ export function explanationCommentary({
   exceedsVariance = false,
   account = '',
   detail = {},
-  accountType,
+  accountType, // eslint-disable-line no-unused-vars -- reserved by the approved input contract
   comparisonType,
   category, // eslint-disable-line no-unused-vars -- reserved by the approved input contract
   varianceAmount,
@@ -138,56 +236,66 @@ export function explanationCommentary({
   const recurring = RECURRING_RE.test(text)
   const timingMemo = TIMING_RE.test(text)
 
-  // Figure-derived warnings (direction conflict, disproportion, offsets) are
-  // grounded in the variance math itself, so they are allowed on any thick match.
-  // Keyword / shape implications additionally require high confidence so an
-  // uncertain account match never asserts a recurring / timing / one-time intent.
+  // Keyword / shape implications require high confidence so an uncertain account
+  // match never asserts a recurring / timing / one-time intent. Figure-derived
+  // warnings are grounded in the variance math and allowed on any thick match.
   const highConf = Number(confidence) >= CONF_AE_MIN
 
   let sentence = null
 
   // 1. Direction conflict — the GL net ran opposite to the reported movement.
+  //    Rule 5: call out credit / reversal behavior explicitly.
   if (contributionType === 'direction-conflict' || type === 'DC') {
-    sentence = 'Account activity ran opposite to the reported movement, which may indicate offsetting entries worth a closer look.'
+    sentence = subject
+      ? `${cap(subject)} ran opposite to the reported movement, consistent with credits or reversals in the period.`
+      : 'Account activity ran opposite to the reported movement, consistent with credits or reversals in the period.'
   }
   // 2. Disproportionate — GL activity materially larger than the variance.
   else if (contributionType === 'disproportionate' || type === 'DP') {
-    sentence = 'Observed activity exceeded the reported variance, suggesting net account movement was influenced by additional offsets.'
+    sentence = subject
+      ? `${cap(subject)} appears in the account detail, though related activity exceeded the reported variance.`
+      : 'Observed activity exceeded the reported variance, suggesting net account movement was influenced by additional offsets.'
   }
   // 3. Offset-heavy / exceeds-variance — the GL total runs past the variance.
   else if (contributionType === 'offset-heavy' || type === 'OH' || exceedsVariance) {
-    sentence = type === 'D'
-      ? 'Activity occurred outside the planned budget and exceeded the reported variance, suggesting offsetting entries or timing effects influenced the result.'
-      : 'Activity exceeded the reported variance, suggesting offsetting entries or timing effects influenced the reported result.'
+    if (subject) {
+      sentence = `${cap(subject)} appears in the account detail, partially offset by related entries in the period.`
+    } else {
+      sentence = type === 'D'
+        ? 'Activity occurred outside the planned budget and exceeded the reported variance, suggesting offsetting entries or timing effects influenced the result.'
+        : 'Activity exceeded the reported variance, suggesting offsetting entries or timing effects influenced the reported result.'
+    }
   }
   // 4. Partial — the GL activity accounts for only part of the movement.
   else if (contributionType === 'partial' || type === 'PA') {
-    sentence = 'Activity appears to explain part of the variance, with additional account movement recorded during the period.'
+    sentence = subject
+      ? `${cap(subject)} appears to explain part of the variance, with additional account activity in the period.`
+      : 'Activity appears to explain part of the variance, with additional account movement recorded during the period.'
   }
   // ---- the remaining shapes are keyword / classifier driven (high confidence) --
   else if (highConf) {
     const lead = subject ? cap(subject) : 'Activity'
 
     // 5. Budget omission — activity against a zero/absent budget (category D).
+    //    Rule 1: drop the soft "may warrant future budgeting" recommendation.
     if (type === 'D') {
       sentence = recurring
         ? `${lead} appears to fall outside the planned budget and may represent recurring activity not yet budgeted.`
-        : `${lead} occurred outside the planned budget and may warrant future budgeting.`
+        : `${lead} was recorded outside the planned budget for the period.`
     }
     // 6. Credit / true-up / timing — a sign surprise (category E) or a timing
-    //    keyword. A credit/refund reads as a timing adjustment even when a
-    //    recurring word (e.g. "premium") is also present, so timing precedes
-    //    recurring here.
+    //    keyword. Checked before recurring so a credit/refund reads as timing.
     else if (type === 'E' || timingMemo) {
       sentence = subject
         ? `${cap(subject)} appears to reflect a timing or true-up adjustment that may reverse in a later period.`
         : 'This appears to reflect a timing or true-up adjustment that may reverse in a later period.'
     }
     // 7. Recurring — an evenly-spread population, or scheduled/repeating service.
+    //    Rule 1: drop the overused "may normalize over the period" tail.
     else if (type === 'C' || recurring) {
       sentence = subject
         ? `${cap(subject)} appears to explain the variance and may represent recurring activity.`
-        : 'This appears to reflect recurring activity that may normalize over the period.'
+        : 'This appears to reflect recurring activity in the account.'
     }
     // 8. Aligned activity (one-time or quantified). With a subject and a known
     //    budget direction, state where it landed relative to plan; otherwise read
@@ -208,8 +316,5 @@ export function explanationCommentary({
     }
   }
 
-  if (!sentence) return null
-  // Reject-on-doubt: never emit causal or certainty language.
-  if (CAUSAL_RE.test(sentence)) return null
-  return sentence
+  return safe(sentence)
 }
