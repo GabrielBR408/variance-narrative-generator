@@ -198,49 +198,67 @@ function notesFromPlan(comparisons, plan, match, sort) {
 // lines belong to Revenue Notes. They have dedicated handling elsewhere.
 const EXPENSE_EXCLUDED_THEMES = new Set(['timing_balance_sheet', 'non_cash', 'revenue_leasing'])
 
+// --- Section membership predicates (single source of truth) ----------------
+// The four owner-prose sections that hold variance lines are defined by these
+// pairwise-disjoint predicates over the plan item (and its source comparison).
+// Defining them ONCE guarantees Context Notes is the EXACT complement, so every
+// triggered non-rollup row lands in exactly one prose section (NQ-3C invariants A
+// and B). High Variances requires `individual`; Revenue/Expense require `grouped`,
+// so they can never overlap; Revenue vs Expense are split by accountType.
+const matchHighVariance = (i) =>
+  i.disposition === 'individual' && (i.materiality === 'top_driver' || i.materiality === 'material')
+const matchRevenueNote = (i, c) =>
+  i.disposition === 'grouped' && i.theme === 'revenue_leasing' && c.accountType === 'revenue'
+const matchExpenseNote = (i, c) =>
+  i.disposition === 'grouped' && !EXPENSE_EXCLUDED_THEMES.has(i.theme) && c.accountType === 'expense'
+
+// A row the narrative may discuss: it crossed a threshold and is a real account
+// line (disposition is individual or grouped; rollups and suppressed rows are not).
+const isTriggeredItem = (i) => i.disposition === 'individual' || i.disposition === 'grouped'
+
 // High Variances — the individual-disposition drivers (top_driver or material).
 // Same headline/untyped set as before; immaterial/noise rows are never promoted.
 export function buildHighVariances(comparisons, plan) {
-  return notesFromPlan(
-    comparisons,
-    plan,
-    (i) => i.disposition === 'individual' && (i.materiality === 'top_driver' || i.materiality === 'material'),
-    byOwnerPriority
-  )
+  return notesFromPlan(comparisons, plan, matchHighVariance, byOwnerPriority)
 }
 
 // Revenue Notes — grouped revenue lines in the revenue/leasing theme, most
 // material first. (A revenue line promoted to High Variances is not repeated.)
 export function buildRevenueNotes(comparisons, plan) {
-  return notesFromPlan(
-    comparisons,
-    plan,
-    (i, c) => i.disposition === 'grouped' && i.theme === 'revenue_leasing' && c.accountType === 'revenue',
-    byMateriality
-  )
+  return notesFromPlan(comparisons, plan, matchRevenueNote, byMateriality)
 }
 
 // Expense Notes — grouped expense lines, excluding timing/balance-sheet, non-cash,
 // and revenue/leasing themes (NQ-3B). Most material first.
 export function buildExpenseNotes(comparisons, plan) {
+  return notesFromPlan(comparisons, plan, matchExpenseNote, byMateriality)
+}
+
+// Context Notes (NQ-3C, NEW) — the catch-all: every triggered, non-rollup row that
+// the three sections above did NOT place. This RE-HOMES grouped timing/balance-sheet
+// and non-cash expense lines (excluded from Expense Notes), plus any other orphan
+// (e.g. an immaterial individual line, or a theme-mismatched grouped line) so no
+// counted variance is left unnarrated (NQ-3C reconciliation). Selection only — rows
+// are rendered with the same toNote() wording; nothing is synthesized. Most material
+// first.
+export function buildContextNotes(comparisons, plan) {
   return notesFromPlan(
     comparisons,
     plan,
-    (i, c) => i.disposition === 'grouped' && !EXPENSE_EXCLUDED_THEMES.has(i.theme) && c.accountType === 'expense',
+    (i, c) => isTriggeredItem(i) && !matchHighVariance(i, c) && !matchRevenueNote(i, c) && !matchExpenseNote(i, c),
     byMateriality
   )
 }
 
-// Review Items (NQ-3B, NEW) — triggered rows the plan flags for a closer look
+// Review Items (NQ-3B) — triggered rows the plan flags for a closer look
 // (ownerQuestion === WHAT_TO_CHECK): material, unexplained lines. Selection only —
-// rows are rendered with the same toNote() wording and may also appear in their
-// primary section. Suppressed/rollup rows are never included, so the
-// "only narrate triggered rows" rule holds.
+// rows are rendered with the same toNote() wording and intentionally OVERLAP their
+// primary section (NQ-3C invariant C). Still INERT in NQ-3C: no surface renders it.
 export function buildReviewItems(comparisons, plan) {
   return notesFromPlan(
     comparisons,
     plan,
-    (i) => (i.disposition === 'individual' || i.disposition === 'grouped') && i.ownerQuestion === 'WHAT_TO_CHECK',
+    (i) => isTriggeredItem(i) && i.ownerQuestion === 'WHAT_TO_CHECK',
     byOwnerPriority
   )
 }

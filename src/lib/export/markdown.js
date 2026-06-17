@@ -64,13 +64,23 @@ function sectionBlock(period, { key, title }) {
   return lines
 }
 
-// One period (Current / YTD / …): a `##` heading and the five sections.
+// Context Notes (NQ-3C) renders after the fixed five, but ONLY when it carries
+// rows — an empty catch-all prints nothing, so a narrative with nothing to
+// re-home stays byte-identical to before.
+const CONTEXT_SECTION = { key: 'contextNotes', title: 'Context Notes' }
+
+// One period (Current / YTD / …): a `##` heading and the five sections, plus the
+// optional Context Notes section when non-empty.
 function periodBlock(period) {
   const lines = [`## ${period?.periodLabel || 'Current'}`, '']
   SECTIONS.forEach((section, i) => {
     if (i > 0) lines.push('')
     lines.push(...sectionBlock(period, section))
   })
+  if (notesOf(period, CONTEXT_SECTION.key).length > 0) {
+    lines.push('')
+    lines.push(...sectionBlock(period, CONTEXT_SECTION))
+  }
   return lines
 }
 

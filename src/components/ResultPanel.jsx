@@ -140,7 +140,10 @@ const SECTIONS = [
   { key: 'highVariances', title: 'High Variances' },
   { key: 'missingData', title: 'Missing Data' },
   { key: 'revenueNotes', title: 'Revenue Notes' },
-  { key: 'expenseNotes', title: 'Expense Notes' }
+  { key: 'expenseNotes', title: 'Expense Notes' },
+  // NQ-3C catch-all; this view already omits empty sections, so it shows only
+  // when it carries re-homed rows.
+  { key: 'contextNotes', title: 'Context Notes' }
 ]
 
 // Renders the deterministic narrative returned by /generate. Presentation only —
