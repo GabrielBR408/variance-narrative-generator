@@ -227,17 +227,15 @@ test('an empty citation prepares an honest empty shape', () => {
   assert.deepEqual(pe.topContributors, [])
 })
 
-// --- integration: byte-identical owner output ------------------------------
+// --- integration: metadata attaches; NQ-4B.1b consumes it ------------------
 
-test('preparedEvidence attaches to a GL-enriched note without changing owner text', () => {
+test('preparedEvidence attaches to a GL-enriched note and feeds the netted total', () => {
   const gl = supporting({
     fileName: 'General Ledger.pdf',
     columns: ['Account', 'Debit', 'Credit'],
     rows: [[ACCT, '4000', ''], [ACCT, '3366', '']]
   })
-  const base = baseNarrative(FLAGGED)
-  const before = narrativeToMarkdown(base)
-  const enriched = enrichNarrative(base, { supporting: [gl] })
+  const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [gl] })
   const note = enriched.periods[0].highVariances.find((x) => x.account === ACCT)
 
   // Metadata is present and correct (netted, reliable) …
@@ -246,22 +244,14 @@ test('preparedEvidence attaches to a GL-enriched note without changing owner tex
   assert.equal(note.preparedEvidence.amountReliable, true)
   assert.equal(note.preparedEvidence.columnModel, 'debit-credit')
 
-  // … the existing summarized total is still null (summarizeDetail unchanged) …
+  // … the support metadata is never mutated (summarizeDetail still omits the
+  // total — the insulation invariant exports rely on) …
   assert.equal(note.support[0].detail.total, null)
 
-  // … and the OWNER text is unchanged: it still uses the count-only wording and
-  // never renders the new netted aggregate (no GL "approximately" sentence).
-  assert.match(note.text, /Activity was spread across 2 related transactions\.$/)
-  assert.doesNotMatch(note.text, /approximately|Detail shows/)
-
-  // The rendered Markdown gains nothing owner-visible beyond the base note text.
-  const after = narrativeToMarkdown(enriched)
-  assert.equal(after.includes('Activity was spread across 2 related transactions'), true)
-  // The base figure $7,366 is the variance itself; the GL aggregate is NOT
-  // separately rendered, so "approximately" never appears.
-  assert.doesNotMatch(after, /approximately/)
-  // Sanity: the base-only render did not already contain that GL clause.
-  assert.doesNotMatch(before, /spread across 2 related transactions/)
+  // … and NQ-4B.1b now consumes the netted total to quantify the owner text,
+  // without surfacing any vendor/description name.
+  assert.match(note.text, /The movement reflects approximately \$7,400 across 2 related utility transactions\.$/)
+  assert.doesNotMatch(note.text, /Activity was spread across/)
 })
 
 test('a non-GL primary match carries no preparedEvidence', () => {
