@@ -150,40 +150,99 @@ export function isCategoryOwned(c) {
   return c.accountType === 'revenue' || c.accountType === 'expense'
 }
 
-// High Variances — the concise headline. It carries (a) the top material drivers
-// across the report and (b) every untyped row (which has no category note),
-// unfavorable first then favorable, most material within each group. Category
-// rows that did NOT make the headline are deferred to their Revenue/Expense Note.
-export function buildHighVariances(comparisons) {
-  const headline = headlineSet(comparisons)
-  return triggeredRows(comparisons)
-    .filter((c) => headline.has(c) || !isCategoryOwned(c))
+// --- NQ-3B: plan-driven section selection ----------------------------------
+// The owner-facing notes are now SELECTED from the deterministic commentary plan
+// (period.plan, built in generateNarrative) instead of recomputed from raw
+// comparisons. The plan's disposition / materiality / theme / ownerQuestion
+// decide membership; sentence generation is unchanged — every selected row is
+// still rendered by the same toNote(), so wording, figures, and ordering match.
+//
+// Plan items carry only decisions plus a stable id, so each selected item is
+// mapped back to its source comparison to render. The id mirrors the plan's own
+// `${account}#${firstSourceRow}` scheme (commentaryPlan.js) over the same filtered
+// rows, so the mapping is exact and needs no import of the plan module (avoiding a
+// cycle — generateNarrative computes the plan and hands it in).
+function comparisonId(c, index) {
+  const account = String(c.account || '').trim()
+  const firstRow = Array.isArray(c.sourceRows) && c.sourceRows.length > 0 ? c.sourceRows[0] : index
+  return `${account}#${firstRow}`
+}
+
+function indexComparisons(comparisons) {
+  const rows = (Array.isArray(comparisons) ? comparisons : []).filter((c) => c && typeof c === 'object')
+  const map = new Map()
+  rows.forEach((c, i) => {
+    const id = comparisonId(c, i)
+    if (!map.has(id)) map.set(id, c)
+  })
+  return map
+}
+
+// Select the comparison rows whose plan item satisfies `match(item, comparison)`,
+// render each with the unchanged toNote(), and order with `sort`. With no plan
+// (a defensive default), no rows are selected.
+function notesFromPlan(comparisons, plan, match, sort) {
+  const items = plan && Array.isArray(plan.items) ? plan.items : []
+  const byId = indexComparisons(comparisons)
+  return items
+    .map((item) => ({ item, c: byId.get(item.id) }))
+    .filter(({ item, c }) => c && match(item, c))
+    .map(({ c }) => c)
     .slice()
-    .sort(byOwnerPriority)
+    .sort(sort)
     .map((c) => toNote(c))
 }
 
-// Revenue Notes — triggered revenue lines that did NOT lead the headline, most
-// material first. (A revenue line promoted to High Variances is not repeated
-// here, so each variance appears exactly once.)
-export function buildRevenueNotes(comparisons) {
-  const headline = headlineSet(comparisons)
-  return triggeredRows(comparisons)
-    .filter((c) => c.accountType === 'revenue' && !headline.has(c))
-    .slice()
-    .sort(byMateriality)
-    .map((c) => toNote(c))
+// Grouped EXPENSE themes kept OUT of Expense Notes (NQ-3B): timing/balance-sheet
+// and non-cash lines are not operating-expense commentary, and revenue/leasing
+// lines belong to Revenue Notes. They have dedicated handling elsewhere.
+const EXPENSE_EXCLUDED_THEMES = new Set(['timing_balance_sheet', 'non_cash', 'revenue_leasing'])
+
+// High Variances — the individual-disposition drivers (top_driver or material).
+// Same headline/untyped set as before; immaterial/noise rows are never promoted.
+export function buildHighVariances(comparisons, plan) {
+  return notesFromPlan(
+    comparisons,
+    plan,
+    (i) => i.disposition === 'individual' && (i.materiality === 'top_driver' || i.materiality === 'material'),
+    byOwnerPriority
+  )
 }
 
-// Expense Notes — triggered expense lines that did NOT lead the headline, most
-// material first.
-export function buildExpenseNotes(comparisons) {
-  const headline = headlineSet(comparisons)
-  return triggeredRows(comparisons)
-    .filter((c) => c.accountType === 'expense' && !headline.has(c))
-    .slice()
-    .sort(byMateriality)
-    .map((c) => toNote(c))
+// Revenue Notes — grouped revenue lines in the revenue/leasing theme, most
+// material first. (A revenue line promoted to High Variances is not repeated.)
+export function buildRevenueNotes(comparisons, plan) {
+  return notesFromPlan(
+    comparisons,
+    plan,
+    (i, c) => i.disposition === 'grouped' && i.theme === 'revenue_leasing' && c.accountType === 'revenue',
+    byMateriality
+  )
+}
+
+// Expense Notes — grouped expense lines, excluding timing/balance-sheet, non-cash,
+// and revenue/leasing themes (NQ-3B). Most material first.
+export function buildExpenseNotes(comparisons, plan) {
+  return notesFromPlan(
+    comparisons,
+    plan,
+    (i, c) => i.disposition === 'grouped' && !EXPENSE_EXCLUDED_THEMES.has(i.theme) && c.accountType === 'expense',
+    byMateriality
+  )
+}
+
+// Review Items (NQ-3B, NEW) — triggered rows the plan flags for a closer look
+// (ownerQuestion === WHAT_TO_CHECK): material, unexplained lines. Selection only —
+// rows are rendered with the same toNote() wording and may also appear in their
+// primary section. Suppressed/rollup rows are never included, so the
+// "only narrate triggered rows" rule holds.
+export function buildReviewItems(comparisons, plan) {
+  return notesFromPlan(
+    comparisons,
+    plan,
+    (i) => (i.disposition === 'individual' || i.disposition === 'grouped') && i.ownerQuestion === 'WHAT_TO_CHECK',
+    byOwnerPriority
+  )
 }
 
 // The COMPLETE variance table for export (Phase 21.6 bugfix). Every comparison
