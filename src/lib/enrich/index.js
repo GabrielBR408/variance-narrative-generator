@@ -147,6 +147,24 @@ function enrichNote(note, index, options, period) {
     // citation's match score is the only confidence; it rides on `detail` as the
     // approved contribution input. Then classify (contribution-gated) and render.
     const detail = { ...primary.detail, confidence: primary.confidence }
+    // NQ-4B.1b: consume the dormant NQ-4B.1a prepared evidence. When summarizeDetail
+    // could not produce a reliable transaction total (e.g. a Debit/Credit ledger,
+    // where the amount columns are ambiguous), substitute the netted total and the
+    // largest netted transaction prepared upstream — Balance columns already
+    // excluded. Gated so a single-amount GL (already reliable) is NEVER touched, so
+    // its wording stays byte-identical. We patch only this LOCAL copy, never
+    // `primary.detail`/`support`, so the support metadata and exports are unchanged.
+    // The reconciled path stays purely quantitative: any vendor/description on the
+    // detail is cleared so the existing template never surfaces a name newly enabled
+    // by the netted total (no contributor / vendor / memo names in this phase).
+    const detailTotalReliable =
+      typeof detail.total === 'number' && Number.isFinite(detail.total) && detail.total !== 0
+    if (!detailTotalReliable && preparedEvidence && preparedEvidence.amountReliable) {
+      detail.total = preparedEvidence.netTotal
+      detail.maxTxn = preparedEvidence.maxTxn
+      detail.vendor = null
+      detail.description = null
+    }
     const contribution = rankContribution({
       varianceAmount: note.varianceAmount,
       comparisonType: note.comparisonType,

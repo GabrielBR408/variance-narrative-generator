@@ -293,30 +293,33 @@ test('GL total is omitted when amounts are ambiguous (Debit + Credit columns)', 
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
   const detail = note.support[0].detail
   assert.equal(detail.count, 2)
-  assert.equal(detail.total, null, 'two amount columns are ambiguous → no total')
-  // Count wording, but NO total since it is unreliable. No causal language.
-  assert.match(note.text, /\. Activity was spread across 2 related transactions\.$/)
-  assert.doesNotMatch(note.text, /approximately|Detail shows/)
+  assert.equal(detail.total, null, 'two amount columns are ambiguous → summarizeDetail omits the total')
+  // NQ-4B.1b: summarizeDetail still omits the total (support metadata unchanged),
+  // but the rendered text now uses the netted Debit/Credit total prepared in
+  // NQ-4B.1a. Still no causal language, no "Detail shows".
+  assert.match(note.text, /The movement reflects approximately \$7,400 across 2 related utility transactions\.$/)
+  assert.doesNotMatch(note.text, /Activity was spread across|Detail shows/)
 })
 
-test('GL with descriptions but no reliable total uses descriptions-only wording', () => {
-  // Two amount columns make the total ambiguous, but a description column is
-  // present → the descriptions-only evidence sentence (no vendor name, no total).
+test('GL with descriptions and ambiguous columns nets to a quantified total without surfacing names', () => {
+  // Two amount columns make summarizeDetail's total ambiguous, but the netted
+  // Debit/Credit total quantifies the text. A description column is present, yet
+  // the reconciled path stays purely quantitative — no vendor/description name.
   const gl = supporting({
     fileName: 'General Ledger.pdf',
     type: 'General Ledger (GL)',
     columns: ['Account', 'Description', 'Debit', 'Credit'],
     rows: [
       ['Utility Expense Recovery', 'PG&E', '4000', ''],
-      ['Utility Expense Recovery', 'City Water', '3400', '']
+      ['Utility Expense Recovery', 'City Water', '3000', '']
     ]
   })
   const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [gl] })
   const note = enriched.periods[0].highVariances.find((x) => x.account === 'Utility Expense Recovery')
-  assert.equal(note.support[0].detail.total, null, 'ambiguous amounts → no total')
-  // No reliable total → quantified fallback degrades to the count-only form.
-  assert.match(note.text, /\. Activity was spread across 2 related transactions\.$/)
-  assert.doesNotMatch(note.text, /PG&E|City Water|approximately/)
+  assert.equal(note.support[0].detail.total, null, 'ambiguous amounts → summarizeDetail omits the total')
+  // 4000 + 3000 = 7000 (≤ the $7,366 variance, so the figure renders), rounded.
+  assert.match(note.text, /The movement reflects approximately \$7,000 across 2 related utility transactions\.$/)
+  assert.doesNotMatch(note.text, /PG&E|City Water/)
 })
 
 test('no enriched owner text contains "Supporting file" or an uploaded file name', () => {
