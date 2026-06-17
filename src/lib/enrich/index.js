@@ -29,11 +29,12 @@
 //         revenueNotes, expenseNotes, sourceRows }, ... ] }
 
 import { buildEvidenceIndex, matchAccount, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
-import { explanationClause, glEvidenceSentence, commentarySentence, detailedCommentarySentence } from './templates.js'
+import { explanationClause, commentarySentence } from './templates.js'
 import { classifyGLCommentary } from './classify.js'
 import { rankContribution } from './contribution.js'
 import { reconstructDetail } from './reconstructDetail.js'
 import { selectDetailEvidence } from './detailEvidence.js'
+import { explanationCommentary } from './commentaryIntent.js'
 
 // Only these sections hold flagged variance notes — they are the only ones we
 // enrich. Executive Summary (a roll-up) and Missing Data (no comparison) are
@@ -151,18 +152,38 @@ function enrichNote(note, index, options, period) {
       varianceAmount: note.varianceAmount,
       accountType: note.accountType
     })
-    // Phase 21.3: opt-in detailed mode renders a sanitized vendor/memo phrase
-    // from the render-safe `detailEvidence` (Phase 21.2). Default mode is
+    // NQ-2A.1: in detailed mode the conservative evidence sentence is REPLACED by
+    // a single owner-facing EXPLANATION that folds the implication in (S2). It
+    // rides on the same already-computed figures (no new math): the classifier
+    // `type`, the Phase 19B contribution shape, the GL detail (for recurring /
+    // timing keyword signals and the render-safe vendor/memo subject), and
+    // whether the render guard tripped. When no confident explanation applies it
+    // returns null and the conservative evidence sentence stands. Default mode is
     // 'conservative', which never reaches this branch, so output is unchanged.
-    // Detailed rendering falls back to the conservative sentence whenever the
-    // evidence is not safe enough to render (detailedCommentarySentence → null).
+    // There is NO third sentence — a note is at most two sentences (S1 + S2).
     if (options.mode === 'detailed') {
-      const detailed = detailedCommentarySentence({
-        evidence: primary.detailEvidence,
+      const reliableTotal =
+        typeof detail.total === 'number' && Number.isFinite(detail.total) && detail.total !== 0
+      const v = Math.abs(Number(note.varianceAmount))
+      const exceedsVariance =
+        reliableTotal && Number.isFinite(v) && Math.abs(detail.total) > v + 0.005
+      const explanation = explanationCommentary({
+        type,
         contribution,
-        period
+        confidence: primary.confidence,
+        thick: primary.thick,
+        exceedsVariance,
+        account: note.account,
+        detail,
+        accountType: note.accountType,
+        comparisonType: note.comparisonType,
+        category: note.category,
+        varianceAmount: note.varianceAmount,
+        period,
+        reconstructed: primary.reconstructed,
+        detailEvidence: primary.detailEvidence
       })
-      if (detailed) sentence = detailed
+      if (explanation) sentence = explanation
     }
     if (sentence) text = appendSentence(note.text, sentence)
   } else {
@@ -217,6 +238,7 @@ export {
   RECURRING_MAX_COUNT
 } from './classify.js'
 export { selectDetailEvidence, VENDOR_RENDER_MAX_LEN, MEMO_RENDER_MAX_LEN } from './detailEvidence.js'
+export { explanationCommentary } from './commentaryIntent.js'
 export {
   rankContribution,
   ALIGN_LOW,

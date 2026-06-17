@@ -83,6 +83,13 @@ function findNote(enriched, account) {
   return null
 }
 
+// Count sentences (terminal punctuation followed by whitespace or end of string).
+// A trailing corporate "." (Inc./LLC.) is stripped from a rendered vendor, so it
+// never reads as a false boundary.
+function sentences(text) {
+  return (String(text).match(/[.!?](?:\s|$)/g) || []).length
+}
+
 // --- 1. default conservative output is byte-identical -----------------------
 
 test('default mode equals explicit conservative mode (byte-identical)', () => {
@@ -99,39 +106,43 @@ test('detailed mode actually differs from conservative (opt-in has an effect)', 
 
 // --- 2. detailed mode renders vendor/memo when render-safe ------------------
 
-test('detailed mode renders vendor + memo for a high-confidence note', () => {
+test('detailed mode renders an explanation for a high-confidence note', () => {
   const note = findNote(build('detailed'), '51252 Janitorial Supplies')
-  assert.match(note.text, /The variance reflects janitorial supplies from Trinity Building Services\.$/)
+  // NQ-2A.1: a single explanation sentence (S2) folds the implication in. This
+  // aligned expense overspend reads as a below/above-plan explanation.
+  assert.match(note.text, /Janitorial supplies from Trinity Building Services was above plan for the period\.$/)
+  assert.ok(sentences(note.text) <= 2, `>2 sentences: ${note.text}`)
 })
 
-test('detailed mode renders vendor + memo for a medium-confidence note', () => {
+test('detailed mode renders an explanation for a medium-confidence note', () => {
   const note = findNote(build('detailed'), '51020 Utility-Building Water')
-  assert.match(note.text, /The variance reflects monthly water from City Water Dept\.$/)
+  // "Monthly" is a recurring signal → recurring explanation.
+  assert.match(note.text, /Monthly water from City Water Dept appears to explain the variance and may represent recurring activity\.$/)
 })
 
-test('detailed mode renders a memo-only phrase', () => {
+test('detailed mode renders a memo-only explanation', () => {
   const note = findNote(build('detailed'), '51256 Trash Removal')
-  assert.match(note.text, /The variance reflects monthly trash pickup\.$/)
+  assert.match(note.text, /Monthly trash pickup appears to explain the variance and may represent recurring activity\.$/)
 })
 
-test('detailed mode renders a vendor-only phrase', () => {
+test('detailed mode renders a vendor-only explanation', () => {
   const note = findNote(build('detailed'), '51257 Recology Hauling')
-  assert.match(note.text, /The variance reflects activity from Recology Golden Gate\.$/)
+  assert.match(note.text, /Activity from Recology Golden Gate was above plan for the period\.$/)
 })
 
 // --- offset-heavy and disproportionate variants ----------------------------
 
-test('detailed mode renders the offset-heavy variant', () => {
+test('detailed mode renders the offset-heavy explanation', () => {
   const note = findNote(build('detailed'), '51400 Fire Sprinkler Contract')
-  assert.match(note.text, /The variance reflects annual fire contract from Acme Fire LLC, partially offset by related entries\.$/)
+  assert.match(note.text, /Activity exceeded the reported variance, suggesting offsetting entries or timing effects influenced the reported result\.$/)
+  assert.ok(sentences(note.text) <= 2)
 })
 
-test('detailed mode renders the disproportionate variant without a dollar', () => {
+test('detailed mode renders the disproportionate explanation without a dollar', () => {
   const note = findNote(build('detailed'), '54200 Insurance')
-  assert.match(note.text, /The variance reflects annual premium from Blue Shield Insurance, though related activity exceeded the reported variance\.$/)
+  assert.match(note.text, /Observed activity exceeded the reported variance, suggesting net account movement was influenced by additional offsets\.$/)
   assert.doesNotMatch(note.text, /\$25,000|25,000/)
-  // Phase 21.4: "related activity" must not be repeated within one sentence.
-  assert.equal((note.text.match(/related activity/gi) || []).length, 1)
+  assert.ok(sentences(note.text) <= 2)
 })
 
 // --- 3. low-confidence / generic evidence does not render -------------------
@@ -139,7 +150,9 @@ test('detailed mode renders the disproportionate variant without a dollar', () =
 test('a generic / low-confidence note falls back to the conservative sentence', () => {
   const detailed = findNote(build('detailed'), '51999 Misc')
   const conservative = findNote(build('conservative'), '51999 Misc')
-  assert.equal(detailed.text, conservative.text)
+  // No render-safe subject and no supported implication → the explanation falls
+  // back to the conservative evidence sentence (no unsupported implication).
+  assert.equal(detailed.text, conservative.text, 'detailed falls back to the conservative S2')
   // The generic "Service" vendor must never surface as a rendered vendor phrase.
   assert.doesNotMatch(detailed.text, /from Service/)
 })
@@ -161,6 +174,8 @@ test('a dropped Description (leading line number) never renders the literal "nul
   const conservative = enrichNarrative(narrative, { supporting: [gl] })
   const dNote = findNote(detailed, '54110 Real Estate Taxes')
   assert.doesNotMatch(dNote.text, /\bnull\b/)
+  // No render-safe subject survives the dropped Description, so the explanation
+  // falls back to the same clean conservative evidence sentence.
   assert.equal(dNote.text, findNote(conservative, '54110 Real Estate Taxes').text)
 })
 
@@ -173,7 +188,7 @@ test('detailed Markdown leaks no date, reference, raw-caps vendor, GL dollar, or
   assert.doesNotMatch(md, /TRINITY BUILDING SERVICES|CITY WATER DEPT|ACME FIRE LLC|BLUE SHIELD INSURANCE|RECOLOGY GOLDEN GATE/) // raw caps blobs
   assert.doesNotMatch(md, /General Ledger\.pdf|Supporting file/) // file name
   assert.doesNotMatch(md, /\$23,200|\$25,000|\$10,700/) // suppressed / raw GL amounts
-  assert.doesNotMatch(md, /\b(caused by|due to|because of|driven by|drove|resulting from|explains?)\b/i) // causation
+  assert.doesNotMatch(md, /\b(caused by|due to|because of|driven by|drove|resulting from|explains)\b/i) // causation ("explains" asserts cause; hedged "appears to explain" is allowed)
 })
 
 // --- 5. deterministic -------------------------------------------------------

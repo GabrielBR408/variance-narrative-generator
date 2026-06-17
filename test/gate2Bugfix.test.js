@@ -82,7 +82,8 @@ test('the GL evidence sentence still reads naturally (owner-facing) after relabe
   assert.ok(repairs, 'Repairs note is present and enriched')
   // NQ-1A: owner-facing prose, never the old extraction-style "Detail …" label.
   assert.doesNotMatch(repairs.text, /Detail (shows|includes|reflects)|Detailed (activity|account)/)
-  assert.match(repairs.text, /(reflects|Related activity|movement)\b/i)
+  // NQ-2A.1: a single owner-facing explanation sentence (S2).
+  assert.match(repairs.text, /(reflects|activity|movement|variance)\b/i)
 })
 
 // --- Finding 3: the export carries the entire variance report --------------
