@@ -27,6 +27,7 @@ import {
   unionSourceRows
 } from './sections.js'
 import { periodLabel } from './formatters.js'
+import { buildCommentaryPlan } from '../plan/commentaryPlan.js'
 
 // Normalize whatever was passed into an ordered list of comparison sets.
 // Accepts a full variance result, or a bare { comparisonSets } / { comparisons }.
@@ -57,6 +58,13 @@ export function buildPeriodNarrative(set, thresholds) {
   // and the on-screen summary stay byte-identical.
   const allVariances = buildAllVariances(comparisons)
 
+  // NQ-3A — Commentary Planning Layer (INERT). A deterministic plan of how each
+  // row would be narrated (disposition / materiality / theme / owner question),
+  // attached for LATER phases to consume. Nothing reads it yet, so every section
+  // below and every export/preview stays byte-identical. Additive, like
+  // `allVariances` above.
+  const plan = buildCommentaryPlan(comparisons, { thresholds })
+
   // Top-level traceability: every source row any sentence in this period drew on.
   const sourceRows = unionSourceRows([
     ...executiveSummary,
@@ -75,6 +83,7 @@ export function buildPeriodNarrative(set, thresholds) {
     revenueNotes,
     expenseNotes,
     allVariances,
+    plan,
     sourceRows
   }
 }

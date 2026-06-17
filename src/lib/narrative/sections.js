@@ -26,7 +26,7 @@ function sourceRowsOf(c) {
 // Materiality ordering: largest dollar movement first, then largest percent,
 // then account name, then source-row index. Fully deterministic — the same set
 // always yields the same order regardless of input order.
-function byMateriality(a, b) {
+export function byMateriality(a, b) {
   const ad = Math.abs(a.varianceAmount ?? 0)
   const bd = Math.abs(b.varianceAmount ?? 0)
   if (bd !== ad) return bd - ad
@@ -117,7 +117,7 @@ export function isZeroNoiseVariance(c) {
 // NQ-2C: effectively-zero (sub-$1) variances are also excluded so "$0"/"$0.09"
 // noise never reaches the narrative. Both filters are presentation-only — they
 // change no variance figure and no source-row index.
-function triggeredRows(comparisons) {
+export function triggeredRows(comparisons) {
   return comparisons.filter(
     (c) => c && c.thresholdTriggered && !isRollupLabel(c.account) && !isZeroNoiseVariance(c)
   )
@@ -138,7 +138,7 @@ export const HIGH_VARIANCE_HEADLINE_LIMIT = 3
 // comparison object references. buildPeriodNarrative hands the SAME `comparisons`
 // array to every section builder, so identity membership is stable and the three
 // sections always agree on which rows were promoted to the headline.
-function headlineSet(comparisons) {
+export function headlineSet(comparisons) {
   const ranked = triggeredRows(comparisons).slice().sort(byMateriality)
   return new Set(ranked.slice(0, HIGH_VARIANCE_HEADLINE_LIMIT))
 }
@@ -146,7 +146,7 @@ function headlineSet(comparisons) {
 // A row is "category-owned" when a dedicated notes section (Revenue or Expense)
 // can hold it. Untyped/unknown rows are not category-owned, so High Variances is
 // their only possible home and they are never dropped from it.
-function isCategoryOwned(c) {
+export function isCategoryOwned(c) {
   return c.accountType === 'revenue' || c.accountType === 'expense'
 }
 
