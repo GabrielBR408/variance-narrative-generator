@@ -35,6 +35,7 @@ import { rankContribution } from './contribution.js'
 import { reconstructDetail } from './reconstructDetail.js'
 import { selectDetailEvidence } from './detailEvidence.js'
 import { explanationCommentary, finalizeNoteCommentary } from './commentaryIntent.js'
+import { prepareEvidence } from './prepareEvidence.js'
 
 // Only these sections hold flagged variance notes — they are the only ones we
 // enrich. Executive Summary (a roll-up) and Missing Data (no comparison) are
@@ -131,6 +132,14 @@ function enrichNote(note, index, options, period) {
   // sentence (Phase 17.1); non-GL stays a conservative merged clause.
   const primary = [...support].sort((a, b) => evidenceRank(a.classificationType) - evidenceRank(b.classificationType))[0]
 
+  // NQ-4B.1a: prepare GL evidence as ADDITIVE METADATA (debit/credit netting,
+  // balance exclusion, top contributors) from the primary GL citation's matched
+  // rows. Null for a non-GL primary. NOTHING below reads it — it never reaches
+  // owner narrative text in this phase, so output stays byte-identical.
+  const preparedEvidence = isGL(primary.classificationType)
+    ? prepareEvidence({ note, citation: citations.find((c) => c.fileName === primary.fileName) })
+    : null
+
   let text = note.text
   if (isGL(primary.classificationType)) {
     // Phase 19B: rank the GL evidence by contribution relevance to THIS variance
@@ -204,7 +213,9 @@ function enrichNote(note, index, options, period) {
     const clause = explanationClause({ classificationType: primary.classificationType })
     if (clause) text = mergeClause(note.text, clause)
   }
-  return { ...note, text, support, enriched: true }
+  const result = { ...note, text, support, enriched: true }
+  if (preparedEvidence) result.preparedEvidence = preparedEvidence
+  return result
 }
 
 // Enrich a generated narrative with supporting-file evidence. Returns the SAME
@@ -265,6 +276,7 @@ export {
   BORDERLINE_MATERIAL_MAX
 } from './commentaryIntent.js'
 export { accountSemanticType, accountSemanticCommentary, ACCOUNT_SEMANTIC } from './accountSemantics.js'
+export { prepareEvidence, TOP_CONTRIBUTORS_MAX } from './prepareEvidence.js'
 export {
   rankContribution,
   ALIGN_LOW,

@@ -36,6 +36,15 @@ const DETAIL_COL_RE = /description|memo|detail|narrative|note|particular|referen
 const VENDOR_COL_RE = /vendor|payee|\bname\b/i
 const DESC_COL_RE = /description|memo|detail|narrative|note|particular/i
 
+// NQ-4B.1a: typed amount columns for the prepared-evidence layer. Debit/Credit
+// drive deterministic netting (debit positive, credit negative); a running
+// Balance column is captured for traceability but EXCLUDED from transaction
+// totals. These are additive — they do not change AMOUNT_COL_RE, reliableAmount,
+// or summarizeDetail, so the existing `amount`/`detail` outputs are unchanged.
+const DEBIT_COL_RE = /debit|\bdr\b/i
+const CREDIT_COL_RE = /credit|\bcr\b/i
+const BALANCE_COL_RE = /balance/i
+
 // A leading numeric token used as an account code: "5100", "5100-10", "51.00".
 const CODE_RE = /^\s*([0-9][0-9.\-]*[0-9]|[0-9])/
 
@@ -87,6 +96,10 @@ export function buildEvidenceIndex(supporting = []) {
     const detailCols = []
     const vendorCols = []
     const descCols = []
+    // NQ-4B.1a: typed debit / credit / balance columns (additive).
+    const debitCols = []
+    const creditCols = []
+    const balanceCols = []
     for (let i = 0; i < columns.length; i++) {
       if (i === col) continue
       const h = String(columns[i])
@@ -94,6 +107,11 @@ export function buildEvidenceIndex(supporting = []) {
       if (DETAIL_COL_RE.test(h)) detailCols.push(i)
       if (VENDOR_COL_RE.test(h)) vendorCols.push(i)
       if (DESC_COL_RE.test(h)) descCols.push(i)
+      // A Balance column is checked first so a "Debit"/"Credit" header never also
+      // lands in balanceCols and vice-versa (the three are mutually exclusive).
+      if (BALANCE_COL_RE.test(h)) balanceCols.push(i)
+      else if (DEBIT_COL_RE.test(h)) debitCols.push(i)
+      else if (CREDIT_COL_RE.test(h)) creditCols.push(i)
     }
 
     const fileName = ex.fileName || ''
@@ -125,7 +143,12 @@ export function buildEvidenceIndex(supporting = []) {
         // Phase 19B: column-typed text, kept separate so a reference/invoice ID
         // can never surface where a vendor or description is expected.
         vendorText: firstDetailText(row, vendorCols),
-        descText: firstDetailText(row, descCols)
+        descText: firstDetailText(row, descCols),
+        // NQ-4B.1a: typed transaction amounts for the prepared-evidence layer.
+        // Balance is captured but never summed into a transaction total.
+        debit: typedAmount(row, debitCols),
+        credit: typedAmount(row, creditCols),
+        balance: typedAmount(row, balanceCols)
       })
     }
   }
@@ -167,6 +190,17 @@ function reliableAmount(row, accountCol, amountCols) {
       }
     })
     return count === 1 ? found : null
+  }
+  return null
+}
+
+// NQ-4B.1a: the first reliably-parsed number among a set of typed columns
+// (debit / credit / balance), or null when none parses. A single typed column
+// is the normal case; first-non-null keeps it deterministic if a layout repeats.
+function typedAmount(row, cols) {
+  for (const i of cols) {
+    const n = toNumber(row[i])
+    if (n !== null) return n
   }
   return null
 }
@@ -311,7 +345,11 @@ export function matchAccount(account, index = [], options = {}) {
         amount: entry.amount,
         detailText: entry.detailText,
         vendorText: entry.vendorText,
-        descText: entry.descText
+        descText: entry.descText,
+        // NQ-4B.1a: typed transaction amounts carried through for prepared evidence.
+        debit: entry.debit,
+        credit: entry.credit,
+        balance: entry.balance
       })
     }
   }
@@ -326,7 +364,10 @@ export function matchAccount(account, index = [], options = {}) {
         confidence: c.confidence,
         sourceRows,
         thick: c.thick,
-        detail: summarizeDetail(orderedRows)
+        detail: summarizeDetail(orderedRows),
+        // NQ-4B.1a: per-row typed cells (source-row traceable), consumed by the
+        // prepared-evidence layer. Additive metadata — no template reads this.
+        matchedRows: sourceRows.map((r) => ({ sourceRow: r, ...c.rows.get(r) }))
       }
     })
     .sort((a, b) => {
