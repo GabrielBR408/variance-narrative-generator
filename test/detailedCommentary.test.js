@@ -101,36 +101,47 @@ test('detailed mode actually differs from conservative (opt-in has an effect)', 
 
 test('detailed mode renders vendor + memo for a high-confidence note', () => {
   const note = findNote(build('detailed'), '51252 Janitorial Supplies')
-  assert.match(note.text, /The variance reflects janitorial supplies from Trinity Building Services\.$/)
+  // S2 (cause) is preserved; NQ-2A appends the S3 implication.
+  assert.match(note.text, /The variance reflects janitorial supplies from Trinity Building Services\./)
+  assert.match(note.text, /This appears to be a one-time item that may normalize in future periods\.$/)
 })
 
 test('detailed mode renders vendor + memo for a medium-confidence note', () => {
   const note = findNote(build('detailed'), '51020 Utility-Building Water')
-  assert.match(note.text, /The variance reflects monthly water from City Water Dept\.$/)
+  assert.match(note.text, /The variance reflects monthly water from City Water Dept\./)
+  // "Monthly" is a recurring signal → recurring implication.
+  assert.match(note.text, /This appears to reflect recurring service activity that may normalize over the period\.$/)
 })
 
 test('detailed mode renders a memo-only phrase', () => {
   const note = findNote(build('detailed'), '51256 Trash Removal')
-  assert.match(note.text, /The variance reflects monthly trash pickup\.$/)
+  assert.match(note.text, /The variance reflects monthly trash pickup\./)
+  assert.match(note.text, /recurring service activity that may normalize over the period\.$/)
 })
 
 test('detailed mode renders a vendor-only phrase', () => {
   const note = findNote(build('detailed'), '51257 Recology Hauling')
-  assert.match(note.text, /The variance reflects activity from Recology Golden Gate\.$/)
+  assert.match(note.text, /The variance reflects activity from Recology Golden Gate\./)
+  assert.match(note.text, /one-time item that may normalize in future periods\.$/)
 })
 
 // --- offset-heavy and disproportionate variants ----------------------------
 
 test('detailed mode renders the offset-heavy variant', () => {
   const note = findNote(build('detailed'), '51400 Fire Sprinkler Contract')
-  assert.match(note.text, /The variance reflects annual fire contract from Acme Fire LLC, partially offset by related entries\.$/)
+  assert.match(note.text, /The variance reflects annual fire contract from Acme Fire LLC, partially offset by related entries\./)
+  // "Annual / contract" is a recurring signal → recurring implication (orthogonal
+  // to the offset intent already in S2).
+  assert.match(note.text, /recurring service activity that may normalize over the period\.$/)
 })
 
 test('detailed mode renders the disproportionate variant without a dollar', () => {
   const note = findNote(build('detailed'), '54200 Insurance')
-  assert.match(note.text, /The variance reflects annual premium from Blue Shield Insurance, though related activity exceeded the reported variance\.$/)
+  assert.match(note.text, /The variance reflects annual premium from Blue Shield Insurance, though related activity exceeded the reported variance\./)
+  assert.match(note.text, /recurring service activity that may normalize over the period\.$/)
   assert.doesNotMatch(note.text, /\$25,000|25,000/)
-  // Phase 21.4: "related activity" must not be repeated within one sentence.
+  // Phase 21.4: "related activity" must not be repeated within one sentence; the
+  // NQ-2A implication adds no further "related activity" mention.
   assert.equal((note.text.match(/related activity/gi) || []).length, 1)
 })
 
@@ -139,7 +150,9 @@ test('detailed mode renders the disproportionate variant without a dollar', () =
 test('a generic / low-confidence note falls back to the conservative sentence', () => {
   const detailed = findNote(build('detailed'), '51999 Misc')
   const conservative = findNote(build('conservative'), '51999 Misc')
-  assert.equal(detailed.text, conservative.text)
+  // The S2 cause sentence still falls back to the conservative shape (no vendor
+  // rendered); NQ-2A may append an S3 implication on top of it.
+  assert.ok(detailed.text.startsWith(conservative.text), 'detailed keeps the conservative S2')
   // The generic "Service" vendor must never surface as a rendered vendor phrase.
   assert.doesNotMatch(detailed.text, /from Service/)
 })
@@ -161,7 +174,9 @@ test('a dropped Description (leading line number) never renders the literal "nul
   const conservative = enrichNarrative(narrative, { supporting: [gl] })
   const dNote = findNote(detailed, '54110 Real Estate Taxes')
   assert.doesNotMatch(dNote.text, /\bnull\b/)
-  assert.equal(dNote.text, findNote(conservative, '54110 Real Estate Taxes').text)
+  // The S2 cause sentence is the same clean fallback as conservative; NQ-2A may
+  // append an S3 implication, so detailed begins with the conservative text.
+  assert.ok(dNote.text.startsWith(findNote(conservative, '54110 Real Estate Taxes').text))
 })
 
 // --- 4. no unsafe tokens / causal language in detailed output --------------

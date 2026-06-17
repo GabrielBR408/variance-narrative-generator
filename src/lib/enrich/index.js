@@ -34,6 +34,7 @@ import { classifyGLCommentary } from './classify.js'
 import { rankContribution } from './contribution.js'
 import { reconstructDetail } from './reconstructDetail.js'
 import { selectDetailEvidence } from './detailEvidence.js'
+import { commentaryImplication } from './commentaryIntent.js'
 
 // Only these sections hold flagged variance notes — they are the only ones we
 // enrich. Executive Summary (a roll-up) and Missing Data (no comparison) are
@@ -165,6 +166,32 @@ function enrichNote(note, index, options, period) {
       if (detailed) sentence = detailed
     }
     if (sentence) text = appendSentence(note.text, sentence)
+
+    // NQ-2A: the OPTIONAL implication sentence (S3, the SO-WHAT). Detailed mode
+    // only, so conservative output stays byte-identical. It rides on the same
+    // already-computed evidence (no new math): the classifier `type`, the
+    // contribution shape, the GL detail (for recurring/timing keyword signals),
+    // and whether the render guard already tripped. Appended after S2, it brings
+    // the note to at most three sentences (S1 variance + S2 cause + S3 here).
+    if (options.mode === 'detailed') {
+      const reliableTotal =
+        typeof detail.total === 'number' && Number.isFinite(detail.total) && detail.total !== 0
+      const v = Math.abs(Number(note.varianceAmount))
+      const exceedsVariance =
+        reliableTotal && Number.isFinite(v) && Math.abs(detail.total) > v + 0.005
+      const implication = commentaryImplication({
+        type,
+        contributionType: contribution && contribution.contributionType,
+        confidence: primary.confidence,
+        thick: primary.thick,
+        exceedsVariance,
+        account: note.account,
+        detail,
+        reconstructed: primary.reconstructed,
+        detailEvidence: primary.detailEvidence
+      })
+      if (implication) text = appendSentence(text, implication)
+    }
   } else {
     const clause = explanationClause({ classificationType: primary.classificationType })
     if (clause) text = mergeClause(note.text, clause)
@@ -217,6 +244,7 @@ export {
   RECURRING_MAX_COUNT
 } from './classify.js'
 export { selectDetailEvidence, VENDOR_RENDER_MAX_LEN, MEMO_RENDER_MAX_LEN } from './detailEvidence.js'
+export { commentaryImplication } from './commentaryIntent.js'
 export {
   rankContribution,
   ALIGN_LOW,
