@@ -90,9 +90,10 @@ test('NQ-3A: markdown export is byte-identical with or without the plan', () => 
 test('NQ-3A: the five sections match the renderer exactly (plan does not alter them)', () => {
   const rows = comparisons()
   const period = generateNarrative({ comparisons: rows }).periods[0]
-  assert.deepEqual(period.highVariances, buildHighVariances(rows))
-  assert.deepEqual(period.revenueNotes, buildRevenueNotes(rows))
-  assert.deepEqual(period.expenseNotes, buildExpenseNotes(rows))
+  const plan = buildCommentaryPlan(rows)
+  assert.deepEqual(period.highVariances, buildHighVariances(rows, plan))
+  assert.deepEqual(period.revenueNotes, buildRevenueNotes(rows, plan))
+  assert.deepEqual(period.expenseNotes, buildExpenseNotes(rows, plan))
 })
 
 // --- 4. Theme assignment ---------------------------------------------------

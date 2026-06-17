@@ -23,6 +23,7 @@ import {
   buildMissingData,
   buildRevenueNotes,
   buildExpenseNotes,
+  buildReviewItems,
   buildAllVariances,
   unionSourceRows
 } from './sections.js'
@@ -48,22 +49,25 @@ export function buildPeriodNarrative(set, thresholds) {
   const period = set.period || 'current'
   const comparisons = Array.isArray(set.comparisons) ? set.comparisons : []
 
+  // NQ-3A/3B — Commentary Planning Layer. The deterministic plan (disposition /
+  // materiality / theme / owner question per row) is computed FIRST, then the
+  // owner-facing sections are SELECTED from it (NQ-3B). Sentence generation is
+  // unchanged — each selected row is still rendered by the same toNote(), so
+  // wording, figures, and ordering are identical for the existing sections.
+  const plan = buildCommentaryPlan(comparisons, { thresholds })
+
   const executiveSummary = buildExecutiveSummary(comparisons, period, thresholds)
-  const highVariances = buildHighVariances(comparisons)
+  const highVariances = buildHighVariances(comparisons, plan)
   const missingData = buildMissingData(comparisons)
-  const revenueNotes = buildRevenueNotes(comparisons)
-  const expenseNotes = buildExpenseNotes(comparisons)
+  const revenueNotes = buildRevenueNotes(comparisons, plan)
+  const expenseNotes = buildExpenseNotes(comparisons, plan)
+  // Review Items (NQ-3B, NEW) — rows the plan flags as needing a closer look
+  // (ownerQuestion === WHAT_TO_CHECK). Omitted entirely when empty (see below).
+  const reviewItems = buildReviewItems(comparisons, plan)
   // The complete variance table for the Excel export (Phase 21.6). Additive and
   // export-only — no owner-facing narrative section reads it, so Markdown/DOCX
   // and the on-screen summary stay byte-identical.
   const allVariances = buildAllVariances(comparisons)
-
-  // NQ-3A — Commentary Planning Layer (INERT). A deterministic plan of how each
-  // row would be narrated (disposition / materiality / theme / owner question),
-  // attached for LATER phases to consume. Nothing reads it yet, so every section
-  // below and every export/preview stays byte-identical. Additive, like
-  // `allVariances` above.
-  const plan = buildCommentaryPlan(comparisons, { thresholds })
 
   // Top-level traceability: every source row any sentence in this period drew on.
   const sourceRows = unionSourceRows([
@@ -71,7 +75,8 @@ export function buildPeriodNarrative(set, thresholds) {
     ...highVariances,
     ...missingData,
     ...revenueNotes,
-    ...expenseNotes
+    ...expenseNotes,
+    ...reviewItems
   ])
 
   return {
@@ -82,6 +87,9 @@ export function buildPeriodNarrative(set, thresholds) {
     missingData,
     revenueNotes,
     expenseNotes,
+    // Review Items renders after Expense Notes; omitted when empty so a period
+    // with nothing to review carries no empty section.
+    ...(reviewItems.length > 0 ? { reviewItems } : {}),
     allVariances,
     plan,
     sourceRows
