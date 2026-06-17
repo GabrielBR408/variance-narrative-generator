@@ -13,7 +13,10 @@ export {
   buildMissingData,
   buildRevenueNotes,
   buildExpenseNotes,
-  unionSourceRows
+  unionSourceRows,
+  isRollupLabel,
+  isZeroNoiseVariance,
+  ZERO_NOISE_DOLLAR
 } from './sections.js'
 export {
   varianceSentence,

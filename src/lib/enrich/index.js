@@ -263,6 +263,7 @@ export {
   IMMATERIAL_DOLLAR,
   IMMATERIAL_MAX_PCT
 } from './commentaryIntent.js'
+export { accountSemanticType, accountSemanticCommentary, ACCOUNT_SEMANTIC } from './accountSemantics.js'
 export {
   rankContribution,
   ALIGN_LOW,
