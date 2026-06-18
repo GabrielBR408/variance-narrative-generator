@@ -190,13 +190,13 @@ test('amortization: same non-cash wording', () => {
   assertSafe(note.text)
 })
 
-test('recovery: recovery / billing-timing wording, not operating performance', () => {
+test('recovery line → MAPPING_PASSTHROUGH diagnosis wording (NQ-5B)', () => {
   const note = enriched({
     account: '5100 Utility Expense Recovery', actual: 12700, budget: 5334,
     rows: [['Tenant utility recovery', 7400]]
   })
-  assert.match(note.text, /Recovery variance appears tied to billing or recovery timing/)
-  assert.match(note.text, /recoverable expense billing and tenant recovery assumptions/)
+  // NQ-5B: the diagnosis owner sentence supersedes the NQ-2C recovery-semantics wording.
+  assert.match(note.text, /Recoverable charges appear to lag expense recognition and may normalize as billing activity occurs\.$/)
   assertSafe(note.text)
 })
 
@@ -239,13 +239,14 @@ test('the semantic wording table itself carries no causal / certainty language',
 // 3. Generic fallback reduction
 // =========================================================================
 
-test('vendor / service detail is preferred over generic offset boilerplate', () => {
+test('offset line → OFFSET_TIMING diagnosis wording, no vendor names (NQ-5B)', () => {
   const note = enriched({
     account: '51200 Janitorial Contract', actual: 9000, budget: 5000,
     rows: [['Janitorial contract TRINITY BUILDING SERVICES', 12000]]
   })
-  assert.match(note.text, /Janitorial contract from Trinity Building Services appears in the account detail/)
-  assert.doesNotMatch(note.text, /Account activity exceeded the reported variance/)
+  // NQ-5B: the diagnosis owner sentence supersedes the NQ-2B vendor-led wording.
+  assert.match(note.text, /Activity exceeded the reported variance and appears influenced by offsetting entries, timing, or account-level movement during the period\.$/)
+  assert.doesNotMatch(note.text, /Trinity/) // no vendor names
   assertSafe(note.text)
 })
 

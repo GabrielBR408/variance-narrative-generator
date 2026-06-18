@@ -37,6 +37,7 @@ import { selectDetailEvidence } from './detailEvidence.js'
 import { explanationCommentary, finalizeNoteCommentary } from './commentaryIntent.js'
 import { prepareEvidence } from './prepareEvidence.js'
 import { diagnose } from './diagnose.js'
+import { diagnosisSentence } from './diagnosisRender.js'
 
 // Only these sections hold flagged variance notes — they are the only ones we
 // enrich. Executive Summary (a roll-up) and Missing Data (no comparison) are
@@ -95,7 +96,10 @@ function enrichNote(note, index, options, period) {
         // preserved. No GL signals are available on this branch — diagnose works
         // from the note's own figures (zero-actual, unbudgeted, account family, …).
         const diagnosis = diagnose({ note, hasCitation: false })
-        return { ...note, text: appendSentence(note.text, factual), enriched: true, diagnosis }
+        // NQ-5B: in detailed mode a renderable diagnosis REPLACES the legacy S2 with
+        // owner wording (figures in S1 are untouched). Null → exact legacy wording.
+        const s2 = diagnosisSentence(diagnosis) || factual
+        return { ...note, text: appendSentence(note.text, s2), enriched: true, diagnosis }
       }
     }
     return note
@@ -266,6 +270,16 @@ function enrichNote(note, index, options, period) {
     thick: primary.thick,
     hasCitation: true
   })
+  // NQ-5B: in detailed mode a renderable diagnosis REPLACES the legacy S2 with
+  // owner wording, keeping S1 (note.text — figures intact) verbatim. Conservative
+  // mode is untouched. The override fires ONLY when the legacy path already added
+  // an S2 (result.text !== note.text), so it augments existing wording and never
+  // introduces commentary where a render guard chose silence (e.g. an immaterial
+  // recovery line, where finalizeNoteCommentary suppressed the semantic sentence).
+  if (options.mode === 'detailed' && result.text !== note.text) {
+    const ds = diagnosisSentence(result.diagnosis)
+    if (ds) result.text = appendSentence(note.text, ds)
+  }
   return result
 }
 

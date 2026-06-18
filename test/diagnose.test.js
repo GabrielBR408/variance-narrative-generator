@@ -302,13 +302,14 @@ for (const [label, account, actual, budget, desc, amount] of [
   ['Janitorial Contract', '51200 Janitorial Contract', 9000, 5000, 'Janitorial contract TRINITY BUILDING SERVICES', 12000],
   ['Security Contract', '51100 Security Contract', 9000, 3000, 'Security monitoring ARMADA SECURITY', 15000]
 ]) {
-  test(`integration: ${label} (GL > variance) diagnoses OFFSET_TIMING with unchanged wording`, () => {
+  test(`integration: ${label} (GL > variance) → OFFSET_TIMING nature + NQ-5B wording`, () => {
     const base = baseNarrative([rec({ account, actual, budget, accountType: 'expense', category: 'unfavorable', sourceRows: [0] })])
     const enriched = enrichNarrative(base, { supporting: [GL_FULL(account, desc, amount)], mode: 'detailed' })
     const note = enriched.periods[0].highVariances.find((x) => x.account === account)
     assert.equal(note.diagnosis.nature, 'OFFSET_TIMING')
-    // Wording is the existing offset sentence — diagnosis changed nothing.
-    assert.match(note.text, /though related activity exceeded the reported variance\.$/)
+    // NQ-5B: detailed mode now renders the diagnosis owner sentence.
+    assert.match(note.text, /Activity exceeded the reported variance and appears influenced by offsetting entries, timing, or account-level movement during the period\.$/)
+    // Rendering reads the baked text, not the diagnosis field, so stripping it is a no-op.
     assert.equal(narrativeToMarkdown(enriched), narrativeToMarkdown(stripDiagnosis(enriched)))
   })
 }
