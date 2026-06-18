@@ -250,3 +250,65 @@ test('identity: no-supporting and no-match still return the same reference', () 
   noMatch.normalized.rows = [['9999 Landscaping', '50'], ['8888 Parking', '75']]
   assert.equal(enrichNarrative(n, { supporting: [noMatch] }), n)
 })
+
+// --- NQ-5A.1: offset / disproportionate / partial coverage -----------------
+
+test('coverage: offset-heavy / disproportionate / partial contribution → OFFSET_TIMING', () => {
+  for (const ct of ['offset-heavy', 'disproportionate', 'partial']) {
+    const d = diagnose({ note: note(), detail: detail({ total: 24000, maxTxn: 24000 }), classifyType: 'DP', contribution: { contributionType: ct }, confidence: 1, thick: true, hasCitation: true })
+    assert.equal(d.nature, 'OFFSET_TIMING', ct)
+    assert.equal(d.confidence, 'high')
+    assert.equal(d.recommendation, 'monitor')
+    assert.ok(d.evidenceSources.includes('GL_DETAIL') && d.evidenceSources.includes('CONTRIBUTION'))
+  }
+})
+
+test('coverage: OH / DP / PA classifier categories → OFFSET_TIMING', () => {
+  for (const ct of ['OH', 'DP', 'PA']) {
+    const d = diagnose({ note: note(), detail: detail(), classifyType: ct, contribution: null, confidence: 1, thick: true, hasCitation: true })
+    assert.equal(d.nature, 'OFFSET_TIMING', ct)
+    assert.deepEqual(d.basis, [`classifier:${ct}`])
+    assert.ok(d.evidenceSources.includes('CLASSIFIER') && d.evidenceSources.includes('GL_DETAIL'))
+  }
+})
+
+test('coverage: a thin GL match is NOT promoted to OFFSET_TIMING', () => {
+  // Without thickness there is no real GL activity to call offset/timing.
+  const d = diagnose({ note: note(), detail: null, classifyType: 'DP', contribution: { contributionType: 'disproportionate' }, confidence: 1, thick: false, hasCitation: true })
+  assert.notEqual(d.nature, 'OFFSET_TIMING')
+})
+
+test('NQ-5A.1: oneTime qualifier suppressed for structural / mapping / offset natures', () => {
+  // A single-row classifier 'A' on a recovery line must not read as one-time.
+  const mapping = diagnose({ note: note({ account: 'Utility Expense Recovery' }), detail: detail({ count: 1 }), classifyType: 'A', confidence: 1, thick: true, hasCitation: true })
+  assert.equal(mapping.nature, 'MAPPING_PASSTHROUGH')
+  assert.equal(mapping.qualifiers.oneTime, false)
+  // REAL_SPEND (a non-suppressed nature) still reports oneTime for classifier 'A'.
+  const real = diagnose({ note: note(), detail: detail({ count: 1 }), classifyType: 'A', contribution: { contributionType: 'aligned' }, confidence: 1, thick: true, hasCitation: true })
+  assert.equal(real.nature, 'REAL_SPEND')
+  assert.equal(real.qualifiers.oneTime, true)
+})
+
+// A richer GL fixture (full MRI-style columns) so the contribution stage sees a
+// reliable amount and a vendor/memo — the real weak-report offset shape.
+const GL_FULL = (account, description, amount) => ({
+  fileName: '4. General Ledger.pdf', status: 'ok', classification: { type: 'General Ledger (GL)' },
+  normalized: { columns: ['Account', 'Date', 'Reference', 'Vendor', 'Description', 'Amount'], rows: [[account, '01/10/2026', '', '', description, String(amount)]] }
+})
+
+// HVAC / Janitorial / Security Contract: GL larger than the variance (offset shape).
+for (const [label, account, actual, budget, desc, amount] of [
+  ['HVAC Contract', '51300 HVAC Contract', 8000, 5000, 'HVAC maintenance BAY CITY MECHANICAL', 13000],
+  ['Janitorial Contract', '51200 Janitorial Contract', 9000, 5000, 'Janitorial contract TRINITY BUILDING SERVICES', 12000],
+  ['Security Contract', '51100 Security Contract', 9000, 3000, 'Security monitoring ARMADA SECURITY', 15000]
+]) {
+  test(`integration: ${label} (GL > variance) diagnoses OFFSET_TIMING with unchanged wording`, () => {
+    const base = baseNarrative([rec({ account, actual, budget, accountType: 'expense', category: 'unfavorable', sourceRows: [0] })])
+    const enriched = enrichNarrative(base, { supporting: [GL_FULL(account, desc, amount)], mode: 'detailed' })
+    const note = enriched.periods[0].highVariances.find((x) => x.account === account)
+    assert.equal(note.diagnosis.nature, 'OFFSET_TIMING')
+    // Wording is the existing offset sentence — diagnosis changed nothing.
+    assert.match(note.text, /though related activity exceeded the reported variance\.$/)
+    assert.equal(narrativeToMarkdown(enriched), narrativeToMarkdown(stripDiagnosis(enriched)))
+  })
+}

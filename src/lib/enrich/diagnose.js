@@ -42,6 +42,7 @@ export const DIAGNOSIS_NATURES = Object.freeze([
   'MAPPING_PASSTHROUGH',
   'NON_CASH',
   'BALANCE_SHEET',
+  'OFFSET_TIMING',
   'INDETERMINATE'
 ])
 
@@ -64,10 +65,22 @@ const RECOMMENDATION = {
   MAPPING_PASSTHROUGH: 'monitor',
   RECURRING_RATE: 'monitor',
   UNBUDGETED: 'monitor',
+  OFFSET_TIMING: 'monitor',
   REAL_SPEND: 'none',
   NON_CASH: 'none',
   BALANCE_SHEET: 'none'
 }
+
+// NQ-5A.1 — natures for which a single-row classifier 'A' must NOT surface a
+// `oneTime` qualifier: a structural / mapping / offset diagnosis is not "one-time"
+// just because the matched GL happened to be a single line. (Distinct from
+// STRUCTURAL_NATURES, which governs the `structural` qualifier.)
+const ONETIME_SUPPRESSED = new Set([
+  'MAPPING_PASSTHROUGH',
+  'NON_CASH',
+  'BALANCE_SHEET',
+  'OFFSET_TIMING'
+])
 
 // Natures that rest on a structural FACT (the account name or the budget
 // structure) rather than on transaction shape, so they carry `structural: true`
@@ -181,6 +194,24 @@ export function diagnose({
     mark('aligned-real-activity', 'GL_DETAIL')
     if (contributionType) sources.add('CONTRIBUTION')
     if (classifyType) sources.add('CLASSIFIER')
+  } else if (
+    thick &&
+    (['offset-heavy', 'disproportionate', 'partial'].includes(contributionType) ||
+      ['OH', 'DP', 'PA'].includes(classifyType))
+  ) {
+    // NQ-5A.1: GL support exists, but the reported variance reflects only PART of
+    // the account movement — offsetting entries, timing, accruals, or account-level
+    // activity larger than the variance. Previously these fell through to null
+    // despite a strong, well-worded GL match (the common weak-report pattern).
+    nature = 'OFFSET_TIMING'
+    if (contributionType && contributionType !== 'aligned') {
+      mark(`contribution:${contributionType}`, 'CONTRIBUTION', 'GL_DETAIL')
+    }
+    if (['OH', 'DP', 'PA'].includes(classifyType)) {
+      basis.push(`classifier:${classifyType}`)
+      sources.add('CLASSIFIER')
+      sources.add('GL_DETAIL')
+    }
   } else if (isMaterialVariance(note) && (!hasCitation || !thick || contributionType === 'unquantified')) {
     // Material but unsupported / unquantified / conflicting → flag for review.
     nature = 'INDETERMINATE'
@@ -195,7 +226,9 @@ export function diagnose({
 
   const qualifiers = {
     recurring: classifyType === 'C',
-    oneTime: classifyType === 'A',
+    // NQ-5A.1: a single-row classifier 'A' does not make a structural / mapping /
+    // offset diagnosis "one-time" — suppress the qualifier for those natures.
+    oneTime: classifyType === 'A' && !(nature !== null && ONETIME_SUPPRESSED.has(nature)),
     credit: !!credit,
     offset: !!offset,
     structural: nature !== null && STRUCTURAL_NATURES.has(nature),
