@@ -133,19 +133,19 @@ test('threshold controls narrative generation only, not export inclusion', () =>
 
 // --- Finding 1: GL supports actual activity only, never a standalone compare -
 
-test('GL supporting files do not create standalone budget comparisons', () => {
+test('GL supporting files do not create standalone budget comparisons', async () => {
   const files = [
     { name: 'Comparative Income Statement.xlsx', size: 10, type: '', role: 'baseReport' },
     { name: 'General Ledger.pdf', size: 10, type: '', role: 'supportingFile' }
   ]
   const variance = { dollarThreshold: '1000', percentThreshold: '10' }
 
-  const withGL = buildGenerateResponse({
+  const withGL = await buildGenerateResponse({
     files,
     extractions: { base: BASE_EXTRACTION, supporting: [GL_SUPPORTING] },
     variance
   })
-  const baseOnly = buildGenerateResponse({
+  const baseOnly = await buildGenerateResponse({
     files: [files[0]],
     extractions: { base: BASE_EXTRACTION, supporting: [] },
     variance

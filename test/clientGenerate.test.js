@@ -34,13 +34,13 @@ function baseExtraction() {
 
 const FILES = [{ name: 'Income Statement.xlsx', size: 10, type: '', role: 'baseReport' }]
 
-test('client fallback matches the server variance + narrative + extraction', () => {
+test('client fallback matches the server variance + narrative + extraction', async () => {
   const base = baseExtraction()
   const variance = { dollarThreshold: '1000', percentThreshold: '10' }
   const thresholds = thresholdsFromSettings(variance)
 
   const client = clientGenerate({ baseExtraction: base, files: FILES, thresholds })
-  const server = buildGenerateResponse({
+  const server = await buildGenerateResponse({
     files: FILES,
     extractions: { base, supporting: [] },
     style: {},
@@ -54,13 +54,13 @@ test('client fallback matches the server variance + narrative + extraction', () 
   assert.deepEqual(client.extraction, server.body.extraction)
 })
 
-test('client fallback honors non-default thresholds (parity with server)', () => {
+test('client fallback honors non-default thresholds (parity with server)', async () => {
   const base = baseExtraction()
   const variance = { dollarThreshold: '100000', percentThreshold: '10000' } // nothing triggers
   const thresholds = thresholdsFromSettings(variance)
 
   const client = clientGenerate({ baseExtraction: base, files: FILES, thresholds })
-  const server = buildGenerateResponse({ files: FILES, extractions: { base, supporting: [] }, style: {}, variance })
+  const server = await buildGenerateResponse({ files: FILES, extractions: { base, supporting: [] }, style: {}, variance })
 
   assert.deepEqual(client.narrative, server.body.narrative)
   // No row should be narrated at this threshold (parity sanity check).
