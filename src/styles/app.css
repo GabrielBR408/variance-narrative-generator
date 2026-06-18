@@ -453,20 +453,6 @@ body {
   * { transition: none !important; animation: none !important; }
 }
 
-/* NQ-6B: Conservative / Cited mode toggle */
-.llm-mode-toggle {
-  display: flex; gap: 0; margin-top: 1rem;
-  border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
-  width: fit-content;
-}
-.llm-mode-btn {
-  padding: 0.4rem 1rem; background: var(--bg); border: none; cursor: pointer;
-  font-size: 0.82rem; color: var(--muted); font-weight: 500; transition: background 0.15s;
-}
-.llm-mode-btn + .llm-mode-btn { border-left: 1px solid var(--line); }
-.llm-mode-btn--active { background: var(--accent); color: #fff; font-weight: 700; }
-.llm-mode-btn:not(.llm-mode-btn--active):hover { background: var(--surface); color: var(--text); }
-
 /* NQ-6B: Disclosure modal overlay */
 .llm-disclosure-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 9999;

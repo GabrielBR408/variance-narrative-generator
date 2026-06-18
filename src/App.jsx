@@ -11,7 +11,9 @@ import {
   extractionReadiness,
   resultFreshness,
   shouldDiscardResult,
-  pendingSupportingCount
+  pendingSupportingCount,
+  AI_LLM_MODE,
+  generateClickAction
 } from './lib/generateState.js'
 import { enrichNarrative } from './lib/enrich/index.js'
 import { clientGenerate } from './lib/clientGenerate.js'
@@ -83,29 +85,25 @@ export default function App() {
   const [result, setResult] = useState(null)
   const [message, setMessage] = useState('')
 
-  // LLM mode: 'conservative' (default, deterministic only) or 'cited' (LLM enrichment).
-  // The disclosure is acknowledged once per session; the ref survives re-renders.
-  const [llmMode, setLlmMode] = useState('conservative')
+  // UX-1: generation always runs in AI mode ("cited"). The AI disclosure is
+  // acknowledged once per session; the ref survives re-renders.
   const [showLlmDisclosure, setShowLlmDisclosure] = useState(false)
   const llmAcknowledgedRef = useRef(false)
 
-  const handleRequestLlmMode = useCallback((mode) => {
-    if (mode === 'conservative') {
-      setLlmMode('conservative')
-      return
-    }
-    if (llmAcknowledgedRef.current) {
-      setLlmMode('cited')
-    } else {
-      setShowLlmDisclosure(true)
-    }
-  }, [])
+  // The first Generate click in a session opens the disclosure; generation runs
+  // once it is acknowledged (and immediately on every later click). Plain
+  // functions so they always close over the current generate()/state.
+  function handleGenerateClick() {
+    const action = generateClickAction({ acknowledged: llmAcknowledgedRef.current, busy })
+    if (action === 'disclose') setShowLlmDisclosure(true)
+    else if (action === 'generate') generate()
+  }
 
-  const handleLlmDisclosureAccept = useCallback(() => {
+  function handleLlmDisclosureAccept() {
     llmAcknowledgedRef.current = true
-    setLlmMode('cited')
     setShowLlmDisclosure(false)
-  }, [])
+    generate()
+  }
 
   const handleLlmDisclosureDismiss = useCallback(() => {
     setShowLlmDisclosure(false)
@@ -257,7 +255,7 @@ export default function App() {
     supportingFiles.forEach((f) => form.append('supportingFiles', f)) // real File objects
     form.append('style', JSON.stringify(style))
     form.append('variance', JSON.stringify(variance))
-    form.append('llmMode', llmMode)
+    form.append('llmMode', AI_LLM_MODE)
 
     // Phase 9B: extraction is browser-first, so the normalized result the
     // browser already computed travels with the request. The server runs the
@@ -382,9 +380,7 @@ export default function App() {
           message={message}
           readiness={readiness}
           pendingSupporting={pendingSupporting}
-          onGenerate={generate}
-          llmMode={llmMode}
-          onRequestLlmMode={handleRequestLlmMode}
+          onGenerate={handleGenerateClick}
         />
         {showLlmDisclosure && (
           <div className="llm-disclosure-overlay" role="dialog" aria-modal="true" aria-labelledby="llm-disclosure-title">

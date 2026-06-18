@@ -11,7 +11,9 @@ import {
   generateButtonState,
   generateHint,
   isBusy,
-  GENERATE_LABEL
+  GENERATE_LABEL,
+  AI_LLM_MODE,
+  generateClickAction
 } from '../src/lib/generateState.js'
 
 const okExtraction = { fileId: 'f1', fileName: 'base.pdf', status: 'ok', confidence: 90 }
@@ -133,4 +135,27 @@ test('successful generate flow: ready + idle yields an enabled button and no hin
   const hint = generateHint({ status: 'success', message: '', readiness })
   assert.equal(button.disabled, false)
   assert.equal(hint, null)
+})
+
+// --- UX-1: always-AI Generate + disclosure gating -------------------------
+
+test('AI_LLM_MODE is the single cited mode sent to the server', () => {
+  assert.equal(AI_LLM_MODE, 'cited')
+})
+
+test('Generate click shows the disclosure on first use (not yet acknowledged)', () => {
+  assert.equal(generateClickAction({ acknowledged: false, busy: false }), 'disclose')
+})
+
+test('Generate click proceeds immediately once the disclosure is acknowledged', () => {
+  assert.equal(generateClickAction({ acknowledged: true, busy: false }), 'generate')
+})
+
+test('Generate click is a no-op while a request is in flight (either ack state)', () => {
+  assert.equal(generateClickAction({ acknowledged: true, busy: true }), 'noop')
+  assert.equal(generateClickAction({ acknowledged: false, busy: true }), 'noop')
+})
+
+test('generateClickAction defaults to the disclosure when called with no args', () => {
+  assert.equal(generateClickAction(), 'disclose')
 })
