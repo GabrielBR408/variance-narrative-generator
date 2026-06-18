@@ -104,7 +104,7 @@ export async function extractPdf(file, maxPages, classification) {
       // A PDF that DID yield text but whose figures didn't survive a non-standard
       // font/encoding (so no table reconstructs) — the text layer is unusable and
       // the figures must be recovered from the page image (OCR), same as a scan.
-      garbled: tables.length === 0 && looksGarbledText(lines),
+      garbled: looksGarbledText(lines), // garbled text = unusable regardless of whether a junk table was reconstructed
       tableReconstructed: tables.length > 0,
       tableSections: table ? table.sections : []
     }
