@@ -283,7 +283,7 @@ export default function App() {
       // with a structured error is still authoritative (surfaced below).
       let data = null
       try {
-        const res = await fetch('/generate', { method: 'POST', body: form })
+        const res = await fetch('/api/generate', { method: 'POST', body: form })
         data = await res.json()
       } catch {
         data = clientGenerate({
