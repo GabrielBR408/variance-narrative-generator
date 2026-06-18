@@ -87,7 +87,7 @@ export default function SourceFiles({
 
       <div className="card card--primary">
         <div className="card-label">Upload Base Variance Report</div>
-        <p className="card-sub">Upload the report to use as the base.</p>
+        <p className="card-sub">Typically a comparative income statement, ideally in Excel.</p>
 
         <input ref={baseInput} type="file" accept={ACCEPT} hidden onChange={onBase} />
         <button type="button" className="dropzone" onClick={() => baseInput.current?.click()}>
@@ -103,7 +103,7 @@ export default function SourceFiles({
 
       <div className="card">
         <div className="card-label">Add Supporting Files</div>
-        <p className="card-sub">Optional context the narrative can draw on.</p>
+        <p className="card-sub">Year-to-date or current period GL, and budget monthly GL-level detail report.</p>
 
         <input ref={supportInput} type="file" accept={ACCEPT} multiple hidden onChange={onSupport} />
         <button type="button" className="dropzone dropzone--sm" onClick={() => supportInput.current?.click()}>
