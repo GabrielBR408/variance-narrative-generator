@@ -10,7 +10,7 @@ import {
 // Presentation only. The readiness / loading / error decisions live in
 // src/lib/generateState.js (pure, tested); this component just renders them.
 
-export default function GeneratePanel({ status, message, readiness, pendingSupporting = 0, onGenerate }) {
+export default function GeneratePanel({ status, message, readiness, pendingSupporting = 0, onGenerate, llmMode = 'conservative', onRequestLlmMode }) {
   const button = generateButtonState({ status, readiness })
   const hint = generateHint({ status, message, readiness })
   const busy = isBusy(status)
@@ -61,6 +61,29 @@ export default function GeneratePanel({ status, message, readiness, pendingSuppo
         <p className="generate-msg generate-msg--warn" role="status">
           Supporting files are still processing. Generate now to continue without them.
         </p>
+      )}
+
+      {/* NQ-6B: Commentary mode toggle. Conservative = deterministic only (default).
+          Cited = LLM-enriched output with vendor citations. Requires disclosure. */}
+      {onRequestLlmMode && (
+        <div className="llm-mode-toggle" role="group" aria-label="Commentary mode">
+          <button
+            type="button"
+            className={`llm-mode-btn${llmMode === 'conservative' ? ' llm-mode-btn--active' : ''}`}
+            onClick={() => onRequestLlmMode('conservative')}
+            aria-pressed={llmMode === 'conservative'}
+          >
+            Conservative
+          </button>
+          <button
+            type="button"
+            className={`llm-mode-btn${llmMode === 'cited' ? ' llm-mode-btn--active' : ''}`}
+            onClick={() => onRequestLlmMode('cited')}
+            aria-pressed={llmMode === 'cited'}
+          >
+            Cited
+          </button>
+        </div>
       )}
     </section>
   )
