@@ -90,6 +90,22 @@ export function _buildPackets(flaggedNotes, period) {
         .filter((r) => r.amount !== null || r.vendor || r.memo)
     }
 
+    // Fallback: when preparedEvidence produced no usable rows (e.g. unresolved
+    // column model with no vendor/memo text), synthesize a row from the citation
+    // detail summary so the LLM always has some evidence to cite.
+    if (glRows.length === 0 && Array.isArray(note.support)) {
+      for (const citation of note.support) {
+        const d = citation && citation.detail
+        if (!d) continue
+        const vendor = d.vendor || d.description || null
+        const amount = typeof d.total === 'number' ? d.total : null
+        if (vendor || amount !== null) {
+          glRows.push({ date: null, vendor, amount, memo: null })
+          if (glRows.length >= MAX_GL_ROWS) break
+        }
+      }
+    }
+
     return {
       _originalIndex: flaggedNotes.indexOf(note), // used for merge-back; stripped before sending
       index: i,
