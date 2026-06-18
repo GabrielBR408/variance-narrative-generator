@@ -117,7 +117,7 @@ export default function ExtractionPreview({ items }) {
     <div className="card extract-card">
       <div className="card-label">Extraction Preview</div>
       <p className="card-sub">
-        Content read in your browser for this session only — nothing is saved or sent.
+        Content read in your browser. GL detail is sent to Anthropic to generate cited commentary — see disclosure for details.
       </p>
       <div className="extract-list">
         {items.map((ex) => <ExtractionItem key={ex.fileId} extraction={ex} />)}
