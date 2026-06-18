@@ -15,6 +15,7 @@
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { reconstructTable, groupItemsIntoLineCells } from './pdfTable.js'
+import { looksGarbledText } from './garbled.js'
 
 // Run the parser in pdf.js's own worker (this is part of the library, not an
 // app-level background job). Configured once at module load.
@@ -86,11 +87,19 @@ export async function extractPdf(file, maxPages, classification) {
     doc.destroy?.()
   }
 
+  // A text layer can be present but UNREADABLE: a PDF whose embedded font lacks a
+  // usable ToUnicode map (or uses a non-standard encoding) yields nonsense glyphs
+  // (Private Use Area / replacement / control characters). Nothing tabular can be
+  // parsed from it, so we treat it like an image-only scan and route it to OCR
+  // rather than dead-ending at "no table was found". Clean text is unaffected.
+  const garbled = looksGarbledText(text)
+
   // Reconstruct a table from the grouped lines (deterministic regex/position
   // parsing only). A General Ledger becomes typed transaction rows; everything
   // else uses the variance reconstructor. Null when the text doesn't look
-  // tabular.
-  const table = reconstructTable(lines, { lineCells, classificationType: classification?.type })
+  // tabular. Skipped entirely for a garbled text layer, whose lines would only
+  // yield a junk table — the OCR path will recover the real one.
+  const table = garbled ? null : reconstructTable(lines, { lineCells, classificationType: classification?.type })
   const tables = table ? [table] : []
 
   return {
@@ -100,7 +109,10 @@ export async function extractPdf(file, maxPages, classification) {
       pages: totalPages,
       pagesRead: pagesToRead,
       truncated: totalPages > pagesToRead,
-      scanned: totalPages > 0 && text.length === 0, // text-free PDF ⇒ likely scanned
+      // No usable text layer ⇒ route to OCR: a text-free scan, OR a present-but-
+      // garbled layer from a broken font/encoding.
+      scanned: totalPages > 0 && (text.length === 0 || garbled),
+      garbled,
       tableReconstructed: tables.length > 0,
       tableSections: table ? table.sections : []
     }

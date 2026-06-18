@@ -495,6 +495,22 @@ function cleanAccountHeading(text) {
   return String(text).replace(/\s+/g, ' ').replace(/\s*:\s*$/, '').trim()
 }
 
+// Drop a leading ENTITY/site id from a multi-entity account heading. A
+// multi-entity General Ledger prints the entity id BEFORE the account id on each
+// section heading (e.g. "715141 40120 Rental Income"), but the income statement
+// it is matched against keys off the ACCOUNT id (40120). So when two or more
+// numeric codes lead the label, keep only the LAST one — yielding
+// "<account-id> <name>", whose accountCode()/normalizeName() then line up with
+// the statement exactly as a single-entity ledger already does. A label with one
+// leading code (the ordinary heading) or none is returned unchanged.
+function stripEntityPrefix(label) {
+  const tokens = String(label).trim().split(/\s+/)
+  let codes = 0
+  while (codes < tokens.length && /^\d[\d.\-]*$/.test(tokens[codes])) codes++
+  if (codes >= 2 && codes < tokens.length) return tokens.slice(codes - 1).join(' ')
+  return tokens.join(' ')
+}
+
 // A cell that is only punctuation/whitespace (e.g. MRI's "@" column marker) — it
 // carries no field content and is dropped from field assignment.
 function isPunctCell(str) {
@@ -524,7 +540,7 @@ function glHeadingLabel(cells, text, moneyStart, headingLeftEdge) {
     if (isPunctCell(c.str)) continue
     parts.push(c.str)
   }
-  return cleanAccountHeading(parts.join(' '))
+  return stripEntityPrefix(cleanAccountHeading(parts.join(' ')))
 }
 
 // Assign a transaction row's text cells to Reference / Vendor / Description by
@@ -705,11 +721,15 @@ function hasGLDateToken(line) {
 
 // An account-section heading from text: "<code> <Name>", optionally followed by
 // the "Balance Forward" opening marker and/or an opening balance figure on the
-// same line. Returns the cleaned "<code> <Name>" label, or '' when the line is
-// not a heading. A transaction line never matches — it leads with the entity
-// code then a period/date (a digit), so the required leading letter is absent.
+// same line. A multi-entity ledger prefixes the account id with one or more
+// ENTITY/site ids ("715141 40120 Rental Income"); the leading-code run absorbs
+// them and the capture keeps the LAST (account) code, so the label keys off the
+// account id the income statement uses — never the entity. Returns the cleaned
+// "<account-code> <Name>" label, or '' when the line is not a heading. A
+// transaction line never matches — it leads with codes then a period/date, so the
+// required leading letter (the account name) is absent.
 function glTextHeadingLabel(line) {
-  const m = String(line).match(/^(\d[\d.\-]*)\s+([A-Za-z].*)$/)
+  const m = String(line).match(/^(?:\d[\d.\-]*\s+)*(\d[\d.\-]*)\s+([A-Za-z].*)$/)
   if (!m) return ''
   const name = m[2]
     .replace(/\s+balance\s+forward\b.*$/i, '') // drop the opening marker + its figure
