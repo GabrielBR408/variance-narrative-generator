@@ -48,6 +48,27 @@ jobs:
           # Pages URL (e.g., /variance-narrative-generator/).
           VITE_BASE: ${{ steps.pages.outputs.base_path }}
 
+      - name: Replace Pages build with Vercel redirect
+        run: |
+          cat > dist/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <meta http-equiv="refresh" content="0; url=https://variance-narrative-generator.vercel.app" />
+            <link rel="canonical" href="https://variance-narrative-generator.vercel.app" />
+            <title>Variance Narrative Generator</title>
+          </head>
+          <body>
+            <p>This app has moved to
+              <a href="https://variance-narrative-generator.vercel.app">variance-narrative-generator.vercel.app</a>.
+              Redirecting&hellip;
+            </p>
+            <script>window.location.replace("https://variance-narrative-generator.vercel.app")</script>
+          </body>
+          </html>
+          EOF
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

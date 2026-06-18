@@ -383,13 +383,13 @@ export default function App() {
         {showLlmDisclosure && (
           <div className="llm-disclosure-overlay" role="dialog" aria-modal="true" aria-labelledby="llm-disclosure-title">
             <div className="llm-disclosure-dialog">
-              <h2 id="llm-disclosure-title" className="llm-disclosure-title">Cited Commentary — Data Notice</h2>
+              <h2 id="llm-disclosure-title" className="llm-disclosure-title">AI Commentary — Data Notice</h2>
               <p className="llm-disclosure-body">
-                Generating cited commentary sends your GL transaction detail to Anthropic's API to produce vendor-cited narratives. No data is stored on our servers. See Anthropic's privacy policy for API data handling.
+                Generating AI commentary sends your GL transaction detail to Anthropic's API to produce vendor-cited narratives. No data is stored on our servers. See Anthropic's privacy policy for API data handling.
               </p>
               <div className="llm-disclosure-actions">
                 <button type="button" className="llm-disclosure-btn llm-disclosure-btn--primary" onClick={handleLlmDisclosureAccept}>
-                  I understand — enable Cited mode
+                  I understand — enable AI mode
                 </button>
                 <button type="button" className="llm-disclosure-btn llm-disclosure-btn--secondary" onClick={handleLlmDisclosureDismiss}>
                   Cancel

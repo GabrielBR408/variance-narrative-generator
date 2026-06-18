@@ -273,6 +273,93 @@ test('buildGenerateResponse returns valid narrative in cited mode when LLM_ENABL
 // originalText is attached during enrichNarrative (additive metadata)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// NQ-6B.1: _buildPackets fallback when preparedEvidence.glRows is empty
+// ---------------------------------------------------------------------------
+
+test('_buildPackets falls back to note.support detail when preparedEvidence glRows all filtered out', () => {
+  // Simulate HVAC/Janitorial/Security Contract scenario: preparedEvidence exists
+  // but all rows have netAmount=null AND no vendor/memo → filter removes everything.
+  const note = makeEnrichedNote({
+    account: 'HVAC Contract',
+    preparedEvidence: {
+      glRows: [
+        { sourceRow: 0, netAmount: null, vendor: null, memo: null },
+        { sourceRow: 1, netAmount: null, vendor: null, memo: null }
+      ],
+      netTotal: null,
+      amountReliable: false,
+      columnModel: 'unresolved',
+      balanceExcluded: false,
+      transactionCount: 2,
+      topContributors: []
+    },
+    support: [
+      {
+        fileName: 'GL.xlsx',
+        classificationType: 'General Ledger (GL)',
+        confidence: 0.85,
+        matchMethod: 'exact',
+        detail: { vendor: 'Climate Control Inc', description: 'HVAC maintenance contract', total: -12000, count: 3 }
+      }
+    ]
+  })
+  const packets = _buildPackets([note], 'current')
+  assert.equal(packets.length, 1)
+  const rows = packets[0].glRows
+  assert.ok(rows.length > 0, 'expected fallback glRows from note.support detail')
+  assert.equal(rows[0].vendor, 'Climate Control Inc')
+  assert.equal(rows[0].amount, -12000)
+})
+
+test('_buildPackets uses description as vendor when vendor is absent in support detail', () => {
+  const note = makeEnrichedNote({
+    account: 'Janitorial Contract',
+    preparedEvidence: {
+      glRows: [{ sourceRow: 0, netAmount: null, vendor: null, memo: null }],
+      netTotal: null, amountReliable: false, columnModel: 'unresolved',
+      balanceExcluded: false, transactionCount: 1, topContributors: []
+    },
+    support: [
+      {
+        fileName: 'GL.xlsx',
+        classificationType: 'General Ledger (GL)',
+        confidence: 0.8,
+        matchMethod: 'exact',
+        detail: { vendor: null, description: 'Janitorial services', total: -4500, count: 1 }
+      }
+    ]
+  })
+  const packets = _buildPackets([note], 'current')
+  assert.equal(packets.length, 1)
+  const rows = packets[0].glRows
+  assert.ok(rows.length > 0)
+  assert.equal(rows[0].vendor, 'Janitorial services')
+})
+
+test('_buildPackets still returns no glRows when both preparedEvidence and support detail are empty', () => {
+  const note = makeEnrichedNote({
+    account: 'Security Contract',
+    preparedEvidence: {
+      glRows: [{ sourceRow: 0, netAmount: null, vendor: null, memo: null }],
+      netTotal: null, amountReliable: false, columnModel: 'unresolved',
+      balanceExcluded: false, transactionCount: 1, topContributors: []
+    },
+    support: [
+      {
+        fileName: 'GL.xlsx',
+        classificationType: 'General Ledger (GL)',
+        confidence: 0.7,
+        matchMethod: 'exact',
+        detail: { vendor: null, description: null, total: null, count: 0 }
+      }
+    ]
+  })
+  const packets = _buildPackets([note], 'current')
+  assert.equal(packets.length, 1)
+  assert.equal(packets[0].glRows.length, 0)
+})
+
 test('enrichNarrative attaches originalText to enriched notes (additive metadata)', () => {
   // Build a narrative with a note and no supporting files — no enrichment will
   // happen. The identity invariant means the note is returned unchanged, so

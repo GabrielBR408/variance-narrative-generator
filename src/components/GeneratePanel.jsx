@@ -63,8 +63,8 @@ export default function GeneratePanel({ status, message, readiness, pendingSuppo
         </p>
       )}
 
-      {/* NQ-6B: Commentary mode toggle. Conservative = deterministic only (default).
-          Cited = LLM-enriched output with vendor citations. Requires disclosure. */}
+      {/* NQ-6B: Commentary mode toggle. Generic = deterministic only (default).
+          AI = LLM-enriched output with vendor citations. Requires disclosure. */}
       {onRequestLlmMode && (
         <div className="llm-mode-toggle" role="group" aria-label="Commentary mode">
           <button
@@ -73,7 +73,7 @@ export default function GeneratePanel({ status, message, readiness, pendingSuppo
             onClick={() => onRequestLlmMode('conservative')}
             aria-pressed={llmMode === 'conservative'}
           >
-            Conservative
+            Generic
           </button>
           <button
             type="button"
@@ -81,7 +81,7 @@ export default function GeneratePanel({ status, message, readiness, pendingSuppo
             onClick={() => onRequestLlmMode('cited')}
             aria-pressed={llmMode === 'cited'}
           >
-            Cited
+            AI
           </button>
         </div>
       )}
