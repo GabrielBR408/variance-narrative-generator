@@ -23,6 +23,7 @@
 // lives only for the life of the request.
 import Busboy from 'busboy'
 import { runPipeline } from '../src/lib/pipeline.js'
+import { LLM_ENABLED, checkIpLimit, checkGlobalLimit, enrichWithLLM } from './llm.js'
 
 // Reasonable safety limits. Files are never stored, so these only guard memory
 // and request time, not storage.
@@ -73,7 +74,7 @@ function thresholdsFromSettings(varianceSettings) {
 //   extractions  : { base, supporting:[...] }     (browser-normalized results)
 //   style        : parsed style settings object (or null)
 //   variance     : parsed variance settings object (or null)
-export function buildGenerateResponse({ files = [], extractions = null, style = null, variance = null } = {}) {
+export async function buildGenerateResponse({ files = [], extractions = null, style = null, variance = null, ip = null } = {}) {
   // A base variance report must be present before anything is analyzed.
   const hasBase = files.some((f) => f.role === 'baseReport')
   if (!hasBase) {
@@ -93,6 +94,18 @@ export function buildGenerateResponse({ files = [], extractions = null, style = 
 
   const thresholds = thresholdsFromSettings(variance)
   const { extraction, variance: varianceResult, narrative } = runPipeline(base, { thresholds })
+
+  // LLM enrichment — runs only when flag is explicitly enabled AND both rate
+  // limits permit. On any limit breach the deterministic narrative is used as-is.
+  if (LLM_ENABLED) {
+    const ipAllowed = checkIpLimit(ip || 'unknown')
+    const globalAllowed = ipAllowed && checkGlobalLimit()
+    if (ipAllowed && globalAllowed) {
+      for (const period of narrative.periods) {
+        period.highVariances = await enrichWithLLM(period.highVariances, varianceResult)
+      }
+    }
+  }
 
   const settingsReceived = Boolean(style && variance)
   // Server-minted Job ID. No real job is stored; it only labels this response.
@@ -196,13 +209,18 @@ export function handleGenerate(req, res) {
       return
     }
 
-    const { status, body } = buildGenerateResponse({
+    const clientIp = req.socket?.remoteAddress || req.connection?.remoteAddress || null
+    buildGenerateResponse({
       files,
       extractions: parseJsonField(fields.extractions),
       style: parseJsonField(fields.style),
-      variance: parseJsonField(fields.variance)
+      variance: parseJsonField(fields.variance),
+      ip: clientIp
+    }).then(({ status, body }) => {
+      sendJson(res, status, body)
+    }).catch(() => {
+      sendJson(res, 500, { success: false, error: 'An unexpected error occurred.' })
     })
-    sendJson(res, status, body)
   })
 
   req.pipe(bb)

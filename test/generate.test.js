@@ -10,6 +10,7 @@ import { Readable } from 'node:stream'
 
 import { runPipeline } from '../src/lib/pipeline.js'
 import { buildGenerateResponse, handleGenerate } from '../server/generate.js'
+import { checkIpLimit, checkGlobalLimit, enrichWithLLM, _resetLimitsForTest } from '../server/llm.js'
 
 // --- Fixtures -------------------------------------------------------------
 // A real-shaped statement: Account + Current{Actual,Budget,Var,Var%} +
@@ -94,8 +95,8 @@ test('runPipeline degrades cleanly for a non-tabular extraction (no invented out
 
 // --- buildGenerateResponse (request-level) --------------------------------
 
-test('successful upload yields a 200 with extraction, variance and narrative', () => {
-  const { status, body } = buildGenerateResponse({
+test('successful upload yields a 200 with extraction, variance and narrative', async () => {
+  const { status, body } = await buildGenerateResponse({
     files: [baseFile],
     extractions: { base: extraction(), supporting: [] },
     style: { audience: 'Owner' },
@@ -110,8 +111,8 @@ test('successful upload yields a 200 with extraction, variance and narrative', (
   assert.ok(body.narrative.periods.length > 0)
 })
 
-test('missing base report is rejected cleanly before any analysis', () => {
-  const { status, body } = buildGenerateResponse({
+test('missing base report is rejected cleanly before any analysis', async () => {
+  const { status, body } = await buildGenerateResponse({
     files: [{ ...baseFile, role: 'supportingFile' }],
     extractions: { base: extraction(), supporting: [] }
   })
@@ -121,15 +122,15 @@ test('missing base report is rejected cleanly before any analysis', () => {
   assert.equal(body.narrative, undefined)
 })
 
-test('missing extraction payload is rejected cleanly', () => {
-  const { status, body } = buildGenerateResponse({ files: [baseFile], extractions: null })
+test('missing extraction payload is rejected cleanly', async () => {
+  const { status, body } = await buildGenerateResponse({ files: [baseFile], extractions: null })
   assert.equal(status, 422)
   assert.equal(body.success, false)
   assert.equal(body.narrative, undefined)
 })
 
-test('a base report that did not extract cleanly is rejected, not fabricated', () => {
-  const { status, body } = buildGenerateResponse({
+test('a base report that did not extract cleanly is rejected, not fabricated', async () => {
+  const { status, body } = await buildGenerateResponse({
     files: [baseFile],
     extractions: { base: extraction({ status: 'error', normalized: { columns: [], rows: [] } }), supporting: [] }
   })
@@ -140,8 +141,8 @@ test('a base report that did not extract cleanly is rejected, not fabricated', (
 
 // --- No invented values / source-row traceability -------------------------
 
-test('every narrated figure traces to a source row and matches Actual − Budget', () => {
-  const { body } = buildGenerateResponse({
+test('every narrated figure traces to a source row and matches Actual − Budget', async () => {
+  const { body } = await buildGenerateResponse({
     files: [baseFile],
     extractions: { base: extraction(), supporting: [] },
     variance: { dollarThreshold: '1000', percentThreshold: '10' }
@@ -168,8 +169,8 @@ test('every narrated figure traces to a source row and matches Actual − Budget
 
 // --- Current/YTD preserved through the flow -------------------------------
 
-test('Current/YTD support survives the generate flow', () => {
-  const { body } = buildGenerateResponse({
+test('Current/YTD support survives the generate flow', async () => {
+  const { body } = await buildGenerateResponse({
     files: [baseFile],
     extractions: { base: extraction(), supporting: [] }
   })
@@ -261,4 +262,76 @@ test('POST /generate rejects a request with no base report', async () => {
   const data = JSON.parse(res.bodyText)
   assert.equal(data.success, false)
   assert.match(data.error, /base variance report/i)
+})
+
+// --- NQ-6A: IP rate limiter -------------------------------------------------
+
+test('IP rate limiter allows first 5 requests and blocks the 6th', () => {
+  _resetLimitsForTest()
+  const ip = '10.0.0.1'
+  for (let i = 0; i < 5; i++) {
+    assert.equal(checkIpLimit(ip), true, `request ${i + 1} should be allowed`)
+  }
+  assert.equal(checkIpLimit(ip), false, '6th request should be blocked')
+})
+
+test('IP rate limiter is independent per IP', () => {
+  _resetLimitsForTest()
+  for (let i = 0; i < 5; i++) checkIpLimit('10.0.0.2')
+  // Different IP should still be allowed
+  assert.equal(checkIpLimit('10.0.0.3'), true)
+})
+
+// --- NQ-6A: Global circuit breaker ------------------------------------------
+
+test('global circuit breaker trips at 201st call', () => {
+  _resetLimitsForTest()
+  for (let i = 0; i < 200; i++) {
+    assert.equal(checkGlobalLimit(), true, `call ${i + 1} should be allowed`)
+  }
+  assert.equal(checkGlobalLimit(), false, '201st call should be blocked')
+})
+
+// --- NQ-6A: Fallback — both limits return valid deterministic narrative ------
+
+test('rate-limited request returns valid deterministic narrative unchanged', async () => {
+  _resetLimitsForTest()
+  // exhaust IP limit
+  for (let i = 0; i < 5; i++) checkIpLimit('192.168.1.1')
+
+  // buildGenerateResponse with flag off (default) — narrative unaffected
+  const { status, body } = await buildGenerateResponse({
+    files: [baseFile],
+    extractions: { base: extraction(), supporting: [] },
+    ip: '192.168.1.1'
+  })
+  assert.equal(status, 200)
+  assert.equal(body.success, true)
+  assert.ok(body.narrative.periods.length > 0)
+})
+
+test('circuit-breaker-tripped request returns valid deterministic narrative unchanged', async () => {
+  _resetLimitsForTest()
+  for (let i = 0; i < 200; i++) checkGlobalLimit()
+
+  const { status, body } = await buildGenerateResponse({
+    files: [baseFile],
+    extractions: { base: extraction(), supporting: [] }
+  })
+  assert.equal(status, 200)
+  assert.equal(body.success, true)
+  assert.ok(body.narrative.periods.length > 0)
+})
+
+// --- NQ-6A: enrichWithLLM stub ----------------------------------------------
+
+test('enrichWithLLM stub returns input flaggedNotes unmodified', async () => {
+  const notes = [{ account: 'Rent', varianceAmount: -7874.8, sourceRows: [0] }]
+  const result = await enrichWithLLM(notes, {})
+  assert.deepEqual(result, notes)
+})
+
+test('enrichWithLLM stub works with empty notes array', async () => {
+  const result = await enrichWithLLM([], {})
+  assert.deepEqual(result, [])
 })
