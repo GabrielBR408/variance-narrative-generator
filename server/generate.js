@@ -23,6 +23,7 @@
 // lives only for the life of the request.
 import Busboy from 'busboy'
 import { runPipeline } from '../src/lib/pipeline.js'
+import { enrichNarrative } from '../src/lib/enrich/index.js'
 import { LLM_ENABLED, checkIpLimit, checkGlobalLimit, enrichWithLLM } from './llm.js'
 
 // Reasonable safety limits. Files are never stored, so these only guard memory
@@ -74,7 +75,7 @@ function thresholdsFromSettings(varianceSettings) {
 //   extractions  : { base, supporting:[...] }     (browser-normalized results)
 //   style        : parsed style settings object (or null)
 //   variance     : parsed variance settings object (or null)
-export async function buildGenerateResponse({ files = [], extractions = null, style = null, variance = null, ip = null } = {}) {
+export async function buildGenerateResponse({ files = [], extractions = null, style = null, variance = null, ip = null, llmMode = 'conservative' } = {}) {
   // A base variance report must be present before anything is analyzed.
   const hasBase = files.some((f) => f.role === 'baseReport')
   if (!hasBase) {
@@ -95,15 +96,30 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
   const thresholds = thresholdsFromSettings(variance)
   const { extraction, variance: varianceResult, narrative } = runPipeline(base, { thresholds })
 
-  // LLM enrichment — runs only when flag is explicitly enabled AND both rate
-  // limits permit. On any limit breach the deterministic narrative is used as-is.
-  if (LLM_ENABLED) {
+  // LLM enrichment — runs only when the server flag is on AND the client
+  // explicitly requests cited mode AND both rate limits permit. On any limit
+  // breach the deterministic narrative is returned unchanged, with no error
+  // surfaced to the client.
+  let finalNarrative = narrative
+  if (LLM_ENABLED && llmMode === 'cited') {
     const ipAllowed = checkIpLimit(ip || 'unknown')
     const globalAllowed = ipAllowed && checkGlobalLimit()
     if (ipAllowed && globalAllowed) {
-      for (const period of narrative.periods) {
-        period.highVariances = await enrichWithLLM(period.highVariances, varianceResult)
-      }
+      // Run deterministic enrichment server-side to populate note.support and
+      // note.preparedEvidence on matching notes. The client will skip notes
+      // already marked enriched:true, so there is no double-enrichment.
+      const supporting = Array.isArray(extractions && extractions.supporting) ? extractions.supporting : []
+      const enrichedNarrative = enrichNarrative(narrative, { supporting, mode: 'detailed' })
+
+      // For each period, replace the evidence sentence with LLM commentary
+      // where GL support data is available. Falls back per-note on any failure.
+      const llmPeriods = await Promise.all(
+        enrichedNarrative.periods.map(async (period) => ({
+          ...period,
+          highVariances: await enrichWithLLM(period.highVariances, { period: period.period })
+        }))
+      )
+      finalNarrative = { ...enrichedNarrative, periods: llmPeriods }
     }
   }
 
@@ -121,7 +137,7 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
       files,
       extraction,
       variance: varianceResult,
-      narrative
+      narrative: finalNarrative
     }
   }
 }
@@ -215,7 +231,8 @@ export function handleGenerate(req, res) {
       extractions: parseJsonField(fields.extractions),
       style: parseJsonField(fields.style),
       variance: parseJsonField(fields.variance),
-      ip: clientIp
+      ip: clientIp,
+      llmMode: fields.llmMode === 'cited' ? 'cited' : 'conservative'
     }).then(({ status, body }) => {
       sendJson(res, status, body)
     }).catch(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import SourceFiles from './components/SourceFiles.jsx'
 import StylePanel from './components/StylePanel.jsx'
 import VarianceDetail from './components/VarianceDetail.jsx'
@@ -81,6 +81,34 @@ export default function App() {
   const [status, setStatus] = useState('idle') // idle | preparing | sending | success | failure
   const [result, setResult] = useState(null)
   const [message, setMessage] = useState('')
+
+  // LLM mode: 'conservative' (default, deterministic only) or 'cited' (LLM enrichment).
+  // The disclosure is acknowledged once per session; the ref survives re-renders.
+  const [llmMode, setLlmMode] = useState('conservative')
+  const [showLlmDisclosure, setShowLlmDisclosure] = useState(false)
+  const llmAcknowledgedRef = useRef(false)
+
+  const handleRequestLlmMode = useCallback((mode) => {
+    if (mode === 'conservative') {
+      setLlmMode('conservative')
+      return
+    }
+    if (llmAcknowledgedRef.current) {
+      setLlmMode('cited')
+    } else {
+      setShowLlmDisclosure(true)
+    }
+  }, [])
+
+  const handleLlmDisclosureAccept = useCallback(() => {
+    llmAcknowledgedRef.current = true
+    setLlmMode('cited')
+    setShowLlmDisclosure(false)
+  }, [])
+
+  const handleLlmDisclosureDismiss = useCallback(() => {
+    setShowLlmDisclosure(false)
+  }, [])
 
   // Extraction state (Phase 7, isolated slice). Map fileKey → extraction
   // result. In memory only; discarded with the session, never persisted.
@@ -223,6 +251,7 @@ export default function App() {
     supportingFiles.forEach((f) => form.append('supportingFiles', f)) // real File objects
     form.append('style', JSON.stringify(style))
     form.append('variance', JSON.stringify(variance))
+    form.append('llmMode', llmMode)
 
     // Phase 9B: extraction is browser-first, so the normalized result the
     // browser already computed travels with the request. The server runs the
@@ -348,7 +377,27 @@ export default function App() {
           readiness={readiness}
           pendingSupporting={pendingSupporting}
           onGenerate={generate}
+          llmMode={llmMode}
+          onRequestLlmMode={handleRequestLlmMode}
         />
+        {showLlmDisclosure && (
+          <div className="llm-disclosure-overlay" role="dialog" aria-modal="true" aria-labelledby="llm-disclosure-title">
+            <div className="llm-disclosure-dialog">
+              <h2 id="llm-disclosure-title" className="llm-disclosure-title">Cited Commentary — Data Notice</h2>
+              <p className="llm-disclosure-body">
+                Generating cited commentary sends your GL transaction detail to Anthropic's API to produce vendor-cited narratives. No data is stored on our servers. See Anthropic's privacy policy for API data handling.
+              </p>
+              <div className="llm-disclosure-actions">
+                <button type="button" className="llm-disclosure-btn llm-disclosure-btn--primary" onClick={handleLlmDisclosureAccept}>
+                  I understand — enable Cited mode
+                </button>
+                <button type="button" className="llm-disclosure-btn llm-disclosure-btn--secondary" onClick={handleLlmDisclosureDismiss}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <ResultPanel status={status} result={result} periodScope={periodScope} freshness={freshness} />
       </div>
     </main>

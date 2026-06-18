@@ -95,7 +95,7 @@ function enrichNote(note, index, options, period) {
         // preserved. No GL signals are available on this branch — diagnose works
         // from the note's own figures (zero-actual, unbudgeted, account family, …).
         const diagnosis = diagnose({ note, hasCitation: false })
-        return { ...note, text: appendSentence(note.text, factual), enriched: true, diagnosis }
+        return { ...note, text: appendSentence(note.text, factual), originalText: note.text, enriched: true, diagnosis }
       }
     }
     return note
@@ -251,7 +251,7 @@ function enrichNote(note, index, options, period) {
     const clause = explanationClause({ classificationType: primary.classificationType })
     if (clause) text = mergeClause(note.text, clause)
   }
-  const result = { ...note, text, support, enriched: true }
+  const result = { ...note, text, originalText: note.text, support, enriched: true }
   if (preparedEvidence) result.preparedEvidence = preparedEvidence
   // NQ-5A: attach diagnosis metadata. The note is already a new object here, so the
   // no-match / no-supporting reference-identity invariants are untouched. Diagnosis
