@@ -229,9 +229,21 @@ export function detectVarianceReport(lines = []) {
 export function reconstructTable(lines = [], options = {}) {
   const { lineCells = null, classificationType = '' } = options || {}
   const glByClass = /general\s*ledger|\bgl\b/i.test(String(classificationType))
-  if ((glByClass || looksLikeGL(lines)) && Array.isArray(lineCells) && lineCells.length > 0) {
-    const gl = reconstructGLTable(lineCells)
-    if (gl) return gl
+  const glByContent = looksLikeGL(lines) || looksLikeSectionedGLText(lines)
+  if (glByClass || glByContent) {
+    // Position-aware reconstruction first (richest: Debit/Credit x-bands and a
+    // reference/vendor/description split). It needs lineCells; without them, or
+    // when it resolves no rows, fall through to the text reconstructor below.
+    if (Array.isArray(lineCells) && lineCells.length > 0) {
+      const gl = reconstructGLTable(lineCells)
+      if (gl) return gl
+    }
+    // NQ-6C.4: text fallback. A sectioned (MRI-style) PDF GL whose x-positions do
+    // not resolve into clean amount bands is still parsed from its x-sorted line
+    // STRINGS via section markers, producing the same typed table shape. Returns
+    // null when no GL section is found, so a non-GL PDF falls through cleanly.
+    const glText = reconstructSectionedGLFromText(lines)
+    if (glText) return glText
   }
   return reconstructVarianceTable(lines)
 }
@@ -656,6 +668,141 @@ function reconstructGLTable(lineCells) {
   return {
     name: 'Reconstructed GL',
     rows,
+    columnCount: GL_COLUMNS.length,
+    sections
+  }
+}
+
+// --- Sectioned GL — TEXT reconstruction (NQ-6C.4) -------------------------
+// A second, position-INDEPENDENT path for an account-sectioned PDF General
+// Ledger (e.g. the MRI export): when pdf.js x-positions don't resolve into clean
+// Debit/Credit bands, reconstructGLTable returns null and the file used to read
+// as "No content". This path parses the x-sorted line STRINGS instead, keying
+// off textual section markers — a "<code> <Name>" account heading, the
+// "Balance Forward" opening marker, and the "** Account Totals" section end. It
+// emits the SAME typed table shape as the position-based reconstructor, so the
+// evidence index, prepared evidence, and LLM packets consume it identically.
+//
+// DETERMINISTIC regex parsing only. NO OCR, NO AI/ML. Returns null when no GL
+// section/transaction is found, so a non-GL PDF (or an unparseable one) fails
+// silently — no error is surfaced and no evidence is produced.
+
+// True when the line strings carry sectioned-GL markers ("Balance Forward" /
+// "** Account Totals"). Conservative: a variance report (which carries neither)
+// is excluded, so the variance reconstructor is never hijacked.
+export function looksLikeSectionedGLText(lines = []) {
+  if (!Array.isArray(lines) || lines.length === 0) return false
+  if (detectVarianceReport(lines)) return false
+  const blob = lines.join(' \n ')
+  return /balance\s+forward/i.test(blob) || /\*+\s*account\s+totals\b/i.test(blob)
+}
+
+function hasGLDateToken(line) {
+  return String(line)
+    .split(/\s+/)
+    .some((t) => GL_DATE_RE.test(t))
+}
+
+// An account-section heading from text: "<code> <Name>", optionally followed by
+// the "Balance Forward" opening marker and/or an opening balance figure on the
+// same line. Returns the cleaned "<code> <Name>" label, or '' when the line is
+// not a heading. A transaction line never matches — it leads with the entity
+// code then a period/date (a digit), so the required leading letter is absent.
+function glTextHeadingLabel(line) {
+  const m = String(line).match(/^(\d[\d.\-]*)\s+([A-Za-z].*)$/)
+  if (!m) return ''
+  const name = m[2]
+    .replace(/\s+balance\s+forward\b.*$/i, '') // drop the opening marker + its figure
+    .replace(/(?:\s+\(?-?\$?\d[\d,]*(?:\.\d+)?\)?%?)+$/, '') // drop a trailing opening balance
+    .trim()
+  if (!name) return ''
+  return cleanAccountHeading(`${m[1]} ${name}`)
+}
+
+// Parse one transaction line of a sectioned GL from its TEXT. Returns
+// { date, reference, description, amount } or null when the line is not a dated
+// transaction. The trailing run of money tokens is the value region: the first
+// is Debit, the second Credit, any third a running Balance (ignored). Per the
+// phase contract, amount = debit when debit > 0, else credit negated.
+function parseGLTextTransaction(line) {
+  const tokens = String(line).split(/\s+/).filter(Boolean)
+  // The entry date is the first true date token; a leading entity code and an
+  // "MM/YY" period never match GL_DATE_RE, so they are skipped naturally.
+  const dateIdx = tokens.findIndex((t) => GL_DATE_RE.test(t))
+  if (dateIdx < 0) return null
+
+  // Trailing run of money tokens = the Debit / Credit / [Balance] value columns.
+  let moneyStart = tokens.length
+  while (moneyStart > dateIdx + 1 && parseGLMoney(tokens[moneyStart - 1]) !== null) moneyStart--
+  const money = tokens.slice(moneyStart)
+  if (money.length === 0) return null // a dated line with no value is not a usable transaction
+
+  const debit = parseGLMoney(money[0]) || 0
+  const credit = (money.length > 1 ? parseGLMoney(money[1]) : 0) || 0
+  const amount = debit > 0 ? debit : -credit
+
+  // Text between the date and the value region = reference + description. Pull an
+  // optional leading document reference (e.g. "CHK1001", "AP 064697"); the rest
+  // is the description/memo the owner-facing commentary can cite.
+  const middle = tokens.slice(dateIdx + 1, moneyStart)
+  let reference = ''
+  let descStart = 0
+  if (/^[A-Za-z]{1,4}$/.test(middle[0] || '') && /^\d[\d\-/]*$/.test(middle[1] || '')) {
+    reference = `${middle[0]} ${middle[1]}`
+    descStart = 2
+  } else if (/^[A-Za-z]{0,4}\d[\d\-/]*$/.test(middle[0] || '')) {
+    reference = middle[0]
+    descStart = 1
+  }
+  const description = middle.slice(descStart).join(' ').trim()
+
+  return { date: tokens[dateIdx], reference, description, amount }
+}
+
+// Reconstruct a typed GL table from x-sorted line STRINGS. Returns null when no
+// account section produced a transaction, so the caller can fall back cleanly.
+export function reconstructSectionedGLFromText(lines = []) {
+  if (!Array.isArray(lines) || lines.length === 0) return null
+  const dataRows = []
+  const sections = []
+  let currentAccount = ''
+
+  for (const raw of lines) {
+    const line = String(raw).replace(/\s+/g, ' ').trim()
+    if (!line) continue
+    if (isGLHeaderText(line)) continue // repeated column header (page chrome)
+    if (GL_TOTAL_RE.test(line)) continue // total / subtotal / ** Account Totals
+
+    // Account-section heading (no entry date) opens / switches the section.
+    if (!hasGLDateToken(line)) {
+      const heading = glTextHeadingLabel(line)
+      if (heading) {
+        currentAccount = heading
+        sections.push(heading)
+        continue
+      }
+    }
+
+    // Transaction row under an active section.
+    if (!currentAccount) continue
+    const txn = parseGLTextTransaction(line)
+    if (!txn) continue
+    if (dataRows.length < MAX_TABLE_ROWS) {
+      dataRows.push([
+        currentAccount,
+        txn.date,
+        txn.reference,
+        '',
+        txn.description,
+        txn.amount == null ? '' : formatGLAmount(txn.amount)
+      ])
+    }
+  }
+
+  if (dataRows.length === 0) return null
+  return {
+    name: 'Reconstructed GL',
+    rows: [GL_COLUMNS.slice(), ...dataRows],
     columnCount: GL_COLUMNS.length,
     sections
   }
