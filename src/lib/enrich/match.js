@@ -15,6 +15,7 @@
 // resemblance never produces a citation.
 
 import { toNumber } from '../extract/normalize.js'
+import { resolveScore } from './accountResolve.js'
 
 export const CONFIDENCE_FLOOR = 0.6
 export const MAX_CITATIONS_PER_NOTE = 3
@@ -278,17 +279,21 @@ function mostFrequent(rows, field) {
   return { value, count }
 }
 
-// Score one base account against one index entry. Returns 0..1.
-export function scoreMatch(baseAccount, entry) {
+// Score one base account against one index entry, returning BOTH the 0..1 score
+// and the `matchMethod` tier that produced it (NQ-4C.1). `scoreMatch` wraps this
+// to preserve its numeric contract for existing callers and tests.
+//   'exact_code' | 'exact_name' | 'substring' | 'resolved_equal' |
+//   'resolved_subset' | null (sub-floor token overlap — never cited)
+export function scoreMatchDetailed(baseAccount, entry) {
   const baseCode = accountCode(baseAccount)
   const baseNorm = normalizeName(baseAccount)
-  if (!baseNorm) return 0
+  if (!baseNorm) return { score: 0, method: null }
   const baseTokens = tokensOf(baseNorm)
 
   // 1) Exact account code.
-  if (baseCode && entry.code && baseCode === entry.code) return 1.0
+  if (baseCode && entry.code && baseCode === entry.code) return { score: 1.0, method: 'exact_code' }
   // 2) Exact normalized name.
-  if (baseNorm === entry.normName) return 0.9
+  if (baseNorm === entry.normName) return { score: 0.9, method: 'exact_name' }
   // 3) Conservative substring containment, guarded so short/single-word labels
   //    (e.g. "tax") cannot match a longer unrelated account.
   if (
@@ -298,15 +303,26 @@ export function scoreMatch(baseAccount, entry) {
     entry.tokens.length >= 2 &&
     (entry.normName.includes(baseNorm) || baseNorm.includes(entry.normName))
   ) {
-    return 0.7
+    return { score: 0.7, method: 'substring' }
   }
-  // 4) Partial token overlap — deliberately scaled below the floor so a partial
+  // 4) NQ-4C.1: deterministic account resolution (qualifier-aware significant-
+  //    token subset, guarded). Runs AFTER the exact/substring tiers so every
+  //    existing citation is unchanged, and BEFORE the sub-floor fallback so only
+  //    previously-unmatched pairs can newly resolve.
+  const resolved = resolveScore(baseAccount, entry)
+  if (resolved.score > 0) return resolved
+  // 5) Partial token overlap — deliberately scaled below the floor so a partial
   //    resemblance is scored but never attached on its own.
   const baseSet = new Set(baseTokens)
   let shared = 0
   for (const t of new Set(entry.tokens)) if (baseSet.has(t)) shared++
   const denom = Math.max(baseTokens.length, entry.tokens.length, 1)
-  return 0.6 * (shared / denom)
+  return { score: 0.6 * (shared / denom), method: null }
+}
+
+// Score one base account against one index entry. Returns 0..1.
+export function scoreMatch(baseAccount, entry) {
+  return scoreMatchDetailed(baseAccount, entry).score
 }
 
 // Match one flagged account to supporting evidence. Returns a deterministic,
@@ -323,7 +339,7 @@ export function matchAccount(account, index = [], options = {}) {
 
   const byFile = new Map()
   for (const entry of index) {
-    const score = scoreMatch(account, entry)
+    const { score, method } = scoreMatchDetailed(account, entry)
     if (score < floor) continue
     let existing = byFile.get(entry.fileName)
     if (!existing) {
@@ -331,6 +347,8 @@ export function matchAccount(account, index = [], options = {}) {
         fileName: entry.fileName,
         classificationType: entry.classificationType,
         confidence: score,
+        // NQ-4C.1: the tier that produced this file's best (highest) score.
+        matchMethod: method,
         thick: false,
         // Dedupe matched rows by source-row index, so a repeated identical row
         // can never inflate the count or total.
@@ -338,7 +356,12 @@ export function matchAccount(account, index = [], options = {}) {
       }
       byFile.set(entry.fileName, existing)
     }
-    existing.confidence = Math.max(existing.confidence, score)
+    // Track the method of the highest-scoring matched row for this file; ties
+    // keep the first-seen method (deterministic).
+    if (score > existing.confidence) {
+      existing.confidence = score
+      existing.matchMethod = method
+    }
     existing.thick = existing.thick || !!entry.hasDetail
     if (!existing.rows.has(entry.sourceRow)) {
       existing.rows.set(entry.sourceRow, {
@@ -362,6 +385,8 @@ export function matchAccount(account, index = [], options = {}) {
         fileName: c.fileName,
         classificationType: c.classificationType,
         confidence: c.confidence,
+        // NQ-4C.1: additive metadata — which tier matched this file.
+        matchMethod: c.matchMethod,
         sourceRows,
         thick: c.thick,
         detail: summarizeDetail(orderedRows),
