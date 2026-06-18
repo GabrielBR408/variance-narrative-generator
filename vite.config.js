@@ -13,7 +13,7 @@ import { handleGenerate } from './server/generate.js'
 // response. No parsing, AI, storage, calculations, persistence, or export.
 function generateEndpoint() {
   const mount = (server) => {
-    server.middlewares.use('/generate', (req, res, next) => {
+    server.middlewares.use('/api/generate', (req, res, next) => {
       if (req.method !== 'POST') return next()
       handleGenerate(req, res)
     })
