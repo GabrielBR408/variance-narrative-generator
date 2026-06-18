@@ -21,7 +21,11 @@ export const CONFIDENCE_FLOOR = 0.6
 export const MAX_CITATIONS_PER_NOTE = 3
 
 // Columns in a supporting file that are likely to carry the account label.
-const ACCOUNT_COL_RE = /account|acct|description|\bgl\b|\bname\b|item|line|category/i
+// NQ-6C.1: also recognize common GL header variants — "code" / "GL code",
+// "G/L", "ledger", "chart" (of accounts) — that real exports use instead of a
+// literal "Account" header. Without these the index silently produced no
+// entries whenever the account column was not named "Account".
+const ACCOUNT_COL_RE = /account|acct|\bcode\b|ledger|chart|description|\bg\/?l\b|\bname\b|item|line|category/i
 
 // Columns that carry transactional detail. Their presence WITH a real value is
 // what makes GL evidence "thick" — solid enough to phrase a cause — versus a
@@ -36,6 +40,12 @@ const DETAIL_COL_RE = /description|memo|detail|narrative|note|particular|referen
 // (DETAIL_COL_RE above stays the thickness signal — it spans all three kinds.)
 const VENDOR_COL_RE = /vendor|payee|\bname\b/i
 const DESC_COL_RE = /description|memo|detail|narrative|note|particular/i
+
+// NQ-6C.1: columns we may borrow an account LABEL from when the account column
+// itself holds only a code (e.g. "6250") or is blank for a row. Description /
+// memo / name carry a human-readable account name; vendor/payee deliberately do
+// NOT (a counterparty is not an account name and would invite false matches).
+const LABEL_FALLBACK_COL_RE = /description|memo|detail|narrative|note|particular|\bname\b/i
 
 // NQ-4B.1a: typed amount columns for the prepared-evidence layer. Debit/Credit
 // drive deterministic netting (debit positive, credit negative); a running
@@ -88,8 +98,7 @@ export function buildEvidenceIndex(supporting = []) {
     if (rows.length === 0) continue
 
     const columns = Array.isArray(normalized.columns) ? normalized.columns : []
-    let col = columns.findIndex((c) => ACCOUNT_COL_RE.test(String(c)))
-    if (col < 0) col = 0
+    const col = chooseAccountColumn(columns, rows)
 
     // Pre-resolve which columns (other than the account column) carry an amount
     // or a description/reference, so per-row thickness is a cheap lookup.
@@ -97,6 +106,9 @@ export function buildEvidenceIndex(supporting = []) {
     const detailCols = []
     const vendorCols = []
     const descCols = []
+    // NQ-6C.1: columns to borrow an account label from when the account cell is
+    // a bare code or blank.
+    const labelFallbackCols = []
     // NQ-4B.1a: typed debit / credit / balance columns (additive).
     const debitCols = []
     const creditCols = []
@@ -108,6 +120,7 @@ export function buildEvidenceIndex(supporting = []) {
       if (DETAIL_COL_RE.test(h)) detailCols.push(i)
       if (VENDOR_COL_RE.test(h)) vendorCols.push(i)
       if (DESC_COL_RE.test(h)) descCols.push(i)
+      if (LABEL_FALLBACK_COL_RE.test(h)) labelFallbackCols.push(i)
       // A Balance column is checked first so a "Debit"/"Credit" header never also
       // lands in balanceCols and vice-versa (the three are mutually exclusive).
       if (BALANCE_COL_RE.test(h)) balanceCols.push(i)
@@ -121,15 +134,16 @@ export function buildEvidenceIndex(supporting = []) {
     for (let r = 0; r < rows.length; r++) {
       const row = rows[r]
       if (!Array.isArray(row)) continue
-      const label = String(row[col] ?? '').trim()
-      if (!label || NUMERIC_ONLY_RE.test(label)) continue
+      const resolved = resolveRowLabel(row, col, labelFallbackCols)
+      if (!resolved) continue
+      const { label, code } = resolved
       const normName = normalizeName(label)
       if (!normName) continue
       entries.push({
         fileName,
         classificationType,
         label,
-        code: accountCode(label),
+        code,
         normName,
         tokens: tokensOf(normName),
         sourceRow: r,
@@ -154,6 +168,66 @@ export function buildEvidenceIndex(supporting = []) {
     }
   }
   return entries
+}
+
+// Choose the column that carries the account label. Among headers that look
+// account-like, prefer the one whose cells are predominantly names (contain
+// letters) over a code-only column — so "Account No" (codes) never wins over
+// "Account Name". Ties keep the earliest column (deterministic, and identical to
+// the prior findIndex behavior when only one header matches). Falls back to the
+// first column when no header looks account-like.
+function chooseAccountColumn(columns, rows) {
+  const candidates = []
+  for (let i = 0; i < columns.length; i++) {
+    if (ACCOUNT_COL_RE.test(String(columns[i]))) candidates.push(i)
+  }
+  if (candidates.length === 0) return 0
+  if (candidates.length === 1) return candidates[0]
+  let best = candidates[0]
+  let bestScore = columnNameScore(rows, best)
+  for (let k = 1; k < candidates.length; k++) {
+    const score = columnNameScore(rows, candidates[k])
+    if (score > bestScore) {
+      best = candidates[k]
+      bestScore = score
+    }
+  }
+  return best
+}
+
+// Fraction of a column's non-empty cells that look like names (contain a letter,
+// i.e. are not purely numeric/symbolic). 0 when the column has no data, so an
+// empty column never wins over one that actually carries names.
+function columnNameScore(rows, col) {
+  let named = 0
+  let nonEmpty = 0
+  for (const row of rows) {
+    if (!Array.isArray(row)) continue
+    const v = String(row[col] ?? '').trim()
+    if (!v) continue
+    nonEmpty++
+    if (!NUMERIC_ONLY_RE.test(v)) named++
+  }
+  return nonEmpty === 0 ? 0 : named / nonEmpty
+}
+
+// Resolve the account label for one row. Normally the account column carries it.
+// But many GL exports put a bare code (e.g. "6250") — or nothing — in the account
+// column and keep the human-readable account in a description / memo / name
+// column. NQ-6C.1: in that case borrow the first text label from those columns so
+// the row still indexes by name (otherwise it was silently dropped and the
+// account never matched). Returns { label, code } or null when no usable text
+// exists anywhere on the row.
+function resolveRowLabel(row, accountCol, labelFallbackCols) {
+  const primary = String(row[accountCol] ?? '').trim()
+  if (primary && !NUMERIC_ONLY_RE.test(primary)) {
+    return { label: primary, code: accountCode(primary) }
+  }
+  const fallback = firstDetailText(row, labelFallbackCols)
+  if (!fallback) return null
+  // A bare numeric code in the account column is still useful for code-tier
+  // matching; otherwise derive the code from the borrowed label as usual.
+  return { label: fallback, code: accountCode(primary) || accountCode(fallback) }
 }
 
 // Does a matched row carry transactional detail beyond its account label?
