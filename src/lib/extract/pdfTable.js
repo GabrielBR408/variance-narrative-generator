@@ -228,8 +228,12 @@ export function looksGarbledText(lines = []) {
   if (!Array.isArray(lines) || lines.length === 0) return false
   const words = lines.join(' ').split(/\s+/).filter(Boolean)
   if (words.length < 30) return false
-  const numeric = words.filter((w) => /\d/.test(w)).length
-  return numeric / words.length < 0.02
+  // Require CLEAN accounting numbers: purely numeric tokens with optional
+  // commas, periods, parentheses, or a leading minus (e.g. 1,234.56 or
+  // (230,602.00) or -5,702.05). Garbled PDFs produce mixed letter+digit
+  // tokens like "P<AQ:;K8" that contain digits but are not valid figures.
+  const cleanNumeric = words.filter((w) => /^-?\(?\d[\d,]*\.?\d*\)?$/.test(w)).length
+  return cleanNumeric / words.length < 0.02
 }
 
 // Reconstruct a table from grouped PDF text lines.
