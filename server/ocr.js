@@ -26,9 +26,29 @@ export const OCR_MAX_TOKENS = Number(process.env.OCR_MAX_TOKENS) || 8192
 const MAX_BODY_BYTES = 24 * 1024 * 1024
 
 const OCR_SYSTEM =
-  'You are a precise data-extraction engine for accounting General Ledger documents. ' +
+  'You are a precise data-extraction engine for accounting documents. ' +
   'You transcribe exactly what is printed; you never invent, infer, or compute values that are not visible. ' +
   'You output only JSON.'
+
+// Income-statement OCR prompt. Used when the text layer of a comparative P&L is
+// unusable (non-standard font/encoding) and the figures must be read from the
+// page image. Returns one row per account line with the current/YTD
+// actual/budget/variance figures so the row maps to the normalized variance
+// table (TABLE_COLUMNS) the rest of the pipeline already consumes.
+const OCR_IS_PROMPT =
+  'These image(s) are page(s) of a COMPARATIVE INCOME STATEMENT (a profit & loss / variance report). They may be ' +
+  'ROTATED or skewed — read them in whatever orientation makes the text legible. Each data row is an account line ' +
+  'with figures in columns. There is typically a CURRENT period and a YEAR-TO-DATE (YTD) period, each with Actual, ' +
+  'Budget, and Variance amounts.\n\n' +
+  'Extract every account/data line with its figures. For each row capture: account (the line label, including its ' +
+  'leading code if printed), and the figures currentActual, currentBudget, currentVariance, ytdActual, ytdBudget, ' +
+  'ytdVariance. Use accounting sign exactly as printed (parentheses or a leading minus = negative). If the statement ' +
+  'has only one period, put its figures in the current* fields and leave the ytd* fields empty. Do NOT compute or ' +
+  'invent values that are not visible; leave a missing figure empty.\n\n' +
+  'Return STRICT JSON only — no prose, no markdown fences — in exactly this shape:\n' +
+  '{"rows":[{"account":"","currentActual":0,"currentBudget":0,"currentVariance":0,"ytdActual":0,"ytdBudget":0,"ytdVariance":0}]}\n' +
+  'Use JSON numbers for figures (negative where shown); use an empty string for a figure that is not visible. ' +
+  'If these pages are not an income statement, return {"rows":[]}.'
 
 const OCR_PROMPT =
   'These image(s) are page(s) of a General Ledger. They may be ROTATED (sideways or upside down) or skewed — read ' +
@@ -46,8 +66,10 @@ const OCR_PROMPT =
   'If these pages are not a general ledger, return {"accounts":[]}.'
 
 // Build the Anthropic message content from page images (data URLs). Invalid /
-// non-image entries are skipped; the extraction prompt is appended last.
-export function buildOcrContent(images = []) {
+// non-image entries are skipped; the extraction prompt for the requested mode is
+// appended last ('gl' = General Ledger, the default; 'incomeStatement' = a
+// comparative P&L whose text layer was unusable).
+export function buildOcrContent(images = [], mode = 'gl') {
   const content = []
   for (const img of Array.isArray(images) ? images : []) {
     const m = /^data:(image\/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(String(img))
@@ -55,7 +77,7 @@ export function buildOcrContent(images = []) {
     const media = m[1] === 'image/jpg' ? 'image/jpeg' : m[1]
     content.push({ type: 'image', source: { type: 'base64', media_type: media, data: m[2].replace(/\s+/g, '') } })
   }
-  content.push({ type: 'text', text: OCR_PROMPT })
+  content.push({ type: 'text', text: mode === 'incomeStatement' ? OCR_IS_PROMPT : OCR_PROMPT })
   return content
 }
 
@@ -81,10 +103,10 @@ function sanitizeAccounts(accounts) {
   return out
 }
 
-// Parse the model's text into a clean accounts array. Tolerant of code fences
-// and surrounding prose. Returns [] on anything unparseable (silent).
-export function parseOcrResponse(text) {
-  if (!text) return []
+// Narrow model output to its JSON payload — tolerant of code fences and
+// surrounding prose. Returns the parsed value or null on anything unparseable.
+function parseModelJson(text) {
+  if (!text) return null
   let s = String(text).trim()
   const fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(s)
   if (fence) s = fence[1].trim()
@@ -94,39 +116,77 @@ export function parseOcrResponse(text) {
     const last = Math.max(s.lastIndexOf('}'), s.lastIndexOf(']'))
     if (first >= 0 && last > first) s = s.slice(first, last + 1)
   }
-  let parsed
   try {
-    parsed = JSON.parse(s)
+    return JSON.parse(s)
   } catch {
-    return []
+    return null
   }
-  const accounts = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.accounts) ? parsed.accounts : []
+}
+
+// Parse the model's text into a clean accounts array (GL mode). Tolerant of code
+// fences and surrounding prose. Returns [] on anything unparseable (silent).
+export function parseOcrResponse(text) {
+  const parsed = parseModelJson(text)
+  if (parsed == null) return []
+  const accounts = Array.isArray(parsed) ? parsed : Array.isArray(parsed.accounts) ? parsed.accounts : []
   return sanitizeAccounts(accounts)
 }
 
-// Run the vision model over the images and return the parsed accounts (or [] on
-// any failure / gating). Never throws.
-export async function runOcr({ images = [], ip = 'unknown' } = {}) {
-  if (!OCR_ENABLED) return []
-  if (!process.env.ANTHROPIC_API_KEY) return []
-  if (!Array.isArray(images) || images.length === 0) return []
-  if (!checkIpLimit(ip) || !checkGlobalLimit()) return []
+// Income-statement figure fields the row mapper expects.
+const IS_FIGURE_FIELDS = ['currentActual', 'currentBudget', 'currentVariance', 'ytdActual', 'ytdBudget', 'ytdVariance']
+
+// Drop anything that isn't a row with an account; coerce each figure to a number
+// or an empty string (never invented).
+function sanitizeRows(rows) {
+  const out = []
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (!r || typeof r !== 'object') continue
+    const account = String(r.account || '').trim()
+    if (!account) continue
+    const row = { account }
+    for (const f of IS_FIGURE_FIELDS) {
+      const v = r[f]
+      row[f] = typeof v === 'number' ? v : v == null ? '' : String(v)
+    }
+    out.push(row)
+  }
+  return out
+}
+
+// Parse the model's text into clean income-statement rows (incomeStatement mode).
+// Returns [] on anything unparseable (silent).
+export function parseOcrRows(text) {
+  const parsed = parseModelJson(text)
+  if (parsed == null) return []
+  const rows = Array.isArray(parsed) ? parsed : Array.isArray(parsed.rows) ? parsed.rows : []
+  return sanitizeRows(rows)
+}
+
+// Run the vision model over the images and return the parsed result for the
+// requested mode — GL mode ⇒ { accounts }, incomeStatement mode ⇒ { rows } — or
+// the empty shape on any failure / gating. Never throws.
+export async function runOcr({ images = [], ip = 'unknown', mode = 'gl' } = {}) {
+  const empty = mode === 'incomeStatement' ? { rows: [] } : { accounts: [] }
+  if (!OCR_ENABLED) return empty
+  if (!process.env.ANTHROPIC_API_KEY) return empty
+  if (!Array.isArray(images) || images.length === 0) return empty
+  if (!checkIpLimit(ip) || !checkGlobalLimit()) return empty
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const resp = await client.messages.create({
       model: OCR_MODEL,
       max_tokens: OCR_MAX_TOKENS,
       system: OCR_SYSTEM,
-      messages: [{ role: 'user', content: buildOcrContent(images.slice(0, OCR_MAX_PAGES)) }]
+      messages: [{ role: 'user', content: buildOcrContent(images.slice(0, OCR_MAX_PAGES), mode) }]
     })
     const text = (resp.content || [])
       .filter((b) => b && b.type === 'text')
       .map((b) => b.text)
       .join('\n')
-    return parseOcrResponse(text)
+    return mode === 'incomeStatement' ? { rows: parseOcrRows(text) } : { accounts: parseOcrResponse(text) }
   } catch (err) {
     console.log('[OCR] vision call failed — returning empty:', err && err.message)
-    return []
+    return empty
   }
 }
 
@@ -182,6 +242,7 @@ export async function handleOcr(req, res) {
     return json({ success: true, accounts: [] })
   }
   const images = Array.isArray(body && body.images) ? body.images : []
-  const accounts = await runOcr({ images, ip: clientIp(req) })
-  return json({ success: true, accounts })
+  const mode = body && body.mode === 'incomeStatement' ? 'incomeStatement' : 'gl'
+  const result = await runOcr({ images, ip: clientIp(req), mode })
+  return json({ success: true, ...result })
 }

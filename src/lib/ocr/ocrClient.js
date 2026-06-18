@@ -7,9 +7,12 @@
 // pdf.js is imported lazily (dynamic import of renderPdf.js) so it never enters
 // the initial bundle.
 
-import { accountsToTable } from './ocrTable.js'
+import { accountsToTable, rowsToTable } from './ocrTable.js'
 
-export async function ocrExtractTable(file, { maxPages = 12 } = {}) {
+// `mode` selects what the server transcribes and how the result is mapped:
+//   'gl'              → General Ledger accounts/transactions → GL table (default)
+//   'incomeStatement' → comparative P&L rows → normalized variance table
+export async function ocrExtractTable(file, { maxPages = 12, mode = 'gl' } = {}) {
   try {
     const { renderPdfToImages } = await import('./renderPdf.js')
     const images = await renderPdfToImages(file, { maxPages })
@@ -18,11 +21,11 @@ export async function ocrExtractTable(file, { maxPages = 12 } = {}) {
     const res = await fetch('/api/ocr', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ images, fileName: (file && file.name) || '' })
+      body: JSON.stringify({ images, fileName: (file && file.name) || '', mode })
     })
     const data = await res.json().catch(() => null)
     if (!data || data.success !== true) return null
-    return accountsToTable(data.accounts)
+    return mode === 'incomeStatement' ? rowsToTable(data.rows) : accountsToTable(data.accounts)
   } catch {
     return null
   }

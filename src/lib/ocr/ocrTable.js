@@ -6,7 +6,7 @@
 // NO model call — the page rendering and the vision call live in their own
 // modules (renderPdf.js / ocrClient.js / server/ocr.js).
 
-import { GL_COLUMNS } from '../extract/pdfTable.js'
+import { GL_COLUMNS, TABLE_COLUMNS } from '../extract/pdfTable.js'
 
 // Coerce a vision amount — a number or numeric string, with debit-positive /
 // credit-negative sign ALREADY applied by the prompt — into a plain string, or
@@ -57,4 +57,62 @@ export function accountsToTable(accounts = []) {
   }
   if (rows.length === 0) return null
   return { name: 'OCR GL', rows: [GL_COLUMNS.slice(), ...rows], columnCount: GL_COLUMNS.length }
+}
+
+// Map the vision rows of a COMPARATIVE INCOME STATEMENT — [{ account,
+// currentActual, currentBudget, currentVariance, ytdActual, ytdBudget,
+// ytdVariance }] — into the SAME normalized variance table the deterministic
+// text reconstructor emits (TABLE_COLUMNS), so an OCR-recovered income statement
+// flows through normalize → variance with ZERO downstream changes. The two
+// variance-% cells are derived from the figures (variance / |budget|) so the
+// table is column-complete; a row with no account or no usable figure is dropped.
+// Returns a table or null when no usable row survives (silent fallback).
+export function rowsToTable(visionRows = []) {
+  const out = []
+  for (const r of Array.isArray(visionRows) ? visionRows : []) {
+    if (!r || typeof r !== 'object') continue
+    const account = String(r.account || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (!account) continue
+    const cells = [
+      toAmountString(r.currentActual),
+      toAmountString(r.currentBudget),
+      toAmountString(r.currentVariance),
+      pctString(r.currentActual, r.currentBudget, r.currentVariance),
+      toAmountString(r.ytdActual),
+      toAmountString(r.ytdBudget),
+      toAmountString(r.ytdVariance),
+      pctString(r.ytdActual, r.ytdBudget, r.ytdVariance)
+    ]
+    // Need at least one real figure for the row to carry comparable data.
+    if (cells.every((c) => c === '')) continue
+    out.push([account, ...cells])
+  }
+  if (out.length === 0) return null
+  return { name: 'OCR Income Statement', rows: [TABLE_COLUMNS.slice(), ...out], columnCount: TABLE_COLUMNS.length }
+}
+
+// Derive a variance-% string ("12.5%") from the figures: variance / |budget|.
+// Uses an explicit variance when present, else actual − budget. '' when budget
+// is missing/zero or no figure is available — never a fabricated percentage.
+function pctString(actual, budget, variance) {
+  const b = numOrNull(budget)
+  if (b === null || b === 0) return ''
+  let v = numOrNull(variance)
+  if (v === null) {
+    const a = numOrNull(actual)
+    if (a === null) return ''
+    v = a - b
+  }
+  return `${Math.round((v / Math.abs(b)) * 1000) / 10}%`
+}
+
+// Parse a vision figure (number or formatted/parenthesized string) to a number,
+// or null when not finite — reuses toAmountString so the rules match exactly.
+function numOrNull(value) {
+  const s = toAmountString(value)
+  if (s === '') return null
+  const n = Number(s)
+  return Number.isFinite(n) ? n : null
 }

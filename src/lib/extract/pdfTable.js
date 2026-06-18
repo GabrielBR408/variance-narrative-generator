@@ -213,6 +213,25 @@ export function detectVarianceReport(lines = []) {
   return HEADER_HINTS.every((re) => re.test(blob))
 }
 
+// True when a substantial body of extracted text carries almost no numeric
+// figures — the signature of a financial statement whose non-standard font /
+// character encoding decoded to garbled glyphs (pdf.js returns text, but the
+// figures did not survive, so no table can be reconstructed). A genuine
+// comparative income statement is dense with actual/budget/variance figures, so
+// near-zero numeric density over enough text means the text layer is unusable
+// and the page must be read via the image (OCR) path instead.
+//
+// Conservative by design: requires a meaningful amount of text (a near-empty
+// extraction is the separate "scanned" case) so ordinary prose isn't misjudged.
+// The caller only consults this when NO table could be reconstructed.
+export function looksGarbledText(lines = []) {
+  if (!Array.isArray(lines) || lines.length === 0) return false
+  const words = lines.join(' ').split(/\s+/).filter(Boolean)
+  if (words.length < 30) return false
+  const numeric = words.filter((w) => /\d/.test(w)).length
+  return numeric / words.length < 0.02
+}
+
 // Reconstruct a table from grouped PDF text lines.
 //
 // Dispatcher (Phase 18A): a General Ledger is reconstructed into typed
@@ -495,6 +514,16 @@ function cleanAccountHeading(text) {
   return String(text).replace(/\s+/g, ' ').replace(/\s*:\s*$/, '').trim()
 }
 
+// Drop a leading entity/site code from a heading that carries two or more
+// consecutive leading numeric tokens (a multi-entity GL prints "<site>
+// <account-code> <Name>", e.g. "715141 40120 Rental Income"). Keeps only the
+// LAST leading code (the account code) + name, so the row keys off the account
+// code that the income statement line also carries. A single-code heading is
+// returned unchanged.
+function stripEntityPrefix(label) {
+  return String(label).replace(/^\s*(?:\d[\d.\-]*\s+)+(?=\d[\d.\-]*\s+[A-Za-z])/, '')
+}
+
 // A cell that is only punctuation/whitespace (e.g. MRI's "@" column marker) — it
 // carries no field content and is dropped from field assignment.
 function isPunctCell(str) {
@@ -524,7 +553,7 @@ function glHeadingLabel(cells, text, moneyStart, headingLeftEdge) {
     if (isPunctCell(c.str)) continue
     parts.push(c.str)
   }
-  return cleanAccountHeading(parts.join(' '))
+  return cleanAccountHeading(stripEntityPrefix(parts.join(' ')))
 }
 
 // Assign a transaction row's text cells to Reference / Vendor / Description by
@@ -703,20 +732,29 @@ function hasGLDateToken(line) {
     .some((t) => GL_DATE_RE.test(t))
 }
 
-// An account-section heading from text: "<code> <Name>", optionally followed by
-// the "Balance Forward" opening marker and/or an opening balance figure on the
-// same line. Returns the cleaned "<code> <Name>" label, or '' when the line is
-// not a heading. A transaction line never matches — it leads with the entity
-// code then a period/date (a digit), so the required leading letter is absent.
+// An account-section heading from text: "<code> <Name>", optionally preceded by
+// one or more entity/site codes (a MULTI-ENTITY GL prints "<site> <account-code>
+// <Name>", e.g. "715141 40120 Rental Income") and optionally followed by the
+// "Balance Forward" opening marker and/or an opening balance figure on the same
+// line. Returns the cleaned "<account-code> <Name>" label — keyed off the
+// ACCOUNT code (the last numeric token before the name), with any leading
+// entity/site code dropped so the row matches the income statement account line.
+// Returns '' when the line is not a heading. A transaction line never matches —
+// it leads with the entity code then a period/date, so the required leading
+// letter (the account name) is absent.
 function glTextHeadingLabel(line) {
-  const m = String(line).match(/^(\d[\d.\-]*)\s+([A-Za-z].*)$/)
+  const m = String(line).match(/^((?:\d[\d.\-]*\s+)*\d[\d.\-]*)\s+([A-Za-z].*)$/)
   if (!m) return ''
+  // The account code is the LAST numeric token; earlier ones are entity/site
+  // identifiers (multi-entity report) and are dropped.
+  const codes = m[1].trim().split(/\s+/)
+  const code = codes[codes.length - 1]
   const name = m[2]
     .replace(/\s+balance\s+forward\b.*$/i, '') // drop the opening marker + its figure
     .replace(/(?:\s+\(?-?\$?\d[\d,]*(?:\.\d+)?\)?%?)+$/, '') // drop a trailing opening balance
     .trim()
   if (!name) return ''
-  return cleanAccountHeading(`${m[1]} ${name}`)
+  return cleanAccountHeading(`${code} ${name}`)
 }
 
 // Parse one transaction line of a sectioned GL from its TEXT. Returns

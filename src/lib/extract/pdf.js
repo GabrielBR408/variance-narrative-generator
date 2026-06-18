@@ -14,7 +14,7 @@
 
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { reconstructTable, groupItemsIntoLineCells } from './pdfTable.js'
+import { reconstructTable, groupItemsIntoLineCells, looksGarbledText } from './pdfTable.js'
 
 // Run the parser in pdf.js's own worker (this is part of the library, not an
 // app-level background job). Configured once at module load.
@@ -101,6 +101,10 @@ export async function extractPdf(file, maxPages, classification) {
       pagesRead: pagesToRead,
       truncated: totalPages > pagesToRead,
       scanned: totalPages > 0 && text.length === 0, // text-free PDF ⇒ likely scanned
+      // A PDF that DID yield text but whose figures didn't survive a non-standard
+      // font/encoding (so no table reconstructs) — the text layer is unusable and
+      // the figures must be recovered from the page image (OCR), same as a scan.
+      garbled: tables.length === 0 && looksGarbledText(lines),
       tableReconstructed: tables.length > 0,
       tableSections: table ? table.sections : []
     }
