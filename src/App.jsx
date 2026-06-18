@@ -6,6 +6,7 @@ import GeneratePanel from './components/GeneratePanel.jsx'
 import ResultPanel from './components/ResultPanel.jsx'
 import { classifyFile } from './lib/classify.js'
 import { extractFile } from './lib/extract/extract.js'
+import { augmentWithOcr } from './lib/ocr/augment.js'
 import {
   extractionReadiness,
   resultFreshness,
@@ -212,6 +213,11 @@ export default function App() {
       }))
 
       extractFile({ file, fileId: id, classification })
+        // OCR fallback: a SCANNED supporting PDF (image-only, no text layer) is
+        // rendered and read by Claude vision into the same GL table the
+        // text/position parsers emit. A no-op for every other file, and on any
+        // failure the original (empty) extraction is kept — nothing surfaced.
+        .then((res) => augmentWithOcr(res, file, { role }))
         .then((res) => setExtractions((prev) => (id in prev ? { ...prev, [id]: res } : prev)))
         .catch(() =>
           setExtractions((prev) =>
