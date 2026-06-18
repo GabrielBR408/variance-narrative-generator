@@ -134,19 +134,20 @@ test('detailed mode renders a vendor-only explanation', () => {
 
 // --- offset-heavy and disproportionate variants (NQ-2B: vendor leads) -------
 
-test('detailed mode renders OFFSET_TIMING owner wording for an offset-heavy line (NQ-5B)', () => {
+test('detailed mode leads the offset-heavy explanation with the vendor/detail (preserved under NQ-5B)', () => {
   const note = findNote(build('detailed'), '51400 Fire Sprinkler Contract')
-  // NQ-5B: the diagnosis owner sentence supersedes the NQ-2B vendor-led wording.
-  assert.match(note.text, /Activity exceeded the reported variance and appears influenced by offsetting entries, timing, or account-level movement during the period\.$/)
-  assert.doesNotMatch(note.text, /Acme Fire/) // no vendor names
+  // NQ-2B rules 1+2: a render-safe vendor/service replaces the generic boilerplate.
+  // NQ-5B (refined) preserves this strong evidence rather than overwriting it.
+  assert.match(note.text, /Annual fire contract from Acme Fire LLC appears in the account detail, partially offset by related entries in the period\.$/)
+  assert.doesNotMatch(note.text, /Related account activity appears broader/) // NQ-5B owner copy not used
   assert.ok(sentences(note.text) <= 2)
 })
 
-test('detailed mode renders OFFSET_TIMING owner wording for a disproportionate line (no dollar) (NQ-5B)', () => {
+test('detailed mode leads the disproportionate explanation with the vendor/detail (no dollar) (preserved under NQ-5B)', () => {
   const note = findNote(build('detailed'), '54200 Insurance')
-  assert.match(note.text, /Activity exceeded the reported variance and appears influenced by offsetting entries, timing, or account-level movement during the period\.$/)
-  assert.doesNotMatch(note.text, /Blue Shield/) // no vendor names
-  assert.doesNotMatch(note.text, /\$25,000|25,000/) // no GL dollar figure
+  assert.match(note.text, /Annual premium from Blue Shield Insurance appears in the account detail, though related activity exceeded the reported variance\.$/)
+  assert.doesNotMatch(note.text, /Related account activity appears broader/)
+  assert.doesNotMatch(note.text, /\$25,000|25,000/)
   assert.ok(sentences(note.text) <= 2)
 })
 

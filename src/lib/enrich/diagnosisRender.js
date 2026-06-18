@@ -23,13 +23,13 @@
 // each; causation-free by construction.
 const NATURE_SENTENCE = {
   OFFSET_TIMING:
-    'Activity exceeded the reported variance and appears influenced by offsetting entries, timing, or account-level movement during the period.',
+    'Related account activity appears broader than the reported variance, suggesting offsetting entries, timing, or account-level movement also affected the result.',
   MAPPING_PASSTHROUGH:
-    'Recoverable charges appear to lag expense recognition and may normalize as billing activity occurs.',
+    'Recoveries or billbacks may lag expense recognition and should be reviewed against tenant recovery billing.',
   TIMING_PHASING:
-    'Budgeted activity does not appear to have occurred during the period and may reflect timing rather than permanent savings.',
+    'Budgeted activity did not post during the period, suggesting a timing difference or deferred work rather than permanent savings.',
   ACCRUAL_TRUEUP:
-    'Recorded activity moved opposite the reported variance and appears consistent with accrual timing, reversals, or correcting entries.'
+    'Recorded activity appears consistent with accrual timing, reversals, or correcting entries rather than recurring operating activity.'
 }
 
 // Belt-and-suspenders reject net: never emit causal/certainty language even if

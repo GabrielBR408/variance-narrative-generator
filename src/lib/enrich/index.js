@@ -75,6 +75,17 @@ function appendSentence(base, sentence) {
   return `${String(base).replace(/\s+$/, '')} ${sentence}`
 }
 
+// NQ-5B (refined): does the primary GL citation carry a render-safe vendor/memo
+// subject? Mirrors renderSafeSubject's gate (selectDetailEvidence → detailEvidence)
+// without re-deriving the string: if it does, the legacy detailed sentence already
+// led with that subject, so a subject-bearing diagnosis must not overwrite it.
+function hasSafeSubject(detailEvidence) {
+  if (!detailEvidence) return false
+  const c = detailEvidence.evidenceConfidence
+  if (c !== 'high' && c !== 'medium') return false
+  return !!(detailEvidence.vendorRenderable || detailEvidence.memoRenderable)
+}
+
 // Enrich one note in place-free fashion: returns the same note when there is no
 // confident match, or a new note carrying structured `support` metadata and an
 // owner-facing explanation merged into its sentence when there is. `period` is
@@ -276,8 +287,17 @@ function enrichNote(note, index, options, period) {
   // an S2 (result.text !== note.text), so it augments existing wording and never
   // introduces commentary where a render guard chose silence (e.g. an immaterial
   // recovery line, where finalizeNoteCommentary suppressed the semantic sentence).
+  //
+  // NQ-5B (refined): for the subject-bearing natures (OFFSET_TIMING, ACCRUAL_TRUEUP)
+  // we do NOT clobber a legacy sentence that already carries safe vendor/memo
+  // detail — diagnosis improves weak/boilerplate text, it never erases strong
+  // evidence. MAPPING_PASSTHROUGH and TIMING_PHASING never carry a subject (recovery
+  // semantics / zero-actual factual), so they always take the owner wording.
   if (options.mode === 'detailed' && result.text !== note.text) {
-    const ds = diagnosisSentence(result.diagnosis)
+    const nature = result.diagnosis && result.diagnosis.nature
+    const subjectBearing = nature === 'OFFSET_TIMING' || nature === 'ACCRUAL_TRUEUP'
+    const keepLegacyEvidence = subjectBearing && hasSafeSubject(primary && primary.detailEvidence)
+    const ds = keepLegacyEvidence ? null : diagnosisSentence(result.diagnosis)
     if (ds) result.text = appendSentence(note.text, ds)
   }
   return result

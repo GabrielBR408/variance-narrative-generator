@@ -83,45 +83,45 @@ function assertSafe(text) {
 
 // --- 1/2. vendor / detail preference over generic offset language ----------
 
-// NQ-5B supersedes the NQ-2B vendor-led wording for OFFSET_TIMING (GL > variance)
-// lines: detailed mode now renders the diagnosis owner sentence, with no vendor name.
-const OFFSET_TIMING_RE = /Activity exceeded the reported variance and appears influenced by offsetting entries, timing, or account-level movement during the period\.$/
-
-test('Janitorial Contract (offset shape) → OFFSET_TIMING diagnosis wording (NQ-5B)', () => {
+// NQ-5B (refined): OFFSET_TIMING lines that carry a render-safe vendor/memo keep
+// the NQ-2B vendor-led wording — diagnosis improves weak text, it does not erase
+// strong evidence. (The generic owner copy applies only to subjectless lines.)
+test('Janitorial Contract: vendor/service detail is preserved (NQ-5B)', () => {
   const note = enriched({
     account: '51200 Janitorial Contract', actual: 9000, budget: 5000,
     rows: [['Janitorial contract TRINITY BUILDING SERVICES', 12000]] // GL > variance → offset shape
   })
-  assert.match(note.text, OFFSET_TIMING_RE)
-  assert.doesNotMatch(note.text, /Trinity/) // no vendor names
+  assert.match(note.text, /Janitorial contract from Trinity Building Services appears in the account detail/)
+  assert.doesNotMatch(note.text, /Related account activity appears broader/)
   assertSafe(note.text)
 })
 
-test('Security Contract (offset shape) → OFFSET_TIMING diagnosis wording (NQ-5B)', () => {
+test('Security Contract: vendor/service detail is preserved (NQ-5B)', () => {
   const note = enriched({
     account: '51100 Security Contract', actual: 9000, budget: 3000,
     rows: [['Security monitoring ARMADA SECURITY', 15000]]
   })
-  assert.match(note.text, OFFSET_TIMING_RE)
-  assert.doesNotMatch(note.text, /Armada/) // no vendor names
+  assert.match(note.text, /Security monitoring from Armada Security appears in the account detail/)
+  assert.doesNotMatch(note.text, /Related account activity appears broader/)
   assertSafe(note.text)
 })
 
-test('HVAC Contract (offset shape) → OFFSET_TIMING diagnosis wording (NQ-5B)', () => {
+test('HVAC Contract: vendor/service detail is preserved (NQ-5B)', () => {
   const note = enriched({
     account: '51300 HVAC Contract', actual: 8000, budget: 5000,
     rows: [['HVAC maintenance BAY CITY MECHANICAL', 13000]]
   })
-  assert.match(note.text, OFFSET_TIMING_RE)
-  assert.doesNotMatch(note.text, /Bay City/) // no vendor names
+  assert.match(note.text, /HVAC maintenance from Bay City Mechanical/)
+  assert.doesNotMatch(note.text, /Related account activity appears broader/)
   assertSafe(note.text)
 })
 
 // --- 3. zero-actual / 100%-under-budget lines ------------------------------
 
-// NQ-5B: zero-actual budgeted lines diagnose TIMING_PHASING; detailed mode now
-// renders the timing owner sentence in place of the NQ-2B factual statement.
-const TIMING_PHASING_RE = /Budgeted activity does not appear to have occurred during the period and may reflect timing rather than permanent savings\.$/
+// NQ-5B: zero-actual budgeted lines diagnose TIMING_PHASING (no subject), so
+// detailed mode renders the timing owner sentence in place of the NQ-2B factual
+// statement.
+const TIMING_PHASING_RE = /Budgeted activity did not post during the period, suggesting a timing difference or deferred work rather than permanent savings\.$/
 
 test('zero-actual expense line → TIMING_PHASING diagnosis wording (NQ-5B)', () => {
   const note = enriched({ account: '51500 Window Cleaning', actual: 0, budget: 19000 })
@@ -140,9 +140,9 @@ test('zero-actual revenue line → TIMING_PHASING diagnosis wording (NQ-5B)', ()
 
 test('zero-actual TIMING_PHASING wording stays causation-free (supersedes NQ-2B no-speculation)', () => {
   const note = enriched({ account: '51500 Window Cleaning', actual: 0, budget: 19000 })
-  // NQ-5B intentionally adds a timing implication here; it must still carry no
-  // causal/certainty language and stay within two sentences.
-  assert.match(note.text, /may reflect timing rather than permanent savings\.$/)
+  // NQ-5B adds a tentative timing implication here; it must still carry no causal /
+  // certainty language and stay within two sentences.
+  assert.match(note.text, /suggesting a timing difference or deferred work rather than permanent savings\.$/)
   assertSafe(note.text)
 })
 
@@ -166,26 +166,29 @@ test('an immaterial unexplained variance is NOT flagged for review (no over-flag
 
 // --- 5. negative / credit lines --------------------------------------------
 
-// NQ-5B: net-credit / opposite-direction lines diagnose ACCRUAL_TRUEUP; detailed
-// mode renders the accrual owner sentence in place of the legacy reversal wording.
-const ACCRUAL_TRUEUP_RE = /Recorded activity moved opposite the reported variance and appears consistent with accrual timing, reversals, or correcting entries\.$/
+// NQ-5B: a net-credit line with NO supporting detail (no subject) diagnoses
+// ACCRUAL_TRUEUP and renders the safer-default owner sentence — never "moved
+// opposite", which is reserved for an actual direction conflict.
+const ACCRUAL_TRUEUP_RE = /Recorded activity appears consistent with accrual timing, reversals, or correcting entries rather than recurring operating activity\.$/
 
-test('negative actual → ACCRUAL_TRUEUP diagnosis wording (NQ-5B)', () => {
+test('negative actual (no detail) → ACCRUAL_TRUEUP owner wording (NQ-5B)', () => {
   const note = enriched({
     account: '52000 Contra Expense', actual: -3000, budget: 1000, category: 'favorable'
   })
   assert.match(note.text, ACCRUAL_TRUEUP_RE)
+  assert.doesNotMatch(note.text, /moved opposite|ran opposite/)
   assertSafe(note.text)
 })
 
-test('a GL direction conflict → ACCRUAL_TRUEUP diagnosis wording (NQ-5B)', () => {
-  // Reported variance is OVER budget, but the GL nets negative — opposite
-  // directions, the classic credit/reversal signal.
+test('a GL direction conflict with a safe subject preserves the legacy reversal wording (NQ-5B)', () => {
+  // Reported variance is OVER budget, but the GL nets negative — a real direction
+  // conflict. The render-safe memo subject ("Premium charge") keeps the legacy
+  // sentence, which legitimately says "ran opposite" because the GL did.
   const note = enriched({
     account: '51800 Insurance Premiums', actual: 8000, budget: 5000, category: 'unfavorable',
     rows: [['Premium charge', 2000], ['Premium credit', -8000]]
   })
-  assert.match(note.text, ACCRUAL_TRUEUP_RE)
+  assert.match(note.text, /ran opposite to the reported movement, consistent with credits or reversals/)
   assertSafe(note.text)
 })
 

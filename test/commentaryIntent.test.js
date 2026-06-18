@@ -92,14 +92,15 @@ test('an evenly-spread population (classifier C) is recurring even without a key
 
 // --- 2. timing / true-up adjustment ----------------------------------------
 
-test('a credit / true-up movement → ACCRUAL_TRUEUP diagnosis wording (NQ-5B)', () => {
-  // Favorable expense, a net credit — diagnosed ACCRUAL_TRUEUP; NQ-5B renders the
-  // owner sentence in place of the legacy timing-adjustment explanation.
+test('a credit / true-up movement yields a timing explanation (legacy vendor/memo preserved under NQ-5B)', () => {
+  // Favorable expense, a net credit — the classifier sees category E. The GL carries
+  // a render-safe memo ("Premium refund"), so NQ-5B PRESERVES the legacy explanation
+  // rather than overwriting it with the generic ACCRUAL owner sentence.
   const note = enriched({
     account: '54200 Insurance', actual: 1000, budget: 4000, category: 'favorable',
     rows: [['Premium refund', -3000]]
   })
-  assert.match(note.text, /Recorded activity moved opposite the reported variance and appears consistent with accrual timing, reversals, or correcting entries\.$/)
+  assert.match(note.text, /appears to reflect a timing or true-up adjustment that may reverse in a later period\.$/)
   assert.ok(sentenceCount(note.text) <= 2)
   assertSafe(note.text)
 })
