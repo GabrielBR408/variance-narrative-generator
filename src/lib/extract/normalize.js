@@ -10,6 +10,17 @@
 // empty placeholder until a later phase assigns meaning. No variance math, no
 // thresholds, no interpretation happens here.
 
+// NQ-6C.2: content-based file-type detection/flattening (sectioned GL, budget
+// summary). fileType.js imports looksLikeDate from here in turn — a safe
+// load-time cycle (no binding is used until runtime; the ones it needs hoist).
+import {
+  detectSectionedGL,
+  parseSectionedGL,
+  detectBudgetSummary,
+  SECTIONED_GL,
+  BUDGET_SUMMARY
+} from './fileType.js'
+
 // Confidence is a coarse signal about how trustworthy the extraction is, NOT a
 // statement about the file's contents.
 const BASE_CONFIDENCE = {
@@ -158,18 +169,9 @@ function resolveHeader(grid) {
   return { columns: grid[0].map((c) => String(c)), rows: grid.length > 1 ? grid.slice(1) : [] }
 }
 
-function normalizeSpreadsheet(extracted) {
-  const table = (extracted.tables && extracted.tables[0]) || { rows: [] }
-  const grid = Array.isArray(table.rows) ? table.rows : []
-
-  if (grid.length === 0) {
-    return { rows: [], columns: [], accounts: [], dates: [], values: [] }
-  }
-
-  // Build column labels from the header (one row, or a folded grouped band) and
-  // take the remaining rows as data.
-  const { columns, rows } = resolveHeader(grid)
-
+// Light type detection over the resolved data rows: which cells read as numbers
+// (values) and which read as dates. Shared by the flat and sectioned-GL paths.
+function collectDatesValues(rows) {
   const dates = []
   const values = []
   for (const row of rows) {
@@ -179,8 +181,39 @@ function normalizeSpreadsheet(extracted) {
       else if (looksLikeDate(cell)) dates.push(String(cell).trim())
     }
   }
+  return { dates, values }
+}
 
-  return { rows, columns, accounts: [], dates, values }
+function normalizeSpreadsheet(extracted, kind) {
+  const table = (extracted.tables && extracted.tables[0]) || { rows: [] }
+  const grid = Array.isArray(table.rows) ? table.rows : []
+
+  if (grid.length === 0) {
+    return { rows: [], columns: [], accounts: [], dates: [], values: [] }
+  }
+
+  // NQ-6C.2: account-sectioned GL (e.g. a YTD GL export). The account name lives
+  // on each section header, not on the transaction rows, so flatten the sections
+  // into a one-transaction-per-row table the evidence index can read. Detection
+  // is spreadsheet-only: a PDF reconstruction's positional columns are not this
+  // grid's, and the budget-summary path below already covers the PDF worksheet.
+  if (kind === 'spreadsheet' && detectSectionedGL(grid)) {
+    const { columns, rows } = parseSectionedGL(grid)
+    const { dates, values } = collectDatesValues(rows)
+    return { rows, columns, accounts: [], dates, values, fileType: SECTIONED_GL }
+  }
+
+  // Build column labels from the header (one row, or a folded grouped band) and
+  // take the remaining rows as data.
+  const { columns, rows } = resolveHeader(grid)
+  const { dates, values } = collectDatesValues(rows)
+
+  // NQ-6C.2: a by-account budget/actual/variance summary carries no transaction
+  // detail — tag it so the evidence index uses it for variance confirmation only
+  // and never mines it for GL rows. Additive: columns/rows are left unchanged.
+  const normalized = { rows, columns, accounts: [], dates, values }
+  if (detectBudgetSummary(columns)) normalized.fileType = BUDGET_SUMMARY
+  return normalized
 }
 
 function normalizeText(extracted) {
@@ -207,7 +240,7 @@ export function normalize(extracted, kind) {
   // table reconstruction produced rows; otherwise it stays free text. DOCX is
   // always free text.
   const grid = kind === 'spreadsheet' || (kind === 'pdf' && hasReconstructedTable(extracted))
-  const normalized = grid ? normalizeSpreadsheet(extracted) : normalizeText(extracted)
+  const normalized = grid ? normalizeSpreadsheet(extracted, kind) : normalizeText(extracted)
 
   // "Empty" reflects whether the parser found anything readable at all, judged
   // on the source: a grid's rows, or a text source's blocks.

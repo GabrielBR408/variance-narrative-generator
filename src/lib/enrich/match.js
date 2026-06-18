@@ -15,6 +15,7 @@
 // resemblance never produces a citation.
 
 import { toNumber } from '../extract/normalize.js'
+import { SECTIONED_GL, BUDGET_SUMMARY } from '../extract/fileType.js'
 import { resolveScore } from './accountResolve.js'
 
 export const CONFIDENCE_FLOOR = 0.6
@@ -94,6 +95,9 @@ export function buildEvidenceIndex(supporting = []) {
     if (!ex || typeof ex !== 'object') continue
     if (ex.status && ex.status !== 'ok') continue
     const normalized = ex.normalized || {}
+    // NQ-6C.2: a budget summary confirms variance only — it carries no
+    // transaction detail, vendor, or memo, so it contributes no GL evidence rows.
+    if (normalized.fileType === BUDGET_SUMMARY) continue
     const rows = Array.isArray(normalized.rows) ? normalized.rows : []
     if (rows.length === 0) continue
 
@@ -129,75 +133,13 @@ export function buildEvidenceIndex(supporting = []) {
     }
 
     const fileName = ex.fileName || ''
-    const classificationType = (ex.classification && ex.classification.type) || 'Supporting Document'
-
-    // ===== [DIAG-1] TEMPORARY diagnostic logging — "GL Index Logging" ========
-    // Surfaces, per supporting (GL) file, exactly what buildEvidenceIndex sees.
-    // Output lands in the Vercel function logs for api/generate (console.log).
-    // This observes only — it changes NO behavior. REMOVE once we have found
-    // the root cause of the missing matches.
-    try {
-      // (1) Raw column headers found in the GL file.
-      console.log('[DIAG-1] file=%s raw column headers: %s', fileName, JSON.stringify(columns))
-      // (2) Which column chooseAccountColumn() selected as the account column.
-      console.log(
-        '[DIAG-1] file=%s chooseAccountColumn() -> index %s (header=%s)',
-        fileName,
-        String(col),
-        JSON.stringify(columns[col] ?? null)
-      )
-      // (3) First 10 parsed rows: resolved account label, amount, memo/description.
-      const diagN = Math.min(10, rows.length)
-      console.log('[DIAG-1] file=%s first %s of %s parsed rows:', fileName, String(diagN), String(rows.length))
-      for (let dr = 0; dr < diagN; dr++) {
-        const drow = rows[dr]
-        if (!Array.isArray(drow)) {
-          console.log('[DIAG-1]   row %s: (not an array) %s', String(dr), JSON.stringify(drow))
-          continue
-        }
-        const dresolved = resolveRowLabel(drow, col, labelFallbackCols)
-        console.log(
-          '[DIAG-1]   row %s: account=%s amount=%s memo/desc=%s | raw=%s',
-          String(dr),
-          JSON.stringify(dresolved ? dresolved.label : null),
-          JSON.stringify(reliableAmount(drow, col, amountCols)),
-          JSON.stringify(firstDetailText(drow, detailCols)),
-          JSON.stringify(drow)
-        )
-      }
-      // (5) Do these specific account names appear ANYWHERE in the raw rows,
-      //     before any normalization? Report the exact cell when present.
-      const diagTargets = ['HVAC Contract', 'Janitorial Contract', 'Security Contract']
-      for (const target of diagTargets) {
-        const needle = target.toLowerCase()
-        let hit = null
-        for (let dr = 0; dr < rows.length && !hit; dr++) {
-          const drow = rows[dr]
-          if (!Array.isArray(drow)) continue
-          for (let dc = 0; dc < drow.length; dc++) {
-            if (String(drow[dc] ?? '').toLowerCase().includes(needle)) {
-              hit = { row: dr, col: dc, cell: String(drow[dc]) }
-              break
-            }
-          }
-        }
-        if (hit) {
-          console.log(
-            '[DIAG-1] file=%s target "%s": PRESENT in raw rows (row %s, col %s, cell=%s)',
-            fileName,
-            target,
-            String(hit.row),
-            String(hit.col),
-            JSON.stringify(hit.cell)
-          )
-        } else {
-          console.log('[DIAG-1] file=%s target "%s": ABSENT from raw rows (before normalization)', fileName, target)
-        }
-      }
-    } catch (diagErr) {
-      console.log('[DIAG-1] logging error (non-fatal):', diagErr && diagErr.message)
-    }
-    // ===== end [DIAG-1] =====================================================
+    // NQ-6C.2: a content-detected sectioned GL is GL evidence regardless of the
+    // filename-based classification, so the GL commentary path engages for it
+    // even when the file was not named like a ledger.
+    const classificationType =
+      normalized.fileType === SECTIONED_GL
+        ? 'General Ledger (GL)'
+        : (ex.classification && ex.classification.type) || 'Supporting Document'
 
     for (let r = 0; r < rows.length; r++) {
       const row = rows[r]
@@ -235,12 +177,6 @@ export function buildEvidenceIndex(supporting = []) {
       })
     }
   }
-
-  // ===== [DIAG-1] TEMPORARY — total entries after buildEvidenceIndex(). =====
-  // (4) How many entries ended up in the index once every supporting file was
-  // processed. REMOVE alongside the per-file [DIAG-1] block above.
-  console.log('[DIAG-1] buildEvidenceIndex() complete: %s total index entries', String(entries.length))
-  // ===== end [DIAG-1] =====================================================
 
   return entries
 }
