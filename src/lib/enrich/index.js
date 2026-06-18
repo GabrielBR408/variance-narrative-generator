@@ -103,6 +103,8 @@ function enrichNote(note, index, options, period) {
       fileName: c.fileName,
       classificationType: c.classificationType,
       confidence: c.confidence,
+      // NQ-4C.1: additive metadata — the matching tier that produced this citation.
+      matchMethod: c.matchMethod,
       sourceRows: c.sourceRows,
       thick: c.thick,
       detail: c.detail
@@ -267,7 +269,16 @@ export function enrichNarrative(narrative, { supporting = [], floor = CONFIDENCE
   return { ...narrative, periods }
 }
 
-export { buildEvidenceIndex, matchAccount, scoreMatch, normalizeName, accountCode, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
+export { buildEvidenceIndex, matchAccount, scoreMatch, scoreMatchDetailed, normalizeName, accountCode, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
+export {
+  significantTokens,
+  resolveScore,
+  QUALIFIER_TOKENS,
+  DISQUALIFYING_TOKENS,
+  RESOLVED_EQUAL_SCORE,
+  RESOLVED_SUBSET_SCORE,
+  RESOLVE_JACCARD_MIN
+} from './accountResolve.js'
 export { explanationClause, glEvidenceSentence, commentarySentence, detailedCommentarySentence, polishVendor, polishMemo, displayAccount, descriptorFor, approxMoney } from './templates.js'
 export { DEFAULT_COMMENTARY_DETAIL, commentaryModeFromStyle } from './commentaryMode.js'
 export {
