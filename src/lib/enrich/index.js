@@ -36,6 +36,7 @@ import { reconstructDetail } from './reconstructDetail.js'
 import { selectDetailEvidence } from './detailEvidence.js'
 import { explanationCommentary, finalizeNoteCommentary } from './commentaryIntent.js'
 import { prepareEvidence } from './prepareEvidence.js'
+import { diagnose } from './diagnose.js'
 
 // Only these sections hold flagged variance notes — they are the only ones we
 // enrich. Executive Summary (a roll-up) and Missing Data (no comparison) are
@@ -88,7 +89,14 @@ function enrichNote(note, index, options, period) {
     // invariant (the note is returned unchanged).
     if (options.mode === 'detailed') {
       const factual = finalizeNoteCommentary({ note, glSentence: null, hasCitation: false })
-      if (factual) return { ...note, text: appendSentence(note.text, factual), enriched: true }
+      if (factual) {
+        // NQ-5A: attach diagnosis metadata only where the note is already rebuilt
+        // (a new object is returned here), so the no-citation identity invariant is
+        // preserved. No GL signals are available on this branch — diagnose works
+        // from the note's own figures (zero-actual, unbudgeted, account family, …).
+        const diagnosis = diagnose({ note, hasCitation: false })
+        return { ...note, text: appendSentence(note.text, factual), enriched: true, diagnosis }
+      }
     }
     return note
   }
@@ -142,6 +150,12 @@ function enrichNote(note, index, options, period) {
     ? prepareEvidence({ note, citation: citations.find((c) => c.fileName === primary.fileName) })
     : null
 
+  // NQ-5A: hoisted so the diagnosis can read the same GL signals the wording used.
+  // Default to the non-GL primary's detail; the GL branch overwrites these.
+  let diagContribution = null
+  let diagClassifyType = null
+  let diagDetail = primary.detail || null
+
   let text = note.text
   if (isGL(primary.classificationType)) {
     // Phase 19B: rank the GL evidence by contribution relevance to THIS variance
@@ -183,6 +197,10 @@ function enrichNote(note, index, options, period) {
       accountType: note.accountType,
       contribution
     })
+    // NQ-5A: surface the GL signals to the diagnosis (metadata only).
+    diagContribution = contribution
+    diagClassifyType = type
+    diagDetail = detail
     let sentence = commentarySentence({
       type,
       account: note.account,
@@ -235,6 +253,19 @@ function enrichNote(note, index, options, period) {
   }
   const result = { ...note, text, support, enriched: true }
   if (preparedEvidence) result.preparedEvidence = preparedEvidence
+  // NQ-5A: attach diagnosis metadata. The note is already a new object here, so the
+  // no-match / no-supporting reference-identity invariants are untouched. Diagnosis
+  // is advisory metadata — no template, planner, or export reads it, so wording is
+  // byte-identical, and it never writes back onto the note/support confidence.
+  result.diagnosis = diagnose({
+    note,
+    contribution: diagContribution,
+    classifyType: diagClassifyType,
+    detail: diagDetail,
+    confidence: primary.confidence,
+    thick: primary.thick,
+    hasCitation: true
+  })
   return result
 }
 
@@ -305,6 +336,7 @@ export {
   BORDERLINE_MATERIAL_MAX
 } from './commentaryIntent.js'
 export { accountSemanticType, accountSemanticCommentary, ACCOUNT_SEMANTIC } from './accountSemantics.js'
+export { diagnose, DIAGNOSIS_NATURES, EVIDENCE_SOURCES } from './diagnose.js'
 export { prepareEvidence, TOP_CONTRIBUTORS_MAX } from './prepareEvidence.js'
 export {
   rankContribution,
