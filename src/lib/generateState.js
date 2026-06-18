@@ -64,6 +64,22 @@ export function generateButtonState({ status, readiness } = {}) {
   }
 }
 
+// --- UX-1: Generate always runs in AI mode --------------------------------
+// The Generic/AI toggle is gone — every generation is AI-mode ("cited"). Before
+// the first generation in a session the AI disclosure must be acknowledged, so a
+// Generate click either opens the disclosure (first time) or generates (once
+// acknowledged). The acknowledgment is tracked per session by the caller.
+export const AI_LLM_MODE = 'cited'
+
+// Decide what a Generate click should do. Returns one of:
+//   'disclose' — show the AI disclosure first (not yet acknowledged)
+//   'generate' — proceed with generation in AI mode
+//   'noop'     — a request is already in flight
+export function generateClickAction({ acknowledged, busy } = {}) {
+  if (busy) return 'noop'
+  return acknowledged ? 'generate' : 'disclose'
+}
+
 // --- Result freshness (Phase 22.2 / 22.3) ---------------------------------
 // A generated result reflects the settings AND the files in force WHEN it was
 // generated. If the user then changes a threshold, the commentary mode, or the
