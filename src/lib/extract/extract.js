@@ -40,10 +40,6 @@ export function extensionOf(name = '') {
   return dot >= 0 ? name.slice(dot + 1).toLowerCase() : ''
 }
 
-export function isExtractable(name = '') {
-  return Boolean(KIND_BY_EXT[extensionOf(name)])
-}
-
 // Friendly, content-free messages. We never surface raw parser errors.
 const MESSAGES = {
   unsupported: 'Extraction unavailable for this file type.',
