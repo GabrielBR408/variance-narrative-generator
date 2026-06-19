@@ -15,12 +15,15 @@ test('Detailed is the default commentary detail level', () => {
   assert.equal(DEFAULT_COMMENTARY_DETAIL, 'Detailed')
 })
 
-test('commentaryModeFromStyle defaults to detailed and honors an explicit Conservative', () => {
+test('commentaryModeFromStyle maps the active reportStyle and defaults to detailed', () => {
+  // Fix B: the mapper reads the LIVE Style-panel field (reportStyle), not the
+  // removed/orphaned commentaryDetail. Missing/unknown still defaults to detailed.
   assert.equal(commentaryModeFromStyle(undefined), 'detailed')
   assert.equal(commentaryModeFromStyle({}), 'detailed')
-  assert.equal(commentaryModeFromStyle({ commentaryDetail: 'Detailed' }), 'detailed')
-  assert.equal(commentaryModeFromStyle({ commentaryDetail: 'anything-else' }), 'detailed')
-  assert.equal(commentaryModeFromStyle({ commentaryDetail: 'Conservative' }), 'conservative')
+  assert.equal(commentaryModeFromStyle({ reportStyle: 'Detailed' }), 'detailed')
+  assert.equal(commentaryModeFromStyle({ reportStyle: 'Concise' }), 'conservative')
+  // The orphaned legacy field must no longer drive the mode.
+  assert.equal(commentaryModeFromStyle({ commentaryDetail: 'Conservative' }), 'detailed')
 })
 
 // --- vendor normalization ---------------------------------------------------

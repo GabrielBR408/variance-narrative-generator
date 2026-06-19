@@ -144,6 +144,13 @@ const SYSTEM_PROMPT =
   'MAPPING_PASSTHROUGH = offset/recovery structure); ' +
   'never invent figures not present in the provided rows; ' +
   'do not restate the dollar or percent amount; ' +
+  // Fix B (direction): variance direction is determined deterministically from
+  // the account type and the variance sign — it is NOT the model's call. The
+  // model must describe WHY a variance occurred, never WHETHER it is good or bad,
+  // so its prose can never flip a line between favorable and unfavorable.
+  'do not state or imply whether the variance is favorable or unfavorable, ' +
+  'good or bad, positive or negative, better or worse, or over/under budget — ' +
+  'that judgment is made elsewhere; describe only the nature of the activity; ' +
   'do not use hedging language such as \'appears\', \'may\', or \'possibly\' — ' +
   'the GL rows are the evidence.'
 

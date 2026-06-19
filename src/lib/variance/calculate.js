@@ -12,14 +12,25 @@ import { DEFAULT_THRESHOLDS, isTriggered } from './thresholds.js'
 // ("cost of sales", "sales tax") would otherwise be miscaught by the broad
 // revenue word "sales". Anything unmatched stays unknown → neutral.
 const EXPENSE_RE =
-  /expense|cost|\bcogs\b|salar|wage|payroll|\brent\b|utilit|deprec|amorti|insurance|supplies|maintenance|repair|\btax(es)?\b|overhead|freight|marketing|advertis|interest\s*expense|fees?\s*(paid|expense)|spend/i
+  /expense|cost|\bcogs\b|salar|wage|payroll|\brent\b|utilit|deprec|amorti|insurance|supplies|maintenance|repair|\btax(es)?\b|overhead|freight|marketing|advertis|interest\s*expense|fees?\s*(paid|expense)|\badmin(?:istrat\w*)?\b|spend/i
 const REVENUE_RE =
   /revenue|\bsales\b|\bincome\b|\bfees?\b|turnover|proceeds|receipts?|earnings|billings/i
+
+// A bare "fee/fees" word is ambiguous: on an owner/operator statement an
+// unqualified fee line (management, admin, legal, professional, asset-management)
+// is an expense the owner PAYS, not income. It only reads as revenue when the
+// label explicitly says so ("Fee Income", "fee revenue"). Without this guard a
+// plain "Admin Fee" matched the broad revenue \bfees?\b and was mislabeled
+// revenue, which then flipped its favorable/unfavorable direction.
+const FEE_RE = /\bfees?\b/i
+const REVENUE_QUALIFIER_RE = /\bincome\b|revenue/i
 
 // Returns 'revenue' | 'expense' | 'unknown'.
 export function accountType(account = '') {
   const name = String(account)
   if (EXPENSE_RE.test(name)) return 'expense'
+  // Unqualified fee (no income/revenue word) → expense, not revenue.
+  if (FEE_RE.test(name) && !REVENUE_QUALIFIER_RE.test(name)) return 'expense'
   if (REVENUE_RE.test(name)) return 'revenue'
   return 'unknown'
 }

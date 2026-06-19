@@ -24,6 +24,7 @@
 import Busboy from 'busboy'
 import { runPipeline } from '../src/lib/pipeline.js'
 import { enrichNarrative } from '../src/lib/enrich/index.js'
+import { commentaryModeFromStyle } from '../src/lib/enrich/commentaryMode.js'
 import { LLM_ENABLED, checkIpLimit, checkGlobalLimit, enrichWithLLM } from './llm.js'
 
 // Reasonable safety limits. Files are never stored, so these only guard memory
@@ -117,7 +118,10 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
       // note.preparedEvidence on matching notes. The client will skip notes
       // already marked enriched:true, so there is no double-enrichment.
       const supporting = Array.isArray(extractions && extractions.supporting) ? extractions.supporting : []
-      const enrichedNarrative = enrichNarrative(narrative, { supporting, mode: 'detailed' })
+      // Fix B (wiring): honor the active Style panel's reportStyle instead of a
+      // hardcoded 'detailed', so Concise vs Detailed reaches the deterministic
+      // commentary even on the LLM-enriched path.
+      const enrichedNarrative = enrichNarrative(narrative, { supporting, mode: commentaryModeFromStyle(style) })
 
       // For each period, replace the evidence sentence with LLM commentary
       // where GL support data is available. Falls back per-note on any failure.
