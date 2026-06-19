@@ -33,19 +33,36 @@ export const EXCEL_TITLE = 'Variance Narrative — Owner Summary'
 const CURRENCY_FMT = '$#,##0.00'
 const PERCENT_FMT = '0.0%'
 
-// Owner presentation sheet: the columns the spec names, with widths, number
-// formats, and which carry wrapped long text.
+// Owner presentation sheet — Phase D: a single comparative income-statement
+// layout. ONE row per account line, with the Current-period and Year-to-Date
+// figures laid out SIDE BY SIDE (the same shape as the source comparative income
+// statements) instead of the old stacked "Current then YTD" view. The financial
+// grid leads, exactly the columns the spec names; all the existing descriptive
+// data (status, category, narrative, supporting detail) is preserved, appended
+// after the grid and grouped per period so nothing is dropped. Columns marked
+// `percent` carry a fraction (value / 100) so the 0.0% number format renders.
 export const OWNER_COLUMNS = [
-  { header: 'Section', key: 'section', width: 16 },
-  { header: 'Period', key: 'period', width: 12 },
-  { header: 'Account', key: 'account', width: 30, wrap: true },
-  { header: 'Actual', key: 'actual', width: 15, numFmt: CURRENCY_FMT },
-  { header: 'Budget / Prior', key: 'comparison', width: 16, numFmt: CURRENCY_FMT },
-  { header: 'Variance $', key: 'varianceAmount', width: 15, numFmt: CURRENCY_FMT },
-  { header: 'Variance %', key: 'variancePercent', width: 12, numFmt: PERCENT_FMT },
-  { header: 'Category', key: 'category', width: 13 },
-  { header: 'Narrative / Explanation', key: 'narrative', width: 64, wrap: true },
-  { header: 'Supporting Detail', key: 'supporting', width: 40, wrap: true }
+  { header: 'Account', key: 'account', width: 32, wrap: true },
+  // Current period — financial grid.
+  { header: 'Current Actual', key: 'currentActual', width: 15, numFmt: CURRENCY_FMT },
+  { header: 'Current Budget', key: 'currentComparison', width: 15, numFmt: CURRENCY_FMT },
+  { header: 'Current Variance', key: 'currentVarianceAmount', width: 15, numFmt: CURRENCY_FMT },
+  { header: 'Current Variance %', key: 'currentVariancePercent', width: 14, numFmt: PERCENT_FMT, percent: true },
+  // Year-to-Date period — financial grid.
+  { header: 'YTD Actual', key: 'ytdActual', width: 15, numFmt: CURRENCY_FMT },
+  { header: 'YTD Budget', key: 'ytdComparison', width: 15, numFmt: CURRENCY_FMT },
+  { header: 'YTD Variance', key: 'ytdVarianceAmount', width: 15, numFmt: CURRENCY_FMT },
+  { header: 'YTD Variance %', key: 'ytdVariancePercent', width: 14, numFmt: PERCENT_FMT, percent: true },
+  // Preserved descriptive data — Current period.
+  { header: 'Current Category', key: 'currentCategory', width: 13 },
+  { header: 'Current Status', key: 'currentSection', width: 16 },
+  { header: 'Current Explanation', key: 'currentNarrative', width: 60, wrap: true },
+  { header: 'Current Supporting Detail', key: 'currentSupporting', width: 36, wrap: true },
+  // Preserved descriptive data — Year-to-Date period.
+  { header: 'YTD Category', key: 'ytdCategory', width: 13 },
+  { header: 'YTD Status', key: 'ytdSection', width: 16 },
+  { header: 'YTD Explanation', key: 'ytdNarrative', width: 60, wrap: true },
+  { header: 'YTD Supporting Detail', key: 'ytdSupporting', width: 36, wrap: true }
 ]
 
 // Optional evidence/debug sheet: traceability for each matched supporting file.
@@ -156,12 +173,12 @@ function rowKey(account, sourceRows) {
   return `${account || ''}#${first}`
 }
 
-// One owner row built directly from a narrated note (legacy/fallback shape).
-function ownerRowFromNote(section, periodLabel, note) {
+// One per-account ENTRY for a single period (the pre-merge shape). Built either
+// from a narrated note (legacy/fallback) or from a full-table variance row.
+function entryFromNote(section, note) {
   return {
-    section,
-    period: periodLabel,
     account: note.account || '',
+    section,
     actual: typeof note.actual === 'number' ? note.actual : null,
     comparison: typeof note.comparison === 'number' ? note.comparison : null,
     varianceAmount: typeof note.varianceAmount === 'number' ? note.varianceAmount : null,
@@ -172,75 +189,147 @@ function ownerRowFromNote(section, periodLabel, note) {
   }
 }
 
-// Build the PURE owner-presentation rows from a (possibly enriched/scoped)
-// narrative.
+// Build the per-account ENTRIES for ONE period (figures + status + narrative +
+// supporting detail). This is the per-period half of the old buildOwnerRows; the
+// side-by-side merge below pairs the Current and YTD entries into one row.
 //
-// Phase 21.6 bugfix: the Excel export carries the ENTIRE variance report — one
-// row for every line of the base report, across every period — not only the
-// rows that crossed a threshold. The threshold governs solely whether a row
-// receives a narrative/commentary: below-threshold rows still appear, with blank
-// Narrative and Supporting Detail. The narrated text and GL supporting summary
-// for triggered rows are merged in from the (enriched) High-Variance notes; the
-// Missing-Data explanation is merged from the Missing-Data notes.
+// Phase 21.6: the entries carry the ENTIRE variance report — one entry for every
+// line of the base report, not only the rows that crossed a threshold. The
+// threshold governs solely whether an entry receives a narrative/commentary;
+// below-threshold lines still appear, with blank Narrative and Supporting Detail.
 //
-// Narratives produced before this field existed (or hand-built fixtures) fall
+// Narratives produced before allVariances existed (or hand-built fixtures) fall
 // back to the original triggered + missing-only view.
-export function buildOwnerRows(narrative) {
-  const rows = []
-  for (const period of periodsOf(narrative)) {
-    const periodLabel = period?.periodLabel || 'Current'
-    const all = Array.isArray(period?.allVariances) ? period.allVariances : null
+function buildPeriodEntries(period) {
+  const all = Array.isArray(period?.allVariances) ? period.allVariances : null
 
-    // Fallback: no full-table metadata — emit the original notes-only view.
-    if (!all) {
-      for (const { key, label } of SECTIONS) {
-        const notes = Array.isArray(period?.[key]) ? period[key] : []
-        for (const note of notes) rows.push(ownerRowFromNote(label, periodLabel, note))
-      }
-      continue
+  // Fallback: no full-table metadata — emit the original notes-only view.
+  if (!all) {
+    const entries = []
+    for (const { key, label } of SECTIONS) {
+      const notes = Array.isArray(period?.[key]) ? period[key] : []
+      for (const note of notes) entries.push(entryFromNote(label, note))
     }
-
-    // Index the narrated notes so each full-table row can pull its text/support.
-    const triggered = new Map()
-    for (const note of Array.isArray(period.highVariances) ? period.highVariances : []) {
-      triggered.set(rowKey(note.account, note.sourceRows), note)
-    }
-    const missing = new Map()
-    for (const note of Array.isArray(period.missingData) ? period.missingData : []) {
-      missing.set(rowKey(note.account, note.sourceRows), note)
-    }
-
-    for (const row of all) {
-      const key = rowKey(row.account, row.sourceRows)
-      let section = 'Within Threshold'
-      let narrative = ''
-      let supporting = ''
-      if (row.missingData) {
-        section = 'Missing Data'
-        const note = missing.get(key)
-        narrative = (note && note.text) || ''
-      } else if (row.thresholdTriggered) {
-        section = 'High Variance'
-        const note = triggered.get(key)
-        narrative = (note && note.text) || ''
-        supporting = note ? ownerSupportSummary(note) : ''
-      } else if (row.rollup) {
-        section = 'Total'
-      }
-      rows.push({
-        section,
-        period: periodLabel,
-        account: row.account || '',
-        actual: typeof row.actual === 'number' ? row.actual : null,
-        comparison: typeof row.comparison === 'number' ? row.comparison : null,
-        varianceAmount: typeof row.varianceAmount === 'number' ? row.varianceAmount : null,
-        variancePercent: typeof row.variancePercent === 'number' ? row.variancePercent : null,
-        category: row.category ? capitalize(row.category) : '',
-        narrative,
-        supporting
-      })
-    }
+    return entries
   }
+
+  // Index the narrated notes so each full-table row can pull its text/support.
+  const triggered = new Map()
+  for (const note of Array.isArray(period.highVariances) ? period.highVariances : []) {
+    triggered.set(rowKey(note.account, note.sourceRows), note)
+  }
+  const missing = new Map()
+  for (const note of Array.isArray(period.missingData) ? period.missingData : []) {
+    missing.set(rowKey(note.account, note.sourceRows), note)
+  }
+
+  return all.map((row) => {
+    const key = rowKey(row.account, row.sourceRows)
+    let section = 'Within Threshold'
+    let narrative = ''
+    let supporting = ''
+    if (row.missingData) {
+      section = 'Missing Data'
+      const note = missing.get(key)
+      narrative = (note && note.text) || ''
+    } else if (row.thresholdTriggered) {
+      section = 'High Variance'
+      const note = triggered.get(key)
+      narrative = (note && note.text) || ''
+      supporting = note ? ownerSupportSummary(note) : ''
+    } else if (row.rollup) {
+      section = 'Total'
+    }
+    return {
+      account: row.account || '',
+      section,
+      actual: typeof row.actual === 'number' ? row.actual : null,
+      comparison: typeof row.comparison === 'number' ? row.comparison : null,
+      varianceAmount: typeof row.varianceAmount === 'number' ? row.varianceAmount : null,
+      variancePercent: typeof row.variancePercent === 'number' ? row.variancePercent : null,
+      category: row.category ? capitalize(row.category) : '',
+      narrative,
+      supporting
+    }
+  })
+}
+
+// Index entries by account label, disambiguating repeated labels by their
+// order of appearance, so the same account in Current and YTD pairs up even
+// when the two periods carry different source-row indexes.
+function indexByAccountOccurrence(entries) {
+  const map = new Map()
+  const counts = new Map()
+  for (const e of entries) {
+    const n = counts.get(e.account) || 0
+    counts.set(e.account, n + 1)
+    map.set(`${e.account}#${n}`, e)
+  }
+  return map
+}
+
+// Flatten a (Current, YTD) entry pair into one comparative owner row. Either
+// side may be absent — a single-period or period-scoped narrative simply leaves
+// the other side's columns blank.
+function mergeOwnerRow(current, ytd) {
+  const base = current || ytd || {}
+  return {
+    account: base.account || '',
+    currentActual: current ? current.actual : null,
+    currentComparison: current ? current.comparison : null,
+    currentVarianceAmount: current ? current.varianceAmount : null,
+    currentVariancePercent: current ? current.variancePercent : null,
+    currentCategory: current ? current.category : '',
+    currentSection: current ? current.section : '',
+    currentNarrative: current ? current.narrative : '',
+    currentSupporting: current ? current.supporting : '',
+    ytdActual: ytd ? ytd.actual : null,
+    ytdComparison: ytd ? ytd.comparison : null,
+    ytdVarianceAmount: ytd ? ytd.varianceAmount : null,
+    ytdVariancePercent: ytd ? ytd.variancePercent : null,
+    ytdCategory: ytd ? ytd.category : '',
+    ytdSection: ytd ? ytd.section : '',
+    ytdNarrative: ytd ? ytd.narrative : '',
+    ytdSupporting: ytd ? ytd.supporting : ''
+  }
+}
+
+// Build the PURE owner-presentation rows from a (possibly enriched/scoped)
+// narrative — ONE comparative row per account line, with the Current and YTD
+// figures side by side (Phase D). The Current period drives row order; any
+// YTD-only account (e.g. when scoped to YTD) is appended afterward. A narrative
+// that carries a single period simply leaves the other side blank, so existing
+// single-period and period-scoped exports keep all their data.
+export function buildOwnerRows(narrative) {
+  const periods = periodsOf(narrative)
+  const currentPeriod = periods.find((p) => p?.period !== 'ytd') || null
+  const ytdPeriod = periods.find((p) => p?.period === 'ytd') || null
+
+  const currentEntries = currentPeriod ? buildPeriodEntries(currentPeriod) : []
+  const ytdEntries = ytdPeriod ? buildPeriodEntries(ytdPeriod) : []
+  const ytdByAccount = indexByAccountOccurrence(ytdEntries)
+
+  const rows = []
+  const matchedYtd = new Set()
+  const counts = new Map()
+  for (const ce of currentEntries) {
+    const n = counts.get(ce.account) || 0
+    counts.set(ce.account, n + 1)
+    const key = `${ce.account}#${n}`
+    const ye = ytdByAccount.get(key) || null
+    if (ye) matchedYtd.add(key)
+    rows.push(mergeOwnerRow(ce, ye))
+  }
+
+  // Append any YTD account line that had no Current counterpart.
+  const ytdCounts = new Map()
+  for (const ye of ytdEntries) {
+    const n = ytdCounts.get(ye.account) || 0
+    ytdCounts.set(ye.account, n + 1)
+    const key = `${ye.account}#${n}`
+    if (!matchedYtd.has(key)) rows.push(mergeOwnerRow(null, ye))
+  }
+
   return rows
 }
 
@@ -335,17 +424,12 @@ function renderOwnerSheet(wb, model) {
   r++
 
   for (const row of model.ownerRows) {
-    setCell(ws, r, 0, row.section)
-    setCell(ws, r, 1, row.period)
-    setCell(ws, r, 2, row.account)
-    setCell(ws, r, 3, row.actual)
-    setCell(ws, r, 4, row.comparison)
-    setCell(ws, r, 5, row.varianceAmount)
-    // Percent stored as a fraction so the 0.0% number format renders correctly.
-    setCell(ws, r, 6, row.variancePercent === null ? null : row.variancePercent / 100)
-    setCell(ws, r, 7, row.category)
-    setCell(ws, r, 8, row.narrative)
-    setCell(ws, r, 9, row.supporting)
+    model.ownerColumns.forEach((col, ci) => {
+      let value = row[col.key]
+      // Percent columns store a fraction so the 0.0% number format renders.
+      if (col.percent && typeof value === 'number') value = value / 100
+      setCell(ws, r, ci, value)
+    })
     r++
   }
   return ws
