@@ -183,46 +183,62 @@ export function detectComparisonSets(columns = [], rows = []) {
   // those blocks so each period is detected on its own — even when the periods
   // are NOT distinguished by a "Current"/"YTD" label (a flat header row that
   // simply repeats "Actual | Budget | …", which the merged period band above it
-  // did not survive as). A new block starts whenever a value type repeats (a
-  // SECOND "Actual" begins the next period) or the explicit period label changes.
-  const blocks = [] // [{ explicit, set: { actual, budget, prior } }]
+  // did not survive as).
+  //
+  // A block boundary is a REPEATED value type (a SECOND "Actual" begins the next
+  // period). We deliberately do NOT split on an explicit-label change, because a
+  // merged period band that does not sit flush over its section (real exports
+  // anchor "Year-To-Date" over the YTD *Budget*, one column right of YTD Actual)
+  // leaves a stray "Current"/"YTD" word mid-block; splitting on it would tear the
+  // YTD Actual off its own block and drop it. Each block's period is decided
+  // afterward by scanning ALL of its column labels (see below).
+  const blocks = [] // [{ set: { actual, budget, prior } }]
   let block = null
   const valueIndexes = []
 
   columns.forEach((header, i) => {
     const type = matchType(header)
     if (!type) return
-    const ep = explicitPeriod(header)
-    const startNew =
-      block === null ||
-      block.set[type] !== null ||
-      (ep && block.explicit && ep !== block.explicit)
-    if (startNew) {
-      block = { explicit: ep || null, set: { actual: null, budget: null, prior: null } }
+    if (block === null || block.set[type] !== null) {
+      block = { set: { actual: null, budget: null, prior: null } }
       blocks.push(block)
-    } else if (ep && !block.explicit) {
-      block.explicit = ep
     }
     block.set[type] = i
     valueIndexes.push(i)
   })
 
-  // Resolve each block to a period: an explicitly labeled block keeps its label;
-  // the rest fall back to position (first block → current, second → ytd, …),
-  // skipping any period an explicit label already claimed.
+  // Decide each block's period from the labels on ITS OWN value columns: any YTD
+  // word anywhere in the block wins (so a band label shifted onto the block's
+  // Budget column still tags the whole block YTD), then any Current/MTD word,
+  // else unlabeled. This tolerates the band-misalignment above where the YTD
+  // Actual column inherited the neighbouring "Current Period" label.
+  function blockPeriod(b) {
+    let ytd = false
+    let current = false
+    for (const t of ['actual', 'budget', 'prior']) {
+      const idx = b.set[t]
+      if (idx === null) continue
+      const ep = explicitPeriod(columns[idx])
+      if (ep === 'ytd') ytd = true
+      else if (ep === 'current') current = true
+    }
+    return ytd ? 'ytd' : current ? 'current' : null
+  }
+
+  // Resolve each block to a period: a labeled block keeps its label; the rest
+  // fall back to position (first block → current, second → ytd, …), skipping any
+  // period an explicit label already claimed.
   const byPeriod = new Map() // period -> { actual, budget, prior } indexes
   const seen = [] // periods in first-seen order
-  const used = new Set()
-  for (const b of blocks) {
-    if (b.explicit) used.add(b.explicit)
-  }
+  const labels = blocks.map(blockPeriod)
+  const used = new Set(labels.filter(Boolean))
   const fallback = ['current', 'ytd']
   let fi = 0
-  for (const b of blocks) {
-    let period = b.explicit
+  blocks.forEach((b, bi) => {
+    let period = labels[bi]
     if (!period) {
       while (fi < fallback.length && used.has(fallback[fi])) fi++
-      period = fi < fallback.length ? fallback[fi++] : `period${blocks.indexOf(b) + 1}`
+      period = fi < fallback.length ? fallback[fi++] : `period${bi + 1}`
       used.add(period)
     }
     if (!byPeriod.has(period)) {
@@ -236,7 +252,7 @@ export function detectComparisonSets(columns = [], rows = []) {
         if (existing[t] === null && b.set[t] !== null) existing[t] = b.set[t]
       }
     }
-  }
+  })
 
   const account = detectAccountColumn(columns, rows, valueIndexes)
 
