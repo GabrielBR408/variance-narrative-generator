@@ -35,6 +35,7 @@ export async function augmentWithOcr(result, file, { role } = {}) {
   // The base income statement reaches OCR only when its text layer is unusable
   // (garbled). A base report that already parsed is returned unchanged.
   if (role === 'baseReport') {
+    console.log('[OCR] augmentWithOcr — baseReport — scanned:', isScannedPdf(result), 'garbled:', isGarbledPdf(result))
     if (!isGarbledPdf(result) && !isScannedPdf(result)) return result
     const table = await ocrExtractTable(file, { mode: 'incomeStatement' })
     if (!table) return result // silent: keep the original (unusable) result
