@@ -166,20 +166,16 @@ export function parseOcrRows(text) {
 // requested mode — GL mode ⇒ { accounts }, incomeStatement mode ⇒ { rows } — or
 // the empty shape on any failure / gating. Never throws.
 export async function runOcr({ images = [], ip = 'unknown', mode = 'gl' } = {}) {
-  console.log('[OCR-SERVER] runOcr called — mode:', mode, 'ip:', ip, 'images:', images.length)
   const empty = mode === 'incomeStatement' ? { rows: [] } : { accounts: [] }
   if (!OCR_ENABLED) return empty
   if (!process.env.ANTHROPIC_API_KEY) return empty
   if (!Array.isArray(images) || images.length === 0) return empty
-  if (!checkIpLimit(ip) || !checkGlobalLimit()) {
-    console.log('[OCR-SERVER] rate limit hit — ip:', ip, 'mode:', mode)
-    return empty
-  }
+  if (!checkIpLimit(ip) || !checkGlobalLimit()) return empty
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const resp = await client.messages.create({
       model: OCR_MODEL,
-      max_tokens: mode === 'incomeStatement' ? 4096 : OCR_MAX_TOKENS,
+      max_tokens: mode === 'incomeStatement' ? 10000 : OCR_MAX_TOKENS,
       system: OCR_SYSTEM,
       messages: [{ role: 'user', content: buildOcrContent(images.slice(0, OCR_MAX_PAGES), mode) }]
     })
