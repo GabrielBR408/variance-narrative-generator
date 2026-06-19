@@ -74,6 +74,113 @@ function appendSentence(base, sentence) {
   return `${String(base).replace(/\s+$/, '')} ${sentence}`
 }
 
+// The no-supporting-match branch of enrichNote (NQ-2B). With no citation, a
+// detailed-mode note may still carry a note-level factual explanation — a
+// zero-actual budgeted line (rule 3), a negative/credit actual (rule 5), or a
+// material unexplained variance flagged for review (rule 4). Conservative mode
+// keeps the byte-identical identity invariant (the SAME note is returned). When
+// a factual line applies, a NEW note is returned with diagnosis metadata
+// attached (NQ-5A) — diagnose works from the note's own figures, as no GL
+// signals exist on this branch. Extracted verbatim from enrichNote.
+function enrichNoteWithoutCitations(note, options) {
+  if (options.mode === 'detailed') {
+    const factual = finalizeNoteCommentary({ note, glSentence: null, hasCitation: false })
+    if (factual) {
+      const diagnosis = diagnose({ note, hasCitation: false })
+      return { ...note, text: appendSentence(note.text, factual), originalText: note.text, enriched: true, diagnosis }
+    }
+  }
+  return note
+}
+
+// The GL-detail branch of enrichNote (Phase 19B / NQ-2A.1 / NQ-4B.1b). Computes
+// the owner-facing GL sentence (or its detailed-mode explanation) plus the
+// contribution / classifier-type / detail signals the diagnosis later reads.
+// Returns { sentence, contribution, type, detail }; the caller appends the
+// sentence (when non-null) and threads the diag signals. Extracted verbatim — no
+// math, wording, or gating changed; it patches only a LOCAL `detail` copy, never
+// `primary.detail`/`support`, so support metadata and exports are unchanged.
+function buildGLCommentary({ note, primary, period, options, preparedEvidence }) {
+  // The citation's match score is the only confidence; it rides on `detail` as
+  // the approved contribution input.
+  const detail = { ...primary.detail, confidence: primary.confidence }
+  // NQ-4B.1b: consume the dormant NQ-4B.1a prepared evidence. When summarizeDetail
+  // could not produce a reliable transaction total (e.g. a Debit/Credit ledger,
+  // where the amount columns are ambiguous), substitute the netted total and the
+  // largest netted transaction prepared upstream — Balance columns already
+  // excluded. Gated so a single-amount GL (already reliable) is NEVER touched, so
+  // its wording stays byte-identical. The reconciled path stays purely
+  // quantitative: any vendor/description on the detail is cleared so the existing
+  // template never surfaces a name newly enabled by the netted total.
+  const detailTotalReliable =
+    typeof detail.total === 'number' && Number.isFinite(detail.total) && detail.total !== 0
+  if (!detailTotalReliable && preparedEvidence && preparedEvidence.amountReliable) {
+    detail.total = preparedEvidence.netTotal
+    detail.maxTxn = preparedEvidence.maxTxn
+    detail.vendor = null
+    detail.description = null
+  }
+  const contribution = rankContribution({
+    varianceAmount: note.varianceAmount,
+    comparisonType: note.comparisonType,
+    accountType: note.accountType,
+    category: note.category,
+    detail
+  })
+  const { type } = classifyGLCommentary({
+    detail,
+    comparison: note.comparison,
+    comparisonType: note.comparisonType,
+    confidence: primary.confidence,
+    thick: primary.thick,
+    accountType: note.accountType,
+    contribution
+  })
+  let sentence = commentarySentence({
+    type,
+    account: note.account,
+    detail,
+    period,
+    contribution,
+    varianceAmount: note.varianceAmount,
+    accountType: note.accountType
+  })
+  // NQ-2A.1: in detailed mode the conservative evidence sentence is REPLACED by
+  // a single owner-facing EXPLANATION that folds the implication in (S2). It
+  // rides on the same already-computed figures (no new math). When no confident
+  // explanation applies it returns null and the conservative evidence sentence
+  // stands. Default mode is 'conservative', which never reaches this branch, so
+  // output is unchanged. There is NO third sentence — at most two (S1 + S2).
+  if (options.mode === 'detailed') {
+    const reliableTotal =
+      typeof detail.total === 'number' && Number.isFinite(detail.total) && detail.total !== 0
+    const v = Math.abs(Number(note.varianceAmount))
+    const exceedsVariance =
+      reliableTotal && Number.isFinite(v) && Math.abs(detail.total) > v + 0.005
+    const explanation = explanationCommentary({
+      type,
+      contribution,
+      confidence: primary.confidence,
+      thick: primary.thick,
+      exceedsVariance,
+      account: note.account,
+      detail,
+      accountType: note.accountType,
+      comparisonType: note.comparisonType,
+      category: note.category,
+      varianceAmount: note.varianceAmount,
+      period,
+      reconstructed: primary.reconstructed,
+      detailEvidence: primary.detailEvidence
+    })
+    // NQ-2B: route the GL explanation (or the conservative fallback) through the
+    // note-level rules — zero-actual override (rule 3), credit/reversal callout
+    // (rule 5), and operationally-immaterial suppression (rule 6).
+    sentence = finalizeNoteCommentary({ note, glSentence: explanation || sentence, hasCitation: true })
+  }
+  return { sentence, contribution, type, detail }
+}
+
 // Enrich one note in place-free fashion: returns the same note when there is no
 // confident match, or a new note carrying structured `support` metadata and an
 // owner-facing explanation merged into its sentence when there is. `period` is
@@ -81,25 +188,7 @@ function appendSentence(base, sentence) {
 function enrichNote(note, index, options, period) {
   if (!note || typeof note !== 'object' || !note.account || note.enriched) return note
   const citations = matchAccount(note.account, index, options)
-  if (citations.length === 0) {
-    // NQ-2B: with no supporting match, a detailed-mode note may still carry a
-    // note-level factual explanation — a zero-actual budgeted line (rule 3), a
-    // negative/credit actual (rule 5), or a material unexplained variance flagged
-    // for review (rule 4). Conservative mode keeps the byte-identical identity
-    // invariant (the note is returned unchanged).
-    if (options.mode === 'detailed') {
-      const factual = finalizeNoteCommentary({ note, glSentence: null, hasCitation: false })
-      if (factual) {
-        // NQ-5A: attach diagnosis metadata only where the note is already rebuilt
-        // (a new object is returned here), so the no-citation identity invariant is
-        // preserved. No GL signals are available on this branch — diagnose works
-        // from the note's own figures (zero-actual, unbudgeted, account family, …).
-        const diagnosis = diagnose({ note, hasCitation: false })
-        return { ...note, text: appendSentence(note.text, factual), originalText: note.text, enriched: true, diagnosis }
-      }
-    }
-    return note
-  }
+  if (citations.length === 0) return enrichNoteWithoutCitations(note, options)
 
   // Structured metadata for tooling/tests and the Excel export — never rendered
   // as final owner narrative text. `detail` carries the GL-detail summary.
@@ -158,95 +247,14 @@ function enrichNote(note, index, options, period) {
 
   let text = note.text
   if (isGL(primary.classificationType)) {
-    // Phase 19B: rank the GL evidence by contribution relevance to THIS variance
-    // (match.js stays matching-only — the ranking lives in contribution.js). The
-    // citation's match score is the only confidence; it rides on `detail` as the
-    // approved contribution input. Then classify (contribution-gated) and render.
-    const detail = { ...primary.detail, confidence: primary.confidence }
-    // NQ-4B.1b: consume the dormant NQ-4B.1a prepared evidence. When summarizeDetail
-    // could not produce a reliable transaction total (e.g. a Debit/Credit ledger,
-    // where the amount columns are ambiguous), substitute the netted total and the
-    // largest netted transaction prepared upstream — Balance columns already
-    // excluded. Gated so a single-amount GL (already reliable) is NEVER touched, so
-    // its wording stays byte-identical. We patch only this LOCAL copy, never
-    // `primary.detail`/`support`, so the support metadata and exports are unchanged.
-    // The reconciled path stays purely quantitative: any vendor/description on the
-    // detail is cleared so the existing template never surfaces a name newly enabled
-    // by the netted total (no contributor / vendor / memo names in this phase).
-    const detailTotalReliable =
-      typeof detail.total === 'number' && Number.isFinite(detail.total) && detail.total !== 0
-    if (!detailTotalReliable && preparedEvidence && preparedEvidence.amountReliable) {
-      detail.total = preparedEvidence.netTotal
-      detail.maxTxn = preparedEvidence.maxTxn
-      detail.vendor = null
-      detail.description = null
-    }
-    const contribution = rankContribution({
-      varianceAmount: note.varianceAmount,
-      comparisonType: note.comparisonType,
-      accountType: note.accountType,
-      category: note.category,
-      detail
-    })
-    const { type } = classifyGLCommentary({
-      detail,
-      comparison: note.comparison,
-      comparisonType: note.comparisonType,
-      confidence: primary.confidence,
-      thick: primary.thick,
-      accountType: note.accountType,
-      contribution
-    })
+    // Phase 19B: rank the GL evidence by contribution relevance to THIS variance,
+    // classify it (contribution-gated), and render — see buildGLCommentary.
+    const gl = buildGLCommentary({ note, primary, period, options, preparedEvidence })
     // NQ-5A: surface the GL signals to the diagnosis (metadata only).
-    diagContribution = contribution
-    diagClassifyType = type
-    diagDetail = detail
-    let sentence = commentarySentence({
-      type,
-      account: note.account,
-      detail,
-      period,
-      contribution,
-      varianceAmount: note.varianceAmount,
-      accountType: note.accountType
-    })
-    // NQ-2A.1: in detailed mode the conservative evidence sentence is REPLACED by
-    // a single owner-facing EXPLANATION that folds the implication in (S2). It
-    // rides on the same already-computed figures (no new math): the classifier
-    // `type`, the Phase 19B contribution shape, the GL detail (for recurring /
-    // timing keyword signals and the render-safe vendor/memo subject), and
-    // whether the render guard tripped. When no confident explanation applies it
-    // returns null and the conservative evidence sentence stands. Default mode is
-    // 'conservative', which never reaches this branch, so output is unchanged.
-    // There is NO third sentence — a note is at most two sentences (S1 + S2).
-    if (options.mode === 'detailed') {
-      const reliableTotal =
-        typeof detail.total === 'number' && Number.isFinite(detail.total) && detail.total !== 0
-      const v = Math.abs(Number(note.varianceAmount))
-      const exceedsVariance =
-        reliableTotal && Number.isFinite(v) && Math.abs(detail.total) > v + 0.005
-      const explanation = explanationCommentary({
-        type,
-        contribution,
-        confidence: primary.confidence,
-        thick: primary.thick,
-        exceedsVariance,
-        account: note.account,
-        detail,
-        accountType: note.accountType,
-        comparisonType: note.comparisonType,
-        category: note.category,
-        varianceAmount: note.varianceAmount,
-        period,
-        reconstructed: primary.reconstructed,
-        detailEvidence: primary.detailEvidence
-      })
-      // NQ-2B: route the GL explanation (or the conservative fallback) through the
-      // note-level rules — zero-actual override (rule 3), credit/reversal callout
-      // (rule 5), and operationally-immaterial suppression (rule 6).
-      sentence = finalizeNoteCommentary({ note, glSentence: explanation || sentence, hasCitation: true })
-    }
-    if (sentence) text = appendSentence(note.text, sentence)
+    diagContribution = gl.contribution
+    diagClassifyType = gl.type
+    diagDetail = gl.detail
+    if (gl.sentence) text = appendSentence(note.text, gl.sentence)
   } else {
     const clause = explanationClause({ classificationType: primary.classificationType })
     if (clause) text = mergeClause(note.text, clause)
