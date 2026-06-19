@@ -2,7 +2,9 @@ import React, { useMemo, useState } from 'react'
 import { DEFAULT_PERIOD_SCOPE } from '../lib/narrative/periodScope.js'
 import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
 import { previewNarrativeState } from '../lib/previewNarrative.js'
+import { OWNER_SECTIONS as SECTIONS } from '../lib/narrative/sectionDefs.js'
 import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
+import PeriodTabs from './PeriodTabs.jsx'
 
 // --- Narrative Summary — Phase 9A / 21.5 ----------------------------------
 // Presentation only. It mirrors the generate path: one narrative is built from
@@ -11,14 +13,6 @@ import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
 // (GL, budget, prior, …) never produce their own preview narrative — they only
 // enrich the base. All routing/math lives in src/lib/previewNarrative; this
 // component generates no text. Nothing is saved, sent, or exported.
-
-const SECTIONS = [
-  { key: 'executiveSummary', title: 'Executive Summary' },
-  { key: 'highVariances', title: 'High Variances' },
-  { key: 'missingData', title: 'Missing Data' },
-  { key: 'revenueNotes', title: 'Revenue Notes' },
-  { key: 'expenseNotes', title: 'Expense Notes' }
-]
 
 const EMPTY_MSG = {
   executiveSummary: 'No triggered variances to summarize.',
@@ -67,20 +61,11 @@ function NarrativeItem({ narrative }) {
 
       <div className="narrative-body">
         {hasMultiplePeriods && (
-          <div className="variance-periods" role="tablist" aria-label="Comparison period">
-            {periods.map((p) => (
-              <button
-                key={p.period}
-                type="button"
-                role="tab"
-                aria-selected={p.period === active.period}
-                className={`variance-period${p.period === active.period ? ' variance-period--on' : ''}`}
-                onClick={() => setPeriod(p.period)}
-              >
-                {p.periodLabel}
-              </button>
-            ))}
-          </div>
+          <PeriodTabs
+            tabs={periods.map((p) => ({ period: p.period, label: p.periodLabel }))}
+            active={active.period}
+            onSelect={setPeriod}
+          />
         )}
 
         {SECTIONS.map(({ key, title }) => (

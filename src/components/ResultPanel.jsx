@@ -3,8 +3,11 @@ import { classifyFile, confidenceTier } from '../lib/classify.js'
 import { canExport } from '../lib/export/exportState.js'
 import { freshnessBannerVisible } from '../lib/generateState.js'
 import { scopeNarrative, DEFAULT_PERIOD_SCOPE } from '../lib/narrative/periodScope.js'
+import { OWNER_SECTIONS, CONTEXT_SECTION } from '../lib/narrative/sectionDefs.js'
+import { prettySize } from './uiFormat.js'
 import ExportActions from './ExportActions.jsx'
 import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
+import PeriodTabs from './PeriodTabs.jsx'
 
 const NO_FRESHNESS = { stale: false, changed: [] }
 
@@ -49,13 +52,6 @@ const STATUS_TEXT = {
 const ROLE_LABEL = {
   baseReport: 'Base Variance Report',
   supportingFile: 'Supporting File'
-}
-
-function prettySize(bytes) {
-  if (typeof bytes !== 'number') return '—'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export default function ResultPanel({ status, result, periodScope = DEFAULT_PERIOD_SCOPE, freshness = NO_FRESHNESS }) {
@@ -135,16 +131,10 @@ export default function ResultPanel({ status, result, periodScope = DEFAULT_PERI
   )
 }
 
-const SECTIONS = [
-  { key: 'executiveSummary', title: 'Executive Summary' },
-  { key: 'highVariances', title: 'High Variances' },
-  { key: 'missingData', title: 'Missing Data' },
-  { key: 'revenueNotes', title: 'Revenue Notes' },
-  { key: 'expenseNotes', title: 'Expense Notes' },
-  // NQ-3C catch-all; this view already omits empty sections, so it shows only
-  // when it carries re-homed rows.
-  { key: 'contextNotes', title: 'Context Notes' }
-]
+// The fixed five owner sections plus the NQ-3C Context Notes catch-all; this
+// view already omits empty sections, so Context Notes shows only when it carries
+// re-homed rows.
+const SECTIONS = [...OWNER_SECTIONS, CONTEXT_SECTION]
 
 // Renders the deterministic narrative returned by /generate. Presentation only —
 // every sentence is produced by the server's narrative engine; nothing here
@@ -171,20 +161,11 @@ function ResultNarrative({ narrative }) {
     <div className="narrative">
       <div className="narrative-label">Narrative</div>
       {hasMultiplePeriods && (
-        <div className="variance-periods" role="tablist" aria-label="Comparison period">
-          {periods.map((p) => (
-            <button
-              key={p.period}
-              type="button"
-              role="tab"
-              aria-selected={p.period === active.period}
-              className={`variance-period${p.period === active.period ? ' variance-period--on' : ''}`}
-              onClick={() => setPeriod(p.period)}
-            >
-              {p.periodLabel}
-            </button>
-          ))}
-        </div>
+        <PeriodTabs
+          tabs={periods.map((p) => ({ period: p.period, label: p.periodLabel }))}
+          active={active.period}
+          onSelect={setPeriod}
+        />
       )}
       {SECTIONS.map(({ key, title }) => {
         const notes = Array.isArray(active[key]) ? active[key] : []
