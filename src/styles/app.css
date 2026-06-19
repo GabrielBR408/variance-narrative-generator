@@ -27,6 +27,22 @@ body {
   padding: 2rem 1.25rem 4rem;
 }
 
+/* ChiefEO brand wordmark — placeholder text mark in the top-left of the header,
+   styled to read as a brand mark and stay visually distinct from the app title
+   below it. TODO: replace with ChiefEO logo asset. */
+.brand-wordmark {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  margin: 0 0 0.4rem;
+}
+
+.brand-wordmark__mark {
+  color: var(--ink);
+}
+
 .masthead h1 {
   font-size: 1.5rem;
   font-weight: 650;

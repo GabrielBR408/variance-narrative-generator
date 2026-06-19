@@ -375,6 +375,10 @@ export default function App() {
   return (
     <main className="page">
       <header className="masthead">
+        {/* TODO: replace with ChiefEO logo asset */}
+        <div className="brand-wordmark" aria-label="ChiefEO">
+          Chief<span className="brand-wordmark__mark">EO</span>
+        </div>
         <h1>Variance Narrative Generator</h1>
       </header>
       <div className="workflow">
