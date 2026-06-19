@@ -21,6 +21,7 @@ import { detectComparisonSets } from './detectColumns.js'
 import { alignRows } from './alignRows.js'
 import { calculate } from './calculate.js'
 import { summarize } from './summarize.js'
+import { assignSectionTypes } from './sectionType.js'
 import { DEFAULT_THRESHOLDS } from './thresholds.js'
 
 function empty(base, reason) {
@@ -66,6 +67,12 @@ export function computeVariance(extraction, thresholds = DEFAULT_THRESHOLDS) {
   const rows = Array.isArray(normalized.rows) ? normalized.rows : []
   const { account, sets } = detectComparisonSets(normalized.columns, rows)
 
+  // Authoritative revenue/expense classification by income-statement section: map
+  // each data row to the side of the subtotal it rolls into (e.g. a line above
+  // "TOTAL OTHER INCOME" is revenue). Shared across every period since the row
+  // order is identical; calculate() applies it per row via its source index.
+  const sectionByRow = assignSectionTypes(rows, account)
+
   // Compute one comparison set per detected period that actually has an actual
   // column plus a budget or prior to compare against. The account/label column
   // is shared across every period.
@@ -77,7 +84,7 @@ export function computeVariance(extraction, thresholds = DEFAULT_THRESHOLDS) {
     if (!hasActual || !hasComparison) continue
 
     const aligned = alignRows(rows, columns)
-    const comparisons = calculate(aligned, thresholds, extraction.confidence)
+    const comparisons = calculate(aligned, thresholds, extraction.confidence, sectionByRow)
     const summary = summarize(comparisons, rows.length)
     comparisonSets.push({
       period: set.period,

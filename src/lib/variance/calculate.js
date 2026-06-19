@@ -8,15 +8,23 @@
 
 import { DEFAULT_THRESHOLDS, isTriggered } from './thresholds.js'
 
-// Account-type heuristics. Expense is tested first because expense-ish wording
-// ("cost of sales", "sales tax") would otherwise be miscaught by the broad
-// revenue word "sales". Anything unmatched stays unknown → neutral.
+// Account-name heuristics — LAST-RESORT FALLBACK ONLY (see accountType below).
+// The authoritative revenue/expense signal is a line's POSITION in the income
+// statement (which section subtotal it rolls into); see ./sectionType.js. These
+// keyword patterns are used only for lines whose section cannot be determined
+// (e.g. a flat table with no subtotals). Expense is tested first because
+// expense-ish wording ("cost of sales", "sales tax") would otherwise be
+// miscaught by the broad revenue word "sales". Anything unmatched stays unknown.
 const EXPENSE_RE =
   /expense|cost|\bcogs\b|salar|wage|payroll|\brent\b|utilit|deprec|amorti|insurance|supplies|maintenance|repair|\btax(es)?\b|overhead|freight|marketing|advertis|interest\s*expense|fees?\s*(paid|expense)|spend/i
 const REVENUE_RE =
   /revenue|\bsales\b|\bincome\b|\bfees?\b|turnover|proceeds|receipts?|earnings|billings/i
 
-// Returns 'revenue' | 'expense' | 'unknown'.
+// Returns 'revenue' | 'expense' | 'unknown'. FALLBACK ONLY — prefer the
+// section-derived type threaded through calculate()/calculateRow(). On real
+// statements an account NAME does not reliably indicate revenue vs expense
+// (e.g. "Admin Fee" can be OTHER INCOME), so this is consulted only when the
+// line's section subtotal could not be resolved.
 export function accountType(account = '') {
   const name = String(account)
   if (EXPENSE_RE.test(name)) return 'expense'
@@ -53,7 +61,10 @@ function rowConfidence(hasActual, hasComparison, type, fileConfidence) {
 
 // Compute one comparison record from an aligned row.
 // Comparison basis: prefer budget, fall back to prior (spec: actual − comparison).
-export function calculateRow(aligned, thresholds = DEFAULT_THRESHOLDS, fileConfidence = 100) {
+// `sectionType` is the authoritative revenue/expense classification derived from
+// the line's section subtotal (see ./sectionType.js). When it is null (the line's
+// section could not be resolved) we fall back to the account-name heuristic.
+export function calculateRow(aligned, thresholds = DEFAULT_THRESHOLDS, fileConfidence = 100, sectionType = null) {
   const { account, actual, budget, prior, sourceRows } = aligned
 
   const hasBudget = typeof budget === 'number' && Number.isFinite(budget)
@@ -74,7 +85,9 @@ export function calculateRow(aligned, thresholds = DEFAULT_THRESHOLDS, fileConfi
     variancePercent = comparison === 0 ? null : (varianceAmount / Math.abs(comparison)) * 100
   }
 
-  const type = accountType(account)
+  // Authoritative type is the section-derived classification; the account-name
+  // heuristic is consulted only when the section is unknown.
+  const type = sectionType === 'revenue' || sectionType === 'expense' ? sectionType : accountType(account)
   const category = classify(type, varianceAmount)
   const thresholdTriggered =
     varianceAmount === null ? false : isTriggered(varianceAmount, variancePercent, thresholds)
@@ -98,6 +111,14 @@ export function calculateRow(aligned, thresholds = DEFAULT_THRESHOLDS, fileConfi
 }
 
 // Calculate every aligned row. Linear pass, no row-vs-row matching.
-export function calculate(alignedRows = [], thresholds = DEFAULT_THRESHOLDS, fileConfidence = 100) {
-  return alignedRows.map((row) => calculateRow(row, thresholds, fileConfidence))
+// `sectionByRow` (optional) maps an original data-row index to its section-derived
+// type ('revenue' | 'expense' | null); each aligned row carries its originating
+// index in `sourceRows`, so the authoritative type follows the row.
+export function calculate(alignedRows = [], thresholds = DEFAULT_THRESHOLDS, fileConfidence = 100, sectionByRow = null) {
+  return alignedRows.map((row) => {
+    const srcRow = Array.isArray(row.sourceRows) ? row.sourceRows[0] : undefined
+    const sectionType =
+      sectionByRow && srcRow !== undefined && srcRow !== null ? sectionByRow[srcRow] : null
+    return calculateRow(row, thresholds, fileConfidence, sectionType)
+  })
 }
