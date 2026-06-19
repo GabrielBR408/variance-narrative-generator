@@ -6,6 +6,7 @@ import ExtractionPreview from './ExtractionPreview.jsx'
 import PreviewBasis from './PreviewBasis.jsx'
 import VariancePreview from './VariancePreview.jsx'
 import NarrativeSummary from './NarrativeSummary.jsx'
+import { prettySize } from './uiFormat.js'
 
 const ACCEPT = '.pdf,.xlsx,.xls,.csv,.docx'
 const CATEGORIES = [
@@ -16,12 +17,6 @@ const CATEGORIES = [
   'Owner Report Example',
   'Supporting Documents'
 ]
-
-function prettySize(bytes) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
 
 function Chip({ file, role, onRemove }) {
   // Classification is purely advisory and computed from name + role only.

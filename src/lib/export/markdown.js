@@ -16,38 +16,18 @@
 //       { period, periodLabel, executiveSummary, highVariances, missingData,
 //         revenueNotes, expenseNotes, sourceRows }, ... ] }
 
-import { formatMoney } from '../narrative/formatters.js'
-
-// Fixed section order. Stable across every export so two owners comparing the
-// same narrative see the same document, byte for byte.
-const SECTIONS = [
-  { key: 'executiveSummary', title: 'Executive Summary' },
-  { key: 'highVariances', title: 'High Variances' },
-  { key: 'missingData', title: 'Missing Data' },
-  { key: 'revenueNotes', title: 'Revenue Notes' },
-  { key: 'expenseNotes', title: 'Expense Notes' }
-]
+import { OWNER_SECTIONS as SECTIONS, CONTEXT_SECTION } from '../narrative/sectionDefs.js'
+import { metaEntries, notesOf } from './exportShared.js'
 
 const TITLE = 'Variance Narrative'
 const EMPTY_NARRATIVE_NOTE =
   '_No comparable variance data was found in the base report, so there is nothing to narrate._'
 const EMPTY_SECTION_NOTE = '_None._'
 
-function notesOf(period, key) {
-  return Array.isArray(period?.[key]) ? period[key] : []
-}
-
 // Header lines: file, classification, thresholds. Each is included only when
 // present so the document never asserts a value the narrative did not carry.
 function metadataLines(narrative) {
-  const lines = []
-  if (narrative?.fileName) lines.push(`- **Source File:** ${narrative.fileName}`)
-  if (narrative?.classification) lines.push(`- **Classification:** ${narrative.classification}`)
-  const t = narrative?.thresholds
-  if (t && (t.amount != null || t.percent != null)) {
-    lines.push(`- **Thresholds:** ${formatMoney(t.amount ?? 0)} or ${t.percent ?? 0}%`)
-  }
-  return lines
+  return metaEntries(narrative).map((m) => `- **${m.label}:** ${m.value}`)
 }
 
 // One section: a `###` heading followed by either a bullet per note (in the
@@ -66,8 +46,7 @@ function sectionBlock(period, { key, title }) {
 
 // Context Notes (NQ-3C) renders after the fixed five, but ONLY when it carries
 // rows — an empty catch-all prints nothing, so a narrative with nothing to
-// re-home stays byte-identical to before.
-const CONTEXT_SECTION = { key: 'contextNotes', title: 'Context Notes' }
+// re-home stays byte-identical to before. (CONTEXT_SECTION is shared.)
 
 // One period (Current / YTD / …): a `##` heading and the five sections, plus the
 // optional Context Notes section when non-empty.

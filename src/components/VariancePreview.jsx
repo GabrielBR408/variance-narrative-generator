@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react'
 import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
 import { buildVariancePreview } from '../lib/previewNarrative.js'
+import { formatMoney } from '../lib/narrative/formatters.js'
+import PeriodTabs from './PeriodTabs.jsx'
 
 // --- Variance preview — Phase 8 / 22.1 ------------------------------------
 // Presentation only. It renders the deterministic variance engine's output as a
@@ -21,15 +23,9 @@ const REASON_MSG = {
     'Couldn’t find an Actual column plus a Budget or Prior column to compare.'
 }
 
-function fmtMoney(n) {
-  if (n === null || n === undefined || !Number.isFinite(n)) return '—'
-  const sign = n < 0 ? '-' : ''
-  return `${sign}$${Math.abs(n).toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  })}`
-}
-
+// Signed percent with an em-dash fallback. Kept local: the shared
+// formatAbsPercent is unsigned and returns null (not '—'), so it is not an
+// equivalent substitute here. (Money formatting uses the shared formatMoney.)
 function fmtPercent(n) {
   if (n === null || n === undefined || !Number.isFinite(n)) return '—'
   return `${n.toFixed(1)}%`
@@ -66,9 +62,9 @@ function VarianceTable({ comparisons }) {
             return (
               <tr key={i} className={c.thresholdTriggered ? 'variance-row--flagged' : undefined}>
                 <td>{c.account || '—'}</td>
-                <td className="variance-num">{fmtMoney(c.actual)}</td>
-                <td className="variance-num">{fmtMoney(comp.value)}</td>
-                <td className="variance-num">{fmtMoney(c.varianceAmount)}</td>
+                <td className="variance-num">{formatMoney(c.actual)}</td>
+                <td className="variance-num">{formatMoney(comp.value)}</td>
+                <td className="variance-num">{formatMoney(c.varianceAmount)}</td>
                 <td className="variance-num">{fmtPercent(c.variancePercent)}</td>
                 <td>
                   <span className={`variance-cat variance-cat--${c.category}`}>{c.category}</span>
@@ -139,20 +135,11 @@ function VarianceItem({ result }) {
         {hasComparisons ? (
           <>
             {hasMultiplePeriods && (
-              <div className="variance-periods" role="tablist" aria-label="Comparison period">
-                {sets.map((s) => (
-                  <button
-                    key={s.period}
-                    type="button"
-                    role="tab"
-                    aria-selected={s.period === active.period}
-                    className={`variance-period${s.period === active.period ? ' variance-period--on' : ''}`}
-                    onClick={() => setPeriod(s.period)}
-                  >
-                    {periodLabel(s.period)}
-                  </button>
-                ))}
-              </div>
+              <PeriodTabs
+                tabs={sets.map((s) => ({ period: s.period, label: periodLabel(s.period) }))}
+                active={active.period}
+                onSelect={setPeriod}
+              />
             )}
             <div className="variance-stats">
               <span>Rows reviewed <strong>{summary.totalRowsReviewed}</strong></span>
@@ -209,7 +196,7 @@ export default function VariancePreview({ items, thresholds = DEFAULT_THRESHOLDS
       <div className="card-label">Variance Preview</div>
       <p className="card-sub">
         Actual vs. Budget/Prior for the base report, calculated in your browser. Thresholds:{' '}
-        {fmtMoney(thresholds.amount)} or {thresholds.percent}%. Supporting files enrich the
+        {formatMoney(thresholds.amount)} or {thresholds.percent}%. Supporting files enrich the
         narrative and are not variance-computed. Preview only — nothing is saved or sent.
       </p>
       <div className="variance-list">

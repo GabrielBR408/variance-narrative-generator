@@ -29,41 +29,21 @@ import {
   HeadingLevel
 } from 'docx'
 
-import { formatMoney } from '../narrative/formatters.js'
+import { OWNER_SECTIONS as SECTIONS, CONTEXT_SECTION } from '../narrative/sectionDefs.js'
+import { metaEntries, notesOf } from './exportShared.js'
 
 // Document title. Distinct from the Markdown export's "Variance Narrative"
 // heading per the Phase 11 spec, which names the Word document explicitly.
 export const DOCX_TITLE = 'Variance Narrative Summary'
 
-// Fixed section order — identical to the Markdown export so the two documents
-// stay structurally aligned, byte-stable across every run.
-const SECTIONS = [
-  { key: 'executiveSummary', title: 'Executive Summary' },
-  { key: 'highVariances', title: 'High Variances' },
-  { key: 'missingData', title: 'Missing Data' },
-  { key: 'revenueNotes', title: 'Revenue Notes' },
-  { key: 'expenseNotes', title: 'Expense Notes' }
-]
-
 const EMPTY_NARRATIVE_NOTE =
   'No comparable variance data was found in the base report, so there is nothing to narrate.'
 const EMPTY_SECTION_NOTE = 'None.'
 
-function notesOf(period, key) {
-  return Array.isArray(period?.[key]) ? period[key] : []
-}
-
 // Header lines: file, classification, thresholds. Each is included only when
 // present so the document never asserts a value the narrative did not carry.
 function metadataLines(narrative) {
-  const lines = []
-  if (narrative?.fileName) lines.push(`Source File: ${narrative.fileName}`)
-  if (narrative?.classification) lines.push(`Classification: ${narrative.classification}`)
-  const t = narrative?.thresholds
-  if (t && (t.amount != null || t.percent != null)) {
-    lines.push(`Thresholds: ${formatMoney(t.amount ?? 0)} or ${t.percent ?? 0}%`)
-  }
-  return lines
+  return metaEntries(narrative).map((m) => `${m.label}: ${m.value}`)
 }
 
 // --- intermediate, framework-free block model ------------------------------
@@ -87,7 +67,7 @@ function sectionBlocks(period, { key, title }) {
 
 // Context Notes (NQ-3C) renders after the fixed five, but ONLY when non-empty, so
 // a narrative with nothing to re-home produces a byte-identical document.
-const CONTEXT_SECTION = { key: 'contextNotes', title: 'Context Notes' }
+// (CONTEXT_SECTION is shared.)
 
 function periodBlocks(period) {
   const blocks = [{ kind: 'period', text: period?.periodLabel || 'Current' }]

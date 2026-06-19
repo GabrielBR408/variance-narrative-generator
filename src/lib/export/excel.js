@@ -23,8 +23,8 @@
 // rendered sheet and the asserted model can never drift.
 
 import ExcelJS from 'exceljs'
-import { formatMoney } from '../narrative/formatters.js'
 import { approxMoney } from '../enrich/index.js'
+import { metaEntries } from './exportShared.js'
 
 export const OWNER_SHEET = 'Owner Summary'
 export const EVIDENCE_SHEET = 'Supporting Evidence'
@@ -105,17 +105,14 @@ function formatDate(value) {
 }
 
 // The header metadata block (file, classification, thresholds, generated date).
-// Each line is included only when present so the sheet never asserts a value the
-// narrative did not carry. The source file here is the BASE report (already
-// shown in the Markdown/DOCX exports) — never a supporting file.
+// The common file/classification/thresholds entries come from the shared
+// metaEntries helper (so the three exports never disagree on them); the Excel
+// sheet additionally stamps its own generated date. Each is included only when
+// present so the sheet never asserts a value the narrative did not carry. The
+// source file here is the BASE report (already shown in the Markdown/DOCX
+// exports) — never a supporting file.
 function buildMeta(narrative, generatedDate) {
-  const meta = []
-  if (narrative?.fileName) meta.push({ label: 'Source File', value: narrative.fileName })
-  if (narrative?.classification) meta.push({ label: 'Classification', value: narrative.classification })
-  const t = narrative?.thresholds
-  if (t && (t.amount != null || t.percent != null)) {
-    meta.push({ label: 'Thresholds', value: `${formatMoney(t.amount ?? 0)} or ${t.percent ?? 0}%` })
-  }
+  const meta = metaEntries(narrative)
   const date = formatDate(generatedDate)
   if (date) meta.push({ label: 'Generated', value: date })
   return meta
