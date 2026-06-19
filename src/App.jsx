@@ -21,6 +21,7 @@ import { periodScopeAvailable, DEFAULT_PERIOD_SCOPE } from './lib/narrative/peri
 import { fileKey } from './lib/fileKey.js'
 import { useExtraction } from './hooks/useExtraction.js'
 import { useGenerate } from './hooks/useGenerate.js'
+import chiefeoLogo from './assets/chiefeo-logo.png'
 
 // Phase 22.2: only `commentaryDetail` affects output today. The remaining style
 // fields are rendered disabled ("Coming soon") and kept here purely so those
@@ -194,10 +195,7 @@ export default function App() {
   return (
     <main className="page">
       <header className="masthead">
-        {/* TODO: replace with ChiefEO logo asset */}
-        <div className="brand-wordmark" aria-label="ChiefEO">
-          Chief<span className="brand-wordmark__mark">EO</span>
-        </div>
+        <img className="brand-logo" src={chiefeoLogo} alt="ChiefEO" />
         <h1>Variance Narrative Generator</h1>
       </header>
       <div className="workflow">
