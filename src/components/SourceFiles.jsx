@@ -1,5 +1,6 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import { classifyFile, confidenceTier } from '../lib/classify.js'
+import { routeUpload } from '../lib/uploadRouting.js'
 import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
 import ExtractionPreview from './ExtractionPreview.jsx'
 import PreviewBasis from './PreviewBasis.jsx'
@@ -54,8 +55,11 @@ export default function SourceFiles({
   commentaryMode = 'detailed',
   thresholds = DEFAULT_THRESHOLDS
 }) {
-  const baseInput = useRef(null)
-  const supportInput = useRef(null)
+  const fileInput = useRef(null)
+  const [dragOver, setDragOver] = useState(false)
+  // Transient confirmation message describing the last routing decision (e.g.
+  // a base report being identified or replaced). Cleared when files are removed.
+  const [notice, setNotice] = useState('')
 
   // Ordered extraction items (base first), if extraction is wired in.
   const orderedFiles = []
@@ -65,18 +69,50 @@ export default function SourceFiles({
     ? orderedFiles.map((f) => extractions[fileKey(f)]).filter(Boolean)
     : []
 
-  const onBase = (e) => {
-    const f = e.target.files?.[0]
-    if (f) setBaseReport(f)
+  // Single entry point for every file the user drops or selects. The existing
+  // filename classifier decides which file (if any) is the base variance report
+  // and which are supporting; validation/extraction downstream are unchanged.
+  const acceptFiles = (incoming) => {
+    const files = Array.from(incoming || [])
+    if (!files.length) return
+    const routed = routeUpload({
+      incoming: files,
+      currentBase: baseReport,
+      currentSupporting: supportingFiles
+    })
+    setBaseReport(routed.base)
+    setSupportingFiles(routed.supporting)
+    setNotice(routed.notice)
+  }
+
+  const onPick = (e) => {
+    acceptFiles(e.target.files)
     e.target.value = ''
   }
-  const onSupport = (e) => {
-    const incoming = Array.from(e.target.files || [])
-    if (incoming.length) setSupportingFiles((prev) => [...prev, ...incoming])
-    e.target.value = ''
+  const onDrop = (e) => {
+    e.preventDefault()
+    setDragOver(false)
+    acceptFiles(e.dataTransfer?.files)
   }
-  const removeSupport = (idx) =>
+  const onDragOver = (e) => {
+    e.preventDefault()
+    setDragOver(true)
+  }
+  const onDragLeave = (e) => {
+    e.preventDefault()
+    setDragOver(false)
+  }
+
+  const removeBase = () => {
+    setBaseReport(null)
+    setNotice('')
+  }
+  const removeSupport = (idx) => {
     setSupportingFiles((prev) => prev.filter((_, i) => i !== idx))
+    setNotice('')
+  }
+
+  const hasFiles = !!baseReport || supportingFiles.length > 0
 
   return (
     <section className="step step--source">
@@ -86,35 +122,52 @@ export default function SourceFiles({
       </div>
 
       <div className="card card--primary">
-        <div className="card-label">Upload Base Variance Report</div>
-        <p className="card-sub">Typically a comparative income statement, ideally in Excel.</p>
+        <div className="card-label">Upload your files</div>
+        <p className="card-sub">
+          Drop the base variance report and any supporting files together — we'll sort out which
+          is which. The base is typically a comparative income statement, ideally in Excel.
+        </p>
 
-        <input ref={baseInput} type="file" accept={ACCEPT} hidden onChange={onBase} />
-        <button type="button" className="dropzone" onClick={() => baseInput.current?.click()}>
-          {baseReport ? 'Replace base report' : 'Choose a file'}
+        <input ref={fileInput} type="file" accept={ACCEPT} multiple hidden onChange={onPick} />
+        <button
+          type="button"
+          className={`dropzone${dragOver ? ' dropzone--over' : ''}`}
+          onClick={() => fileInput.current?.click()}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+        >
+          <span className="dropzone-title">Drag &amp; drop files here</span>
+          <span className="dropzone-sub">or click to choose — you can add several at once</span>
         </button>
 
-        {baseReport && (
-          <div className="chips">
-            <Chip file={baseReport} role="baseReport" onRemove={() => setBaseReport(null)} />
-          </div>
-        )}
-      </div>
+        {notice && <p className="upload-notice" role="status">{notice}</p>}
 
-      <div className="card">
-        <div className="card-label">Add Supporting Files</div>
-        <p className="card-sub">Year-to-date or current period GL, and budget monthly GL-level detail report.</p>
+        {hasFiles && (
+          <div className="upload-groups">
+            <div className="upload-group">
+              <div className="upload-group-label">Base Variance Report</div>
+              {baseReport ? (
+                <div className="chips">
+                  <Chip file={baseReport} role="baseReport" onRemove={removeBase} />
+                </div>
+              ) : (
+                <p className="upload-group-empty">No base report yet — drop a variance report above.</p>
+              )}
+            </div>
 
-        <input ref={supportInput} type="file" accept={ACCEPT} multiple hidden onChange={onSupport} />
-        <button type="button" className="dropzone dropzone--sm" onClick={() => supportInput.current?.click()}>
-          Add files
-        </button>
-
-        {supportingFiles.length > 0 && (
-          <div className="chips">
-            {supportingFiles.map((f, i) => (
-              <Chip key={`${f.name}-${i}`} file={f} role="supportingFile" onRemove={() => removeSupport(i)} />
-            ))}
+            <div className="upload-group">
+              <div className="upload-group-label">Supporting Files</div>
+              {supportingFiles.length > 0 ? (
+                <div className="chips">
+                  {supportingFiles.map((f, i) => (
+                    <Chip key={`${f.name}-${i}`} file={f} role="supportingFile" onRemove={() => removeSupport(i)} />
+                  ))}
+                </div>
+              ) : (
+                <p className="upload-group-empty">No supporting files yet.</p>
+              )}
+            </div>
           </div>
         )}
 

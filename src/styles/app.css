@@ -77,9 +77,44 @@ body {
   color: var(--muted);
   font: inherit;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  text-align: center;
+  padding: 0.8rem;
 }
 .dropzone--sm { min-height: 60px; }
 .dropzone:hover { border-color: var(--accent); color: var(--accent-ink); }
+.dropzone--over {
+  border-color: var(--accent);
+  border-style: solid;
+  color: var(--accent-ink);
+  background: #eef7f3;
+}
+.dropzone-title { font-weight: 600; font-size: 0.9rem; }
+.dropzone-sub { font-size: 0.8rem; }
+
+/* Unified upload — routing notice + base/supporting groups */
+.upload-notice {
+  margin: 0.7rem 0 0;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid #bfe0d6;
+  border-radius: 8px;
+  background: #eaf6f1;
+  color: var(--accent-ink);
+  font-size: 0.82rem;
+}
+.upload-groups { display: flex; flex-direction: column; gap: 0.9rem; margin-top: 0.8rem; }
+.upload-group-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+.upload-group-empty { color: var(--muted); font-size: 0.82rem; margin: 0; }
 
 /* Chips */
 .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem; }
