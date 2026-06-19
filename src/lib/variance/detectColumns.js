@@ -27,6 +27,19 @@ function detectPeriod(header) {
   return YTD_RE.test(String(header)) ? 'ytd' : 'current'
 }
 
+// Explicit period markers in a header. Returns 'ytd' / 'current' only when the
+// header actually names the period, or null when it carries no period word (a
+// bare "Actual" / "Budget"). This is stricter than detectPeriod (which defaults
+// the unmarked case to 'current') so the block splitter below can tell a labeled
+// period apart from a positional one.
+const CURRENT_RE = /\bcurrent\b|\bmtd\b|month[-\s]*to[-\s]*date|this\s*month|current\s*period/i
+function explicitPeriod(header) {
+  const h = String(header)
+  if (YTD_RE.test(h)) return 'ytd'
+  if (CURRENT_RE.test(h)) return 'current'
+  return null
+}
+
 function matchType(header) {
   const h = String(header).toLowerCase()
   for (const [type, patterns] of COLUMN_PATTERNS) {
@@ -87,6 +100,70 @@ export function detectColumns(columns = [], rows = []) {
   return result
 }
 
+// Group every non-account column by its detected period, preserving order, so a
+// column's position WITHIN its period band can be compared across periods. Used
+// to recover value columns whose sub-labels a merged group band swallowed.
+function groupColumnsByPeriod(columns, account) {
+  const groups = new Map() // period -> [columnIndex, ...] in left-to-right order
+  columns.forEach((header, i) => {
+    if (i === account) return
+    const period = detectPeriod(header)
+    if (!groups.has(period)) groups.set(period, [])
+    groups.get(period).push(i)
+  })
+  return groups
+}
+
+// Fill in value columns (actual / budget / prior) for any period the keyword
+// pass left incomplete, by borrowing the type→offset layout of a period it
+// fully resolved. A comparative statement lays each period out with the same
+// column order, so the column at offset N under "Year-To-Date" carries the same
+// value type as the column at offset N under "Current Period". Conservative: it
+// only assigns a still-empty slot to a still-unclaimed column, so a period the
+// keyword pass already resolved is never altered.
+function inferUnlabeledPeriodColumns(columns, account, byPeriod, seen, valueIndexes) {
+  // A clean template period has both an actual and a budget the keyword pass
+  // resolved; without one there is nothing trustworthy to mirror.
+  const template = [...byPeriod.entries()].find(
+    ([, set]) => set.actual !== null && set.budget !== null
+  )
+  if (!template) return
+
+  const groups = groupColumnsByPeriod(columns, account)
+  const [templatePeriod, templateSet] = template
+  const templateGroup = groups.get(templatePeriod) || []
+
+  // offset (position within the period band) -> value type, for the columns the
+  // keyword pass resolved on the template period.
+  const offsetType = new Map()
+  for (const type of ['actual', 'budget', 'prior']) {
+    const idx = templateSet[type]
+    if (idx === null) continue
+    const offset = templateGroup.indexOf(idx)
+    if (offset >= 0) offsetType.set(offset, type)
+  }
+
+  const claimed = new Set(valueIndexes)
+  for (const [period, group] of groups) {
+    if (period === templatePeriod) continue
+    const set = byPeriod.get(period) || { actual: null, budget: null, prior: null }
+    let filled = false
+    for (const [offset, type] of offsetType) {
+      const idx = group[offset]
+      if (idx === undefined || claimed.has(idx)) continue
+      if (set[type] !== null) continue
+      set[type] = idx
+      claimed.add(idx)
+      valueIndexes.push(idx)
+      filled = true
+    }
+    if (filled && !byPeriod.has(period)) {
+      byPeriod.set(period, set)
+      seen.push(period)
+    }
+  }
+}
+
 // Period-aware detection. Some statements lay Current and YTD comparisons side
 // by side ("Current Actual | Current Budget | … | YTD Actual | YTD Budget | …").
 // This groups the value columns by period so each can be compared on its own,
@@ -101,26 +178,92 @@ export function detectComparisonSets(columns = [], rows = []) {
     return { account: null, sets: [] }
   }
 
-  const byPeriod = new Map() // period -> { actual, budget, prior } indexes
-  const seen = [] // periods in first-seen order
+  // Block-aware grouping. A comparative statement lays its periods out as
+  // repeating value blocks ("Actual | Budget | … " once per period). We split
+  // those blocks so each period is detected on its own — even when the periods
+  // are NOT distinguished by a "Current"/"YTD" label (a flat header row that
+  // simply repeats "Actual | Budget | …", which the merged period band above it
+  // did not survive as).
+  //
+  // A block boundary is a REPEATED value type (a SECOND "Actual" begins the next
+  // period). We deliberately do NOT split on an explicit-label change, because a
+  // merged period band that does not sit flush over its section (real exports
+  // anchor "Year-To-Date" over the YTD *Budget*, one column right of YTD Actual)
+  // leaves a stray "Current"/"YTD" word mid-block; splitting on it would tear the
+  // YTD Actual off its own block and drop it. Each block's period is decided
+  // afterward by scanning ALL of its column labels (see below).
+  const blocks = [] // [{ set: { actual, budget, prior } }]
+  let block = null
   const valueIndexes = []
 
   columns.forEach((header, i) => {
     const type = matchType(header)
     if (!type) return
-    const period = detectPeriod(header)
-    if (!byPeriod.has(period)) {
-      byPeriod.set(period, { actual: null, budget: null, prior: null })
-      seen.push(period)
+    if (block === null || block.set[type] !== null) {
+      block = { set: { actual: null, budget: null, prior: null } }
+      blocks.push(block)
     }
-    const set = byPeriod.get(period)
-    if (set[type] === null) {
-      set[type] = i
-      valueIndexes.push(i)
+    block.set[type] = i
+    valueIndexes.push(i)
+  })
+
+  // Decide each block's period from the labels on ITS OWN value columns: any YTD
+  // word anywhere in the block wins (so a band label shifted onto the block's
+  // Budget column still tags the whole block YTD), then any Current/MTD word,
+  // else unlabeled. This tolerates the band-misalignment above where the YTD
+  // Actual column inherited the neighbouring "Current Period" label.
+  function blockPeriod(b) {
+    let ytd = false
+    let current = false
+    for (const t of ['actual', 'budget', 'prior']) {
+      const idx = b.set[t]
+      if (idx === null) continue
+      const ep = explicitPeriod(columns[idx])
+      if (ep === 'ytd') ytd = true
+      else if (ep === 'current') current = true
+    }
+    return ytd ? 'ytd' : current ? 'current' : null
+  }
+
+  // Resolve each block to a period: a labeled block keeps its label; the rest
+  // fall back to position (first block → current, second → ytd, …), skipping any
+  // period an explicit label already claimed.
+  const byPeriod = new Map() // period -> { actual, budget, prior } indexes
+  const seen = [] // periods in first-seen order
+  const labels = blocks.map(blockPeriod)
+  const used = new Set(labels.filter(Boolean))
+  const fallback = ['current', 'ytd']
+  let fi = 0
+  blocks.forEach((b, bi) => {
+    let period = labels[bi]
+    if (!period) {
+      while (fi < fallback.length && used.has(fallback[fi])) fi++
+      period = fi < fallback.length ? fallback[fi++] : `period${bi + 1}`
+      used.add(period)
+    }
+    if (!byPeriod.has(period)) {
+      byPeriod.set(period, b.set)
+      seen.push(period)
+    } else {
+      // Two blocks resolving to the same period (unusual): keep the first-seen
+      // value columns, mirroring the original "first column wins" rule.
+      const existing = byPeriod.get(period)
+      for (const t of ['actual', 'budget', 'prior']) {
+        if (existing[t] === null && b.set[t] !== null) existing[t] = b.set[t]
+      }
     }
   })
 
   const account = detectAccountColumn(columns, rows, valueIndexes)
+
+  // Recover a period whose value sub-labels were not repeated under its group
+  // band. Side-by-side comparative income statements often print "Actual |
+  // Budget | Variance | Variance %" only beneath the FIRST period ("Current
+  // Period"); the merged second band ("Year-To-Date") leaves its columns
+  // carrying just the period label, so the keyword pass above never claims them
+  // and the whole YTD set is dropped. Map those columns to value types
+  // positionally, mirroring a fully-labeled period's column offsets.
+  inferUnlabeledPeriodColumns(columns, account, byPeriod, seen, valueIndexes)
 
   const priority = ['current', 'ytd']
   const ordered = [

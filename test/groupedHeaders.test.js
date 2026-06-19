@@ -14,6 +14,7 @@ import { computeVariance } from '../src/lib/variance/index.js'
 import { generateNarrative } from '../src/lib/narrative/index.js'
 import { narrativeToMarkdown } from '../src/lib/export/markdown.js'
 import { narrativeToDocxBlocks } from '../src/lib/export/docx.js'
+import { buildExcelModel } from '../src/lib/export/excel.js'
 
 // Wrap an array-of-arrays grid the way the spreadsheet parser hands it over.
 function spreadsheet(grid) {
@@ -148,4 +149,103 @@ test('grouped workbook narrates and exports to Markdown + DOCX (Current + YTD)',
   const text = blocks.map((b) => b.text).join('\n')
   assert.ok(text.includes('Rental Income') && text.includes('Repairs Expense'))
   assert.deepEqual(blocks.filter((b) => b.kind === 'period').map((b) => b.text), ['Current', 'YTD'])
+})
+
+// --- unlabeled YTD band: value sub-labels printed only under Current ---------
+// A real comparative income statement whose merged "Year-To-Date" group band
+// does NOT repeat the Actual/Budget/Variance/Variance % sub-headers — they
+// appear only under "Current Period". After folding, the YTD columns carry just
+// the period label, so the YTD value columns must be recovered positionally or
+// every YTD column in the Excel export comes back null. This reproduces the
+// reported bug (Current reads fine, YTD null) and locks in the fix end-to-end.
+const UNLABELED_YTD = [
+  ['', 'Current Period', '', '', '', 'Year-To-Date', '', '', ''],
+  ['Account', 'Actual', 'Budget', 'Variance', 'Variance %', '', '', '', ''],
+  ['Rental Income', '130000', '100000', '30000', '30', '700000', '600000', '100000', '16.7'],
+  ['Repairs Expense', '60000', '40000', '20000', '50', '300000', '250000', '50000', '20']
+]
+
+test('YTD columns parse and flow to the Excel export when only Current carries sub-labels', () => {
+  const { normalized, confidence } = normalize(spreadsheet(UNLABELED_YTD), 'spreadsheet')
+  const result = computeVariance({
+    fileId: 'f1', fileName: 'Comparative Income Statement.xlsx',
+    status: 'ok', confidence, classification: { type: 'variance-report' }, normalized
+  })
+  assert.deepEqual(result.comparisonSets.map((s) => s.period), ['current', 'ytd'])
+
+  const model = buildExcelModel(generateNarrative(result), {})
+  const rental = model.ownerRows.find((r) => r.account === 'Rental Income')
+  // Current side still reads exactly as before.
+  assert.equal(rental.currentActual, 130000)
+  assert.equal(rental.currentComparison, 100000)
+  // YTD side now carries real numbers instead of null.
+  assert.equal(rental.ytdActual, 700000)
+  assert.equal(rental.ytdComparison, 600000)
+  assert.equal(rental.ytdVarianceAmount, 100000)
+  assert.ok(Math.abs(rental.ytdVariancePercent - 16.6667) < 0.01)
+})
+
+// --- flat duplicated header with NO period band (the reported regression) -----
+// Some exports drop the merged "Current Period | Year-To-Date" band entirely,
+// leaving a single flat header row that simply REPEATS "Actual | Budget |
+// Variance | Variance %" twice with no period marker. The second block is the
+// YTD figures (cols 5–8); without splitting it positionally those columns are
+// discarded as duplicates and every YTD cell in the Owner Summary is null.
+const FLAT_DUPLICATE = [
+  ['Account', 'Actual', 'Budget', 'Variance', 'Variance %', 'Actual', 'Budget', 'Variance', 'Variance %'],
+  ['Rental Inc. - Commercial', '661061.20', '661061.20', '0', '0', '2644244.80', '2644244.80', '0', '0'],
+  ['Repairs Expense', '60000', '40000', '20000', '50', '300000', '250000', '50000', '20']
+]
+
+test('YTD columns flow to the Excel export from a flat duplicated header with no period band', () => {
+  const { normalized, confidence } = normalize(spreadsheet(FLAT_DUPLICATE), 'spreadsheet')
+  const result = computeVariance({
+    fileId: 'f1', fileName: 'Comparative Income Statement.xlsx',
+    status: 'ok', confidence, classification: { type: 'variance-report' }, normalized
+  })
+  assert.deepEqual(result.comparisonSets.map((s) => s.period), ['current', 'ytd'])
+
+  const model = buildExcelModel(generateNarrative(result), {})
+  const rental = model.ownerRows.find((r) => r.account === 'Rental Inc. - Commercial')
+  // Current side reads from cols 1–2.
+  assert.equal(rental.currentActual, 661061.2)
+  assert.equal(rental.currentComparison, 661061.2)
+  // YTD side reads from cols 5–6 (real numbers, not null).
+  assert.equal(rental.ytdActual, 2644244.8)
+  assert.equal(rental.ytdComparison, 2644244.8)
+  assert.equal(rental.ytdVarianceAmount, 0)
+})
+
+// --- misaligned period band (the production regression) ----------------------
+// The real export anchors the merged "Year-To-Date" band over the YTD *Budget*
+// column (index 6), one column to the RIGHT of where the YTD section actually
+// begins (YTD Actual, index 5). After folding, YTD Actual inherits the
+// neighbouring "Current Period" label, so naïvely trusting the folded label
+// tags it Current and the YTD set loses its Actual column → null YTD output.
+// There is also a "Thru:" date row (carrying the word "Variance") between the
+// header and the data. The block must still resolve cols 5–8 to YTD.
+const MISALIGNED_BAND = [
+  ['', 'Current Period', '', '', '', '', 'Year-To-Date', '', ''],
+  ['', 'Actual', 'Budget', '', '', 'Actual', 'Budget', '', ''],
+  ['Thru:', '2024-04-30', '2024-04-30', 'Variance', '', '2024-04-30', '2024-04-30', 'Variance', ''],
+  ['Rental Inc. - Commercial', '661061.20', '661061.20', '0', '0', '2644244.80', '2644244.80', '0', '0']
+]
+
+test('YTD columns flow to the export when the period band is shifted off its section', () => {
+  const { normalized, confidence } = normalize(spreadsheet(MISALIGNED_BAND), 'spreadsheet')
+  const result = computeVariance({
+    fileId: 'f1', fileName: 'income-statement.xlsx',
+    status: 'ok', confidence, classification: { type: 'variance-report' }, normalized
+  })
+  assert.deepEqual(result.comparisonSets.map((s) => s.period), ['current', 'ytd'])
+  const ytd = result.comparisonSets.find((s) => s.period === 'ytd')
+  // The YTD set must carry BOTH the Actual (col 5) and Budget (col 6) columns.
+  assert.deepEqual(ytd.columns, { account: 0, actual: 5, budget: 6, prior: null })
+
+  const model = buildExcelModel(generateNarrative(result), {})
+  const rental = model.ownerRows.find((r) => r.account === 'Rental Inc. - Commercial')
+  assert.equal(rental.currentActual, 661061.2)
+  assert.equal(rental.ytdActual, 2644244.8)
+  assert.equal(rental.ytdComparison, 2644244.8)
+  assert.equal(rental.ytdVarianceAmount, 0)
 })

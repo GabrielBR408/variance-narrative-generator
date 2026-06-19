@@ -61,6 +61,81 @@ test('detectComparisonSets splits Current and YTD with a shared account column',
   assert.deepEqual(sets[1].columns, { actual: 5, budget: 6, prior: null })
 })
 
+// A comparative statement whose merged "Year-To-Date" band did not repeat the
+// Actual/Budget sub-labels: after header folding the YTD columns carry only the
+// period label, with no value-type keyword. The YTD value columns must still be
+// recovered positionally from the fully-labeled Current period, or the entire
+// YTD set is dropped (Current reads, YTD comes back null).
+const UNLABELED_YTD_COLUMNS = [
+  'Account',
+  'Current Period Actual',
+  'Current Period Budget',
+  'Current Period Variance',
+  'Current Period Variance %',
+  'Year-To-Date',
+  'Year-To-Date',
+  'Year-To-Date',
+  'Year-To-Date'
+]
+
+test('detectComparisonSets recovers a YTD band whose value sub-labels were not repeated', () => {
+  const { account, sets } = detectComparisonSets(UNLABELED_YTD_COLUMNS, ROWS)
+  assert.equal(account, 0)
+  assert.deepEqual(sets.map((s) => s.period), ['current', 'ytd'])
+  assert.deepEqual(sets[0].columns, { actual: 1, budget: 2, prior: null })
+  // Mirrors the Current period's offsets: YTD Actual at col F (5), Budget at G (6).
+  assert.deepEqual(sets[1].columns, { actual: 5, budget: 6, prior: null })
+})
+
+test('computeVariance produces real YTD numbers from an unlabeled YTD band', () => {
+  const result = computeVariance(extraction({
+    normalized: { columns: UNLABELED_YTD_COLUMNS, rows: ROWS, accounts: [], dates: [], values: [] }
+  }))
+  const ytd = result.comparisonSets.find((s) => s.period === 'ytd')
+  assert.ok(ytd, 'YTD comparison set must exist')
+  const rental = ytd.comparisons.find((c) => c.account.startsWith('Rental'))
+  assert.equal(rental.actual, 358495.18)
+  assert.equal(rental.budget, 374173.03)
+  near(rental.varianceAmount, -15677.85)
+  near(rental.variancePercent, -4.19)
+})
+
+// A flat header row that REPEATS the value sub-labels with no "Current"/"YTD"
+// period marker at all — the merged period band did not survive the export, so
+// both periods read as a plain "Actual | Budget | Variance | Variance %" twice.
+// The duplicated second block must be split off into the YTD period positionally,
+// or the YTD columns (5–8) are silently discarded as duplicates of the first.
+const FLAT_DUPLICATE_COLUMNS = [
+  'Account',
+  'Actual', 'Budget', 'Variance', 'Variance %',
+  'Actual', 'Budget', 'Variance', 'Variance %'
+]
+
+// The confirmed real row: Current Actual = Budget (zero variance) and YTD
+// Actual = Budget, with the YTD figures roughly four times the monthly figure.
+const FLAT_DUPLICATE_ROWS = [
+  ['Rental Inc. - Commercial', 661061.2, 661061.2, 0, 0, 2644244.8, 2644244.8, 0, 0]
+]
+
+test('detectComparisonSets splits a flat duplicated header into Current + YTD positionally', () => {
+  const { account, sets } = detectComparisonSets(FLAT_DUPLICATE_COLUMNS, FLAT_DUPLICATE_ROWS)
+  assert.equal(account, 0)
+  assert.deepEqual(sets.map((s) => s.period), ['current', 'ytd'])
+  assert.deepEqual(sets[0].columns, { actual: 1, budget: 2, prior: null })
+  assert.deepEqual(sets[1].columns, { actual: 5, budget: 6, prior: null })
+})
+
+test('computeVariance reads YTD columns 5–8 from a flat duplicated header', () => {
+  const result = computeVariance(extraction({
+    normalized: { columns: FLAT_DUPLICATE_COLUMNS, rows: FLAT_DUPLICATE_ROWS, accounts: [], dates: [], values: [] }
+  }))
+  const ytd = result.comparisonSets.find((s) => s.period === 'ytd')
+  assert.ok(ytd, 'YTD comparison set must exist')
+  const rental = ytd.comparisons.find((c) => c.account.startsWith('Rental'))
+  assert.equal(rental.actual, 2644244.8)
+  assert.equal(rental.budget, 2644244.8)
+})
+
 test('computeVariance exposes both periods in comparisonSets', () => {
   const result = computeVariance(extraction())
   assert.ok(Array.isArray(result.comparisonSets))
