@@ -109,6 +109,28 @@ export default function App() {
     setShowLlmDisclosure(false)
   }, [])
 
+  // First-visit privacy & AI disclosure. Shown once per browser; acknowledgement
+  // is persisted in localStorage so it never reappears on later visits. Reads are
+  // wrapped because localStorage can throw (private mode / disabled storage) — if
+  // it does, we simply don't show the modal rather than break the app.
+  const PRIVACY_ACK_KEY = 'cheo:privacyDisclosureAck'
+  const [showPrivacyDisclosure, setShowPrivacyDisclosure] = useState(() => {
+    try {
+      return localStorage.getItem(PRIVACY_ACK_KEY) !== '1'
+    } catch {
+      return false
+    }
+  })
+
+  const handlePrivacyDisclosureAccept = useCallback(() => {
+    try {
+      localStorage.setItem(PRIVACY_ACK_KEY, '1')
+    } catch {
+      // Storage unavailable — the modal simply reappears next session.
+    }
+    setShowPrivacyDisclosure(false)
+  }, [])
+
   // Extraction state (Phase 7, isolated slice). Map fileKey → extraction
   // result. In memory only; discarded with the session, never persisted.
   const [extractions, setExtractions] = useState({})
@@ -402,6 +424,36 @@ export default function App() {
         )}
         <ResultPanel status={status} result={result} periodScope={periodScope} freshness={freshness} />
       </div>
+
+      {showPrivacyDisclosure && (
+        <div className="llm-disclosure-overlay" role="dialog" aria-modal="true" aria-labelledby="privacy-disclosure-title">
+          <div className="llm-disclosure-dialog">
+            <h2 id="privacy-disclosure-title" className="llm-disclosure-title">Privacy &amp; AI Disclosure</h2>
+            <p className="llm-disclosure-body">
+              Your files are processed locally in your browser and are never stored on our servers. File content is only sent to Anthropic (creator of Claude AI) when GL transaction detail is sent to generate cited commentary, or when PDF text scanning is needed to read a file. Anthropic does not use API data for model training by default. See Anthropic&rsquo;s privacy policy at{' '}
+              <a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener noreferrer">anthropic.com/privacy</a>{' '}
+              for details on how API data is handled.
+            </p>
+            <p className="llm-disclosure-body">
+              AI-generated narratives may contain errors or omissions. Always review and verify output against your source documents before distribution.
+            </p>
+            <div className="llm-disclosure-actions">
+              <button type="button" className="llm-disclosure-btn llm-disclosure-btn--primary" onClick={handlePrivacyDisclosureAccept}>
+                I understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <footer className="site-footer">
+        <p className="site-footer-line">
+          AI-generated narratives may contain errors. Always verify figures against source documents before distribution.
+        </p>
+        <p className="site-footer-line site-footer-line--muted">
+          &copy; 2026 GREVE, operating as ChiefEO. All rights reserved.
+        </p>
+      </footer>
     </main>
   )
 }

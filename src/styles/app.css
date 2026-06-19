@@ -468,3 +468,19 @@ body {
 .llm-disclosure-btn { padding: 0.5rem 1.1rem; border-radius: 7px; font-size: 0.87rem; font-weight: 600; cursor: pointer; border: none; }
 .llm-disclosure-btn--primary { background: var(--accent); color: #fff; }
 .llm-disclosure-btn--secondary { background: var(--surface); color: var(--text); }
+.llm-disclosure-body a { color: var(--accent-ink); }
+
+/* Persistent site footer: error/verification notice + copyright */
+.site-footer {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+.site-footer-line {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.site-footer-line--muted { font-size: 0.74rem; opacity: 0.85; }
