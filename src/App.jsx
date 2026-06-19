@@ -22,6 +22,7 @@ import { fileKey } from './lib/fileKey.js'
 import { useExtraction } from './hooks/useExtraction.js'
 import { useGenerate } from './hooks/useGenerate.js'
 import chiefeoLogo from './assets/chiefeo-logo.png'
+import { Analytics } from '@vercel/analytics/react'
 
 // Phase 23: all five Style controls are active and shape the generated
 // narrative. Report Style / Tone / Length / Dollar Value References become
@@ -243,6 +244,8 @@ export default function App() {
           &copy; 2026 GREVE, operating as ChiefEO. All rights reserved.
         </p>
       </footer>
+
+      <Analytics />
     </main>
   )
 }
