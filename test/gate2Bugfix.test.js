@@ -100,13 +100,13 @@ test('export includes below-threshold variance rows', () => {
 
   // The below-threshold row appears with blank narrative + supporting fields.
   const below = rows.find((r) => r.account === 'Office Supplies')
-  assert.equal(below.section, 'Within Threshold')
-  assert.equal(below.narrative, '')
-  assert.equal(below.supporting, '')
+  assert.equal(below.currentSection, 'Within Threshold')
+  assert.equal(below.currentNarrative, '')
+  assert.equal(below.currentSupporting, '')
   // …but it still carries its real figures, so the report is complete.
-  assert.equal(below.actual, 520)
-  assert.equal(below.comparison, 500)
-  assert.equal(below.varianceAmount, 20)
+  assert.equal(below.currentActual, 520)
+  assert.equal(below.currentComparison, 500)
+  assert.equal(below.currentVarianceAmount, 20)
 })
 
 test('threshold controls narrative generation only, not export inclusion', () => {
@@ -125,10 +125,10 @@ test('threshold controls narrative generation only, not export inclusion', () =>
   // SAME row still exports but with a blank narrative.
   const lowRepairs = low.find((r) => r.account === 'Repairs & Maintenance')
   const highRepairs = high.find((r) => r.account === 'Repairs & Maintenance')
-  assert.ok(lowRepairs.narrative.length > 0, 'narrated when it crosses the threshold')
-  assert.equal(lowRepairs.section, 'High Variance')
-  assert.equal(highRepairs.narrative, '', 'not narrated when below the threshold')
-  assert.equal(highRepairs.section, 'Within Threshold')
+  assert.ok(lowRepairs.currentNarrative.length > 0, 'narrated when it crosses the threshold')
+  assert.equal(lowRepairs.currentSection, 'High Variance')
+  assert.equal(highRepairs.currentNarrative, '', 'not narrated when below the threshold')
+  assert.equal(highRepairs.currentSection, 'Within Threshold')
 })
 
 // --- Finding 1: GL supports actual activity only, never a standalone compare -

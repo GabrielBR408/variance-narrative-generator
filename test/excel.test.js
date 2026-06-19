@@ -93,31 +93,49 @@ const FIXED_DATE = new Date('2026-06-15T00:00:00Z')
 test('owner columns are exactly the spec set, in order', () => {
   assert.deepEqual(
     OWNER_COLUMNS.map((c) => c.header),
-    ['Section', 'Period', 'Account', 'Actual', 'Budget / Prior', 'Variance $', 'Variance %', 'Category', 'Narrative / Explanation', 'Supporting Detail']
+    [
+      'Account',
+      'Current Actual',
+      'Current Budget',
+      'Current Variance',
+      'Current Variance %',
+      'YTD Actual',
+      'YTD Budget',
+      'YTD Variance',
+      'YTD Variance %',
+      'Current Category',
+      'Current Status',
+      'Current Explanation',
+      'Current Supporting Detail',
+      'YTD Category',
+      'YTD Status',
+      'YTD Explanation',
+      'YTD Supporting Detail'
+    ]
   )
 })
 
-test('owner rows carry Actual and Budget/Prior from the note metadata', () => {
+test('owner rows carry Current Actual and Budget from the note metadata', () => {
   const rows = buildOwnerRows(baseNarrative(FLAGGED))
   const row = rows.find((r) => r.account === 'Utility Expense Recovery')
-  assert.equal(row.actual, 12700)
-  assert.equal(row.comparison, 5334)
-  assert.equal(row.varianceAmount, 7366)
-  assert.ok(Math.abs(row.variancePercent - 138.1) < 0.1)
-  assert.equal(row.category, 'Unfavorable')
-  assert.equal(row.section, 'High Variance')
+  assert.equal(row.currentActual, 12700)
+  assert.equal(row.currentComparison, 5334)
+  assert.equal(row.currentVarianceAmount, 7366)
+  assert.ok(Math.abs(row.currentVariancePercent - 138.1) < 0.1)
+  assert.equal(row.currentCategory, 'Unfavorable')
+  assert.equal(row.currentSection, 'High Variance')
 })
 
 test('owner Supporting Detail summarizes GL detail without any file name', () => {
   const enriched = enrichNarrative(baseNarrative(FLAGGED), { supporting: [GL('4. General Ledger.pdf')] })
   const rows = buildOwnerRows(enriched)
   const row = rows.find((r) => r.account === 'Utility Expense Recovery')
-  assert.match(row.supporting, /^GL:/)
-  assert.match(row.supporting, /PG&E/)
+  assert.match(row.currentSupporting, /^GL:/)
+  assert.match(row.currentSupporting, /PG&E/)
   // Rounded "approximately" presentation matching the narrative — no cents.
-  assert.match(row.supporting, /~\$17,400\b/)
-  assert.doesNotMatch(row.supporting, /17,415\.99|\.\d\d/)
-  assert.doesNotMatch(row.supporting, /General Ledger\.pdf|Supporting file/)
+  assert.match(row.currentSupporting, /~\$17,400\b/)
+  assert.doesNotMatch(row.currentSupporting, /17,415\.99|\.\d\d/)
+  assert.doesNotMatch(row.currentSupporting, /General Ledger\.pdf|Supporting file/)
 })
 
 test('meta block includes source file, classification, thresholds and generated date', () => {
@@ -154,9 +172,11 @@ test('workbook re-reads with bold frozen header, currency + percent formats', as
   // Frozen top region (header row pinned).
   assert.equal(owner.views[0].state, 'frozen')
   assert.ok(owner.views[0].ySplit >= 1)
-  // Currency + percent number formats survive on the data columns.
-  assert.equal(owner.getColumn(4).numFmt, '$#,##0.00') // Actual
-  assert.equal(owner.getColumn(7).numFmt, '0.0%') // Variance %
+  // Currency + percent number formats survive on the side-by-side data columns.
+  assert.equal(owner.getColumn(2).numFmt, '$#,##0.00') // Current Actual
+  assert.equal(owner.getColumn(5).numFmt, '0.0%') // Current Variance %
+  assert.equal(owner.getColumn(6).numFmt, '$#,##0.00') // YTD Actual
+  assert.equal(owner.getColumn(9).numFmt, '0.0%') // YTD Variance %
   // The header row is bold somewhere in the frozen region.
   const headerRow = owner.getRow(owner.views[0].ySplit)
   assert.ok(headerRow.getCell(1).font && headerRow.getCell(1).font.bold, 'header is bold')
@@ -172,10 +192,11 @@ test('Variance % is stored as a fraction so 0.0% renders the right number', asyn
   const wb = new ExcelJS.Workbook()
   await wb.xlsx.load(buf)
   const owner = wb.getWorksheet(OWNER_SHEET)
-  // Find the data row for the account and read the Variance % cell (col 7).
+  // Find the data row for the account (col 1) and read the Current Variance %
+  // cell (col 5).
   let pct = null
   owner.eachRow((row) => {
-    if (row.getCell(3).value === 'Utility Expense Recovery') pct = row.getCell(7).value
+    if (row.getCell(1).value === 'Utility Expense Recovery') pct = row.getCell(5).value
   })
   assert.ok(pct !== null && Math.abs(pct - 1.381) < 0.01, `expected ~1.381, got ${pct}`)
 })
@@ -196,7 +217,7 @@ test('owner sheet never contains a supporting-file name', async () => {
 
 // --- Period Scope interop --------------------------------------------------
 
-test('Excel respects the selected period scope', () => {
+test('Excel lays Current and YTD side by side and respects period scope', () => {
   const two = generateNarrative({
     fileId: 'base',
     fileName: 'X.xlsx',
@@ -208,9 +229,27 @@ test('Excel respects the selected period scope', () => {
     ]
   })
   const enriched = enrichNarrative(two, { supporting: [GL()] })
+
+  // Both periods → ONE merged row per account, Current and YTD side by side.
+  const rows = buildOwnerRows(enriched)
+  const matches = rows.filter((r) => r.account === 'Utility Expense Recovery')
+  assert.equal(matches.length, 1, 'a single comparative row carries both periods')
+  assert.equal(matches[0].currentActual, 12700)
+  assert.equal(matches[0].currentComparison, 5334)
+  assert.equal(matches[0].ytdActual, 12700)
+  assert.equal(matches[0].ytdComparison, 5334)
+
+  // Scoped to Current: the Current columns are populated, the YTD side is blank.
   const current = scopeNarrative(enriched, 'current')
-  const periods = new Set(buildOwnerRows(current).map((r) => r.period))
-  assert.deepEqual([...periods], ['Current'])
+  const cRow = buildOwnerRows(current).find((r) => r.account === 'Utility Expense Recovery')
+  assert.equal(cRow.currentActual, 12700)
+  assert.equal(cRow.ytdActual, null)
+
+  // Scoped to YTD: the YTD columns are populated, the Current side is blank.
+  const ytd = scopeNarrative(enriched, 'ytd')
+  const yRow = buildOwnerRows(ytd).find((r) => r.account === 'Utility Expense Recovery')
+  assert.equal(yRow.ytdActual, 12700)
+  assert.equal(yRow.currentActual, null)
 })
 
 // --- base-only / empty narratives still export cleanly ---------------------
@@ -218,7 +257,7 @@ test('Excel respects the selected period scope', () => {
 test('base-only narrative exports with no evidence sheet and no supporting detail', async () => {
   const model = buildExcelModel(baseNarrative(FLAGGED), { generatedDate: FIXED_DATE })
   assert.equal(model.evidenceRows.length, 0)
-  assert.ok(model.ownerRows.every((r) => r.supporting === ''))
+  assert.ok(model.ownerRows.every((r) => r.currentSupporting === '' && r.ytdSupporting === ''))
   const buf = await narrativeToExcelBuffer(baseNarrative(FLAGGED), { generatedDate: FIXED_DATE })
   const wb = new ExcelJS.Workbook()
   await wb.xlsx.load(buf)
