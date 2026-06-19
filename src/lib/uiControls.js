@@ -1,22 +1,25 @@
-// --- UI control inventory — Phase 22.2 ------------------------------------
+// --- UI control inventory — Phase 23 (Style controls) ---------------------
 // Single source of truth for which Style / Variance controls are ACTIVE (wired to
 // real output) versus shown-but-disabled ("Coming soon"). Kept as pure data (no
 // JSX) so the panels and the test suite read the exact same lists and can never
-// drift. Removed controls (Learn-from-uploads, free-text Notes, Narrative Detail)
-// are intentionally absent here and from the panels/state/request wiring.
+// drift. Removed controls (Audience, Learn-from-uploads, free-text Notes,
+// Narrative Detail, Commentary detail) are intentionally absent here and from the
+// panels/state/request wiring.
 
-// Active Style control: changes real output (drives the enrichment commentary mode).
+// Active Style controls — Phase 23. All five shape the LLM style instructions
+// (see server/llm.js buildStyleInstructions). Each carries a `type`: 'select'
+// renders as a dropdown; 'toggle' renders as a checkbox (On/Off). Order here is
+// the render order in the Style panel.
 export const STYLE_ACTIVE_FIELDS = [
-  { key: 'commentaryDetail', label: 'Commentary detail', options: ['Conservative', 'Detailed'] }
+  { key: 'reportStyle', label: 'Report Style', type: 'select', options: ['Concise', 'Detailed'] },
+  { key: 'tone', label: 'Tone', type: 'select', options: ['Neutral', 'Cautious'] },
+  { key: 'length', label: 'Length', type: 'select', options: ['Brief', 'Standard', 'Verbose'] },
+  { key: 'abbreviateDollars', label: 'Abbreviate Dollar Values', type: 'toggle' },
+  { key: 'dollarReferences', label: 'Dollar Value References', type: 'select', options: ['Minimum', 'Detail'] }
 ]
 
-// Style controls shown but not yet wired — rendered disabled and tagged "Coming soon".
-export const STYLE_COMING_SOON_FIELDS = [
-  { key: 'audience', label: 'Audience', options: ['Owner', 'Asset Manager', 'Internal'] },
-  { key: 'reportStyle', label: 'Report Style', options: ['Executive', 'Detailed', 'Narrative'] },
-  { key: 'tone', label: 'Tone', options: ['Neutral', 'Formal', 'Plain'] },
-  { key: 'length', label: 'Length', options: ['Standard', 'Brief', 'Expanded'] }
-]
+// No Style controls are deferred anymore — every Style control is active.
+export const STYLE_COMING_SOON_FIELDS = []
 
 // Variance "Include" filters — planned, not yet wired (disabled, "Coming soon").
 export const VARIANCE_INCLUDE_FILTERS = [
