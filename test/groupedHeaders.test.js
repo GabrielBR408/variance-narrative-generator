@@ -14,6 +14,7 @@ import { computeVariance } from '../src/lib/variance/index.js'
 import { generateNarrative } from '../src/lib/narrative/index.js'
 import { narrativeToMarkdown } from '../src/lib/export/markdown.js'
 import { narrativeToDocxBlocks } from '../src/lib/export/docx.js'
+import { buildExcelModel } from '../src/lib/export/excel.js'
 
 // Wrap an array-of-arrays grid the way the spreadsheet parser hands it over.
 function spreadsheet(grid) {
@@ -148,4 +149,38 @@ test('grouped workbook narrates and exports to Markdown + DOCX (Current + YTD)',
   const text = blocks.map((b) => b.text).join('\n')
   assert.ok(text.includes('Rental Income') && text.includes('Repairs Expense'))
   assert.deepEqual(blocks.filter((b) => b.kind === 'period').map((b) => b.text), ['Current', 'YTD'])
+})
+
+// --- unlabeled YTD band: value sub-labels printed only under Current ---------
+// A real comparative income statement whose merged "Year-To-Date" group band
+// does NOT repeat the Actual/Budget/Variance/Variance % sub-headers — they
+// appear only under "Current Period". After folding, the YTD columns carry just
+// the period label, so the YTD value columns must be recovered positionally or
+// every YTD column in the Excel export comes back null. This reproduces the
+// reported bug (Current reads fine, YTD null) and locks in the fix end-to-end.
+const UNLABELED_YTD = [
+  ['', 'Current Period', '', '', '', 'Year-To-Date', '', '', ''],
+  ['Account', 'Actual', 'Budget', 'Variance', 'Variance %', '', '', '', ''],
+  ['Rental Income', '130000', '100000', '30000', '30', '700000', '600000', '100000', '16.7'],
+  ['Repairs Expense', '60000', '40000', '20000', '50', '300000', '250000', '50000', '20']
+]
+
+test('YTD columns parse and flow to the Excel export when only Current carries sub-labels', () => {
+  const { normalized, confidence } = normalize(spreadsheet(UNLABELED_YTD), 'spreadsheet')
+  const result = computeVariance({
+    fileId: 'f1', fileName: 'Comparative Income Statement.xlsx',
+    status: 'ok', confidence, classification: { type: 'variance-report' }, normalized
+  })
+  assert.deepEqual(result.comparisonSets.map((s) => s.period), ['current', 'ytd'])
+
+  const model = buildExcelModel(generateNarrative(result), {})
+  const rental = model.ownerRows.find((r) => r.account === 'Rental Income')
+  // Current side still reads exactly as before.
+  assert.equal(rental.currentActual, 130000)
+  assert.equal(rental.currentComparison, 100000)
+  // YTD side now carries real numbers instead of null.
+  assert.equal(rental.ytdActual, 700000)
+  assert.equal(rental.ytdComparison, 600000)
+  assert.equal(rental.ytdVarianceAmount, 100000)
+  assert.ok(Math.abs(rental.ytdVariancePercent - 16.6667) < 0.01)
 })
