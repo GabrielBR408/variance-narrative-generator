@@ -4,46 +4,23 @@ import StylePanel from './components/StylePanel.jsx'
 import VarianceDetail from './components/VarianceDetail.jsx'
 import GeneratePanel from './components/GeneratePanel.jsx'
 import ResultPanel from './components/ResultPanel.jsx'
-import { classifyFile } from './lib/classify.js'
-import { extractFile } from './lib/extract/extract.js'
-import { augmentWithOcr } from './lib/ocr/augment.js'
+import DisclosureModal from './components/DisclosureModal.jsx'
+import PrivacyModal from './components/PrivacyModal.jsx'
 import {
   extractionReadiness,
   resultFreshness,
   shouldDiscardResult,
   pendingSupportingCount,
-  AI_LLM_MODE,
   generateClickAction
 } from './lib/generateState.js'
-import { enrichNarrative } from './lib/enrich/index.js'
-import { clientGenerate } from './lib/clientGenerate.js'
-import { DEFAULT_COMMENTARY_DETAIL, commentaryModeFromStyle } from './lib/enrich/commentaryMode.js'
-import { enrichmentDiagnostic } from './lib/enrichmentDiagnostic.js'
+import { commentaryModeFromStyle, DEFAULT_COMMENTARY_DETAIL } from './lib/enrich/commentaryMode.js'
 import { computeVariance } from './lib/variance/index.js'
 import { DEFAULT_THRESHOLDS, thresholdsFromSettings } from './lib/variance/thresholds.js'
 import { generateNarrative } from './lib/narrative/index.js'
 import { periodScopeAvailable, DEFAULT_PERIOD_SCOPE } from './lib/narrative/periodScope.js'
-
-// Stable in-memory key for a File. Same name+size+mtime ⇒ same extraction, so
-// we never re-open a file we've already read this session.
-function fileKey(file) {
-  return `${file.name}::${file.size}::${file.lastModified}`
-}
-
-// Compact, faithful view of a browser extraction to ship to /generate. We send
-// only the normalized shape the variance engine reads — never the raw text or
-// parser internals. Returns null when the file hasn't been extracted yet.
-function slimExtraction(ex) {
-  if (!ex) return null
-  return {
-    fileId: ex.fileId,
-    fileName: ex.fileName,
-    status: ex.status,
-    confidence: ex.confidence,
-    classification: ex.classification ? { type: ex.classification.type } : null,
-    normalized: ex.normalized || { rows: [], columns: [], accounts: [], dates: [], values: [] }
-  }
-}
+import { fileKey } from './lib/fileKey.js'
+import { useExtraction } from './hooks/useExtraction.js'
+import { useGenerate } from './hooks/useGenerate.js'
 
 // Phase 22.2: only `commentaryDetail` affects output today. The remaining style
 // fields are rendered disabled ("Coming soon") and kept here purely so those
@@ -90,25 +67,6 @@ export default function App() {
   const [showLlmDisclosure, setShowLlmDisclosure] = useState(false)
   const llmAcknowledgedRef = useRef(false)
 
-  // The first Generate click in a session opens the disclosure; generation runs
-  // once it is acknowledged (and immediately on every later click). Plain
-  // functions so they always close over the current generate()/state.
-  function handleGenerateClick() {
-    const action = generateClickAction({ acknowledged: llmAcknowledgedRef.current, busy })
-    if (action === 'disclose') setShowLlmDisclosure(true)
-    else if (action === 'generate') generate()
-  }
-
-  function handleLlmDisclosureAccept() {
-    llmAcknowledgedRef.current = true
-    setShowLlmDisclosure(false)
-    generate()
-  }
-
-  const handleLlmDisclosureDismiss = useCallback(() => {
-    setShowLlmDisclosure(false)
-  }, [])
-
   // First-visit privacy & AI disclosure. Shown once per browser; acknowledgement
   // is persisted in localStorage so it never reappears on later visits. Reads are
   // wrapped because localStorage can throw (private mode / disabled storage) — if
@@ -131,10 +89,9 @@ export default function App() {
     setShowPrivacyDisclosure(false)
   }, [])
 
-  // Extraction state (Phase 7, isolated slice). Map fileKey → extraction
-  // result. In memory only; discarded with the session, never persisted.
-  const [extractions, setExtractions] = useState({})
-  const startedRef = useRef(new Set()) // keys already sent to the extractor
+  // Extraction pipeline (Phase 7): classify → extract → normalize → preview.
+  // Owns the in-memory extraction map and re-runs as the uploaded files change.
+  const extractions = useExtraction({ baseReport, supportingFiles })
 
   const busy = status === 'preparing' || status === 'sending'
 
@@ -189,6 +146,41 @@ export default function App() {
     })
   }, [result, previewThresholds, style, baseReport, supportingFiles])
 
+  // The Generate flow (assembles the request, runs the pipeline, enriches, and
+  // snapshots settings). Lives in a hook but drives App's status/result/message.
+  const generate = useGenerate({
+    baseReport,
+    supportingFiles,
+    style,
+    variance,
+    extractions,
+    previewThresholds,
+    readiness,
+    busy,
+    setStatus,
+    setResult,
+    setMessage
+  })
+
+  // The first Generate click in a session opens the disclosure; generation runs
+  // once it is acknowledged (and immediately on every later click). Plain
+  // functions so they always close over the current generate()/state.
+  function handleGenerateClick() {
+    const action = generateClickAction({ acknowledged: llmAcknowledgedRef.current, busy })
+    if (action === 'disclose') setShowLlmDisclosure(true)
+    else if (action === 'generate') generate()
+  }
+
+  function handleLlmDisclosureAccept() {
+    llmAcknowledgedRef.current = true
+    setShowLlmDisclosure(false)
+    generate()
+  }
+
+  const handleLlmDisclosureDismiss = useCallback(() => {
+    setShowLlmDisclosure(false)
+  }, [])
+
   // Phase 22.3: a result with no base report cannot be valid — its source is
   // gone. Clear it (and its export availability) so nothing stale lingers.
   useEffect(() => {
@@ -198,179 +190,6 @@ export default function App() {
       setMessage('')
     }
   }, [baseReport, result])
-
-  // Extraction pipeline: classify (Phase 6) → extract → normalize → preview.
-  // Runs whenever the uploaded files change. Each file is opened at most once;
-  // removed files are pruned so their content is released.
-  useEffect(() => {
-    const current = []
-    if (baseReport) current.push({ file: baseReport, role: 'baseReport' })
-    supportingFiles.forEach((f) => current.push({ file: f, role: 'supportingFile' }))
-    const keys = new Set(current.map(({ file }) => fileKey(file)))
-
-    // Drop extractions for files that are no longer present.
-    setExtractions((prev) => {
-      let changed = false
-      const next = {}
-      for (const k of Object.keys(prev)) {
-        if (keys.has(k)) next[k] = prev[k]
-        else changed = true
-      }
-      return changed ? next : prev
-    })
-    for (const k of [...startedRef.current]) if (!keys.has(k)) startedRef.current.delete(k)
-
-    // Kick off extraction for any newly added file.
-    current.forEach(({ file, role }) => {
-      const id = fileKey(file)
-      if (startedRef.current.has(id)) return
-      startedRef.current.add(id)
-
-      const classification = classifyFile({ name: file.name, role })
-      setExtractions((prev) => ({
-        ...prev,
-        [id]: { fileId: id, fileName: file.name, classification, status: 'pending' }
-      }))
-
-      extractFile({ file, fileId: id, classification })
-        // OCR fallback: a SCANNED supporting PDF (image-only, no text layer) is
-        // rendered and read by Claude vision into the same GL table the
-        // text/position parsers emit. A no-op for every other file, and on any
-        // failure the original (empty) extraction is kept — nothing surfaced.
-        .then((res) => augmentWithOcr(res, file, { role }))
-        .then((res) => setExtractions((prev) => (id in prev ? { ...prev, [id]: res } : prev)))
-        .catch(() =>
-          setExtractions((prev) =>
-            id in prev
-              ? {
-                  ...prev,
-                  [id]: { fileId: id, fileName: file.name, classification, status: 'error', message: 'Something went wrong while reading this file.', confidence: 0 }
-                }
-              : prev
-          )
-        )
-    })
-  }, [baseReport, supportingFiles])
-
-  async function generate() {
-    if (busy) return // prevent duplicate submits
-
-    // Readiness gate (Phase 9C): no base, still extracting, or extraction failed.
-    // The button is already disabled in these states; this guards programmatic
-    // or race-y calls and surfaces the same friendly explanation.
-    if (!readiness.ready) {
-      setStatus('failure')
-      setResult(null)
-      setMessage(readiness.message)
-      return
-    }
-
-    // Preparing: assemble one multipart request carrying the actual file
-    // bytes. No interpretation, no extraction, no validation beyond the
-    // required base file above.
-    setStatus('preparing')
-    setMessage('')
-    setResult(null)
-
-    const form = new FormData()
-    form.append('baseReport', baseReport) // real File object
-    supportingFiles.forEach((f) => form.append('supportingFiles', f)) // real File objects
-    form.append('style', JSON.stringify(style))
-    form.append('variance', JSON.stringify(variance))
-    form.append('llmMode', AI_LLM_MODE)
-
-    // Phase 9B: extraction is browser-first, so the normalized result the
-    // browser already computed travels with the request. The server runs the
-    // deterministic variance + narrative engines on it — no re-parsing.
-    const baseExtraction = slimExtraction(extractions[fileKey(baseReport)])
-    const supportingExtractions = supportingFiles
-      .map((f) => slimExtraction(extractions[fileKey(f)]))
-      .filter(Boolean)
-    form.append(
-      'extractions',
-      JSON.stringify({ base: baseExtraction, supporting: supportingExtractions })
-    )
-
-    // Compact file metadata for the static fallback's response (mirrors what the
-    // server reports back as `files`).
-    const clientFiles = [
-      { name: baseReport.name, size: baseReport.size, type: baseReport.type || '', role: 'baseReport' },
-      ...supportingFiles.map((f) => ({ name: f.name, size: f.size, type: f.type || '', role: 'supportingFile' }))
-    ]
-
-    // Sending. Do not set Content-Type — the browser adds the multipart
-    // boundary automatically.
-    setStatus('sending')
-    try {
-      // Try the real /generate endpoint (present in dev/preview and any server
-      // deploy). On a static host (e.g., GitHub Pages) there is no endpoint, so
-      // the request yields no usable JSON — fall back to computing the SAME
-      // response in-browser with the same pure pipeline. A server that responds
-      // with a structured error is still authoritative (surfaced below).
-      let data = null
-      try {
-        const res = await fetch('/api/generate', { method: 'POST', body: form })
-        data = await res.json()
-      } catch {
-        data = clientGenerate({
-          baseExtraction,
-          files: clientFiles,
-          thresholds: previewThresholds,
-          settingsReceived: Boolean(style && variance)
-        })
-      }
-
-      if (!data || data.success !== true || !data.narrative) {
-        throw new Error((data && data.error) || 'Generation could not be completed. Try again.')
-      }
-
-      // Phase 15: enrich the server's base-only narrative with deterministic
-      // evidence from the supporting files (which the browser already extracted).
-      // With no supporting files or no confident match, this is a no-op and the
-      // narrative is byte-identical to the server's.
-      // Phase 21.3/21.4: commentary mode (Detailed is the default; Conservative
-      // is still selectable). The chosen mode flows into the generated result
-      // and the exports (which consume this enriched narrative).
-      const mode = commentaryModeFromStyle(style)
-      const narrative = enrichNarrative(data.narrative, { supporting: supportingExtractions, mode })
-
-      // UI-only enrichment diagnostic (deterministic; reads counts only, never
-      // amounts/rows). Tells the user whether GL enrichment actually ran.
-      const diagnostic = enrichmentDiagnostic({
-        extractions: supportingExtractions,
-        narratives: [narrative]
-      })
-
-      setResult({
-        jobId: data.jobId,
-        filesReceived: data.filesReceived,
-        settingsReceived: data.settingsReceived,
-        files: Array.isArray(data.files) ? data.files : [],
-        extraction: data.extraction,
-        variance: data.variance,
-        narrative,
-        diagnostic,
-        // Phase 22.2: snapshot the settings this result was generated with, so the
-        // UI can warn when the live settings drift from it (period scope excluded —
-        // it is applied live at render/export time, so it never makes a result stale).
-        settings: {
-          amountThreshold: previewThresholds.amount,
-          percentThreshold: previewThresholds.percent,
-          commentaryMode: mode
-        },
-        // Phase 22.3: snapshot the file set too (base + sorted supporting), so the
-        // same freshness banner fires when files are added, removed, or replaced.
-        source: {
-          baseKey: fileKey(baseReport),
-          supportingKeys: supportingFiles.map(fileKey).sort()
-        }
-      })
-      setStatus('success')
-    } catch (err) {
-      setStatus('failure')
-      setMessage(err.message || 'Something went wrong. Try again.')
-    }
-  }
 
   return (
     <main className="page">
@@ -409,46 +228,12 @@ export default function App() {
           onGenerate={handleGenerateClick}
         />
         {showLlmDisclosure && (
-          <div className="llm-disclosure-overlay" role="dialog" aria-modal="true" aria-labelledby="llm-disclosure-title">
-            <div className="llm-disclosure-dialog">
-              <h2 id="llm-disclosure-title" className="llm-disclosure-title">AI Commentary — Data Notice</h2>
-              <p className="llm-disclosure-body">
-                Generating AI commentary sends your GL transaction detail to Anthropic's API to produce vendor-cited narratives. No data is stored on our servers. See Anthropic's privacy policy for API data handling.
-              </p>
-              <div className="llm-disclosure-actions">
-                <button type="button" className="llm-disclosure-btn llm-disclosure-btn--primary" onClick={handleLlmDisclosureAccept}>
-                  I understand — enable AI mode
-                </button>
-                <button type="button" className="llm-disclosure-btn llm-disclosure-btn--secondary" onClick={handleLlmDisclosureDismiss}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
+          <DisclosureModal onAccept={handleLlmDisclosureAccept} onDismiss={handleLlmDisclosureDismiss} />
         )}
         <ResultPanel status={status} result={result} periodScope={periodScope} freshness={freshness} />
       </div>
 
-      {showPrivacyDisclosure && (
-        <div className="llm-disclosure-overlay" role="dialog" aria-modal="true" aria-labelledby="privacy-disclosure-title">
-          <div className="llm-disclosure-dialog">
-            <h2 id="privacy-disclosure-title" className="llm-disclosure-title">Privacy &amp; AI Disclosure</h2>
-            <p className="llm-disclosure-body">
-              Your files are processed locally in your browser and are never stored on our servers. File content is only sent to Anthropic (creator of Claude AI) when GL transaction detail is sent to generate cited commentary, or when PDF text scanning is needed to read a file. Anthropic does not use API data for model training by default. See Anthropic&rsquo;s privacy policy at{' '}
-              <a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener noreferrer">anthropic.com/privacy</a>{' '}
-              for details on how API data is handled.
-            </p>
-            <p className="llm-disclosure-body">
-              AI-generated narratives may contain errors or omissions. Always review and verify output against your source documents before distribution.
-            </p>
-            <div className="llm-disclosure-actions">
-              <button type="button" className="llm-disclosure-btn llm-disclosure-btn--primary" onClick={handlePrivacyDisclosureAccept}>
-                I understand
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showPrivacyDisclosure && <PrivacyModal onAccept={handlePrivacyDisclosureAccept} />}
 
       <footer className="site-footer">
         <p className="site-footer-line">
