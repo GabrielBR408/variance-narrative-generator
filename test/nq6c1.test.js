@@ -15,7 +15,7 @@ import assert from 'node:assert/strict'
 import {
   buildEvidenceIndex,
   matchAccount,
-  scoreMatch
+  scoreMatchDetailed
 } from '../src/lib/enrich/match.js'
 import { enrichNarrative } from '../src/lib/enrich/index.js'
 import { generateNarrative } from '../src/lib/narrative/index.js'
@@ -72,7 +72,7 @@ test('a "Ledger" header (not column 0) is selected as the account column', () =>
   ])
   assert.equal(idx.length, 1, 'the row indexes by name instead of defaulting to the numeric Amount column')
   assert.equal(idx[0].normName, 'hvac contract')
-  assert.equal(scoreMatch('HVAC Contract', idx[0]), 0.9)
+  assert.equal(scoreMatchDetailed('HVAC Contract', idx[0]).score, 0.9)
 })
 
 test('a "Code" header (not column 0) is selected as the account column', () => {

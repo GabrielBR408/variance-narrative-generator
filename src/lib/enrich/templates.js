@@ -173,22 +173,6 @@ export function commentarySentence({ type, account, detail, period, contribution
   return shapeSentence({ type, account, count, total, reliableTotal, maxTxn, yp, accountType })
 }
 
-// --- Phase 21.3: detailed commentary (opt-in) -----------------------------
-// Build an OPT-IN detailed GL sentence from the render-safe detail evidence
-// selected in Phase 21.2 (`detailEvidence`). Conservative mode NEVER calls this
-// — it is reached only when the caller passes mode: 'detailed'. It renders at
-// most ONE sanitized vendor/memo phrase per note, never lists multiple vendors,
-// never asserts causation, and renders nothing unsafe (the 21.2 gate already
-// stripped dates / references / money / page-bleed / codes / account numbers).
-//
-// Returns null whenever it should fall back to the conservative sentence:
-//   • no evidence, or evidenceConfidence is 'low' / 'none' (do not over-render)
-//   • neither a render-safe vendor nor memo survived selection
-//   • a direction-conflict (the conservative "runs counter" warning must win)
-// The final causal-language guard is a belt-and-suspenders reject-on-doubt net;
-// the wording below is causation-free by construction.
-const CAUSAL_RE = /\b(caused by|due to|because of|driven by|drove|resulting from|result of|explains?|attributable to)\b/i
-
 // --- Phase 21.4: deterministic vendor / memo polish ------------------------
 // Render-time normalization (the reconstructed metadata is left untouched). The
 // reconstruction layer (21.1) title-cases generically, which mangles acronyms
@@ -293,47 +277,6 @@ export function polishMemo(memo) {
   const firstWord = (expanded.split(/\s+/)[0] || '').toUpperCase()
   if (VENDOR_ACRONYMS.has(firstWord)) return expanded
   return expanded.charAt(0).toLowerCase() + expanded.slice(1)
-}
-
-// Build the opt-in detailed GL sentence from the render-safe detail evidence
-// (Phase 21.2 `detailEvidence`), with Phase 21.4 vendor/memo polish applied at
-// render time. Renders at most ONE vendor/memo phrase per note, never lists
-// multiple vendors, and never asserts causation. Returns null to fall back to
-// the conservative sentence when the evidence is not safe enough to render.
-export function detailedCommentarySentence({ evidence, contribution, period } = {}) {
-  if (!evidence) return null
-  const { evidenceConfidence, vendorRenderable, memoRenderable } = evidence
-  // Do not render detail when confidence is low/none (do not over-render).
-  if (evidenceConfidence !== 'high' && evidenceConfidence !== 'medium') return null
-
-  const vendor = vendorRenderable ? polishVendor(evidence.vendor) : ''
-  const memo = memoRenderable ? polishMemo(evidence.memo) : ''
-  if (!vendor && !memo) return null
-
-  const yp = periodClause(period)
-  const contributionType = contribution && contribution.contributionType
-
-  // A direction conflict carries an important "ran the other way / worth a closer
-  // look" signal — prefer the conservative sentence over a softer detail phrase.
-  if (contributionType === 'direction-conflict') return null
-
-  // Exactly one vendor/memo phrase; memo + vendor preferred, then vendor, then
-  // memo. `subject` reads as a clause head for every variant.
-  const subject = vendor && memo ? `${memo} from ${vendor}` : vendor ? `activity from ${vendor}` : memo
-
-  let sentence
-  if (contributionType === 'offset-heavy') {
-    sentence = `The variance reflects ${subject}, partially offset by related entries${yp}.`
-  } else if (contributionType === 'disproportionate') {
-    // Reworded to avoid repeating "related activity" within one sentence.
-    sentence = `The variance reflects ${subject}, though related activity exceeded the reported variance${yp}.`
-  } else {
-    sentence = `The variance reflects ${subject}${yp}.`
-  }
-
-  // Reject-on-doubt: never emit causal language even if wording changes later.
-  if (CAUSAL_RE.test(sentence)) return null
-  return sentence
 }
 
 // The Phase 19A shape sentence (A–I). Factored out so Phase 19B can embed a

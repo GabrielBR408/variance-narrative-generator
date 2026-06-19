@@ -18,14 +18,18 @@
 // survive into vendor or memo; cap vendor and memo length. NOTHING here is
 // rendered — it only attaches metadata (Phase 21.1 is reconstruction only).
 
+// Tokens that must never survive into a reconstructed vendor or memo — the
+// shared render-safety set (see sanitationPatterns.js). PAGE_BLEED_STRIP_RE is
+// the global form used for stripping every page-header occurrence below.
+import {
+  DATE_RE,
+  REFERENCE_RE as REFERENCE_LIKE_RE,
+  MONEY_RE,
+  PAGE_BLEED_STRIP_RE as PAGE_BLEED_RE
+} from './sanitationPatterns.js'
+
 export const VENDOR_MAX_LEN = 40
 export const MEMO_MAX_LEN = 60
-
-// Tokens that must never survive into a reconstructed vendor or memo.
-const DATE_RE = /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b|\b\d{4}-\d{2}-\d{2}\b/
-const REFERENCE_LIKE_RE = /\b(inv|invoice|chk|check|ck|ref|po|ap|ar|doc|gs|cm|je)\b\s*\d|#\s*\d/i
-const MONEY_RE = /\d[\d,]*\.\d{2}\b|\$\s*\d/
-const PAGE_BLEED_RE = /general\s+ledger/gi
 
 // A corporate / entity suffix that strongly marks the tail of a vendor name.
 const SUFFIX_RE = /^(llc|inc|inc\.|co|co\.|corp|corp\.|lp|llp|ltd|ltd\.|company|services?|service|collector|associates|group|systems?|mechanical|plumbing|electric|security|properties|partners)$/i

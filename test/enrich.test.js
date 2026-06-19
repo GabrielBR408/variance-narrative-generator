@@ -23,7 +23,7 @@ import { narrativeToMarkdown } from '../src/lib/export/markdown.js'
 import { narrativeToDocxBlocks } from '../src/lib/export/docx.js'
 import {
   enrichNarrative,
-  scoreMatch,
+  scoreMatchDetailed,
   buildEvidenceIndex,
   normalizeName,
   accountCode,
@@ -178,7 +178,7 @@ test('a partial token overlap scores below the floor and does not attach', () =>
   const idx = buildEvidenceIndex([
     supporting({ fileName: 'Notes.pdf', type: 'Supporting Document', columns: ['Account'], rows: [['Utility Expense Insurance']] })
   ])
-  const score = scoreMatch('Utility Expense Recovery', idx[0])
+  const score = scoreMatchDetailed('Utility Expense Recovery', idx[0]).score
   assert.ok(score < CONFIDENCE_FLOOR, `expected < ${CONFIDENCE_FLOOR}, got ${score}`)
 
   const n = baseNarrative(FLAGGED)
@@ -190,11 +190,11 @@ test('a partial token overlap scores below the floor and does not attach', () =>
 
 test('scoreMatch tiers: code exact > name exact > substring', () => {
   const [byCode] = buildEvidenceIndex([supporting({ fileName: 'a', type: '', columns: ['Account'], rows: [['5100 Utilities']] })])
-  assert.equal(scoreMatch('5100 Utility Expense Recovery', byCode), 1.0)
+  assert.equal(scoreMatchDetailed('5100 Utility Expense Recovery', byCode).score, 1.0)
   const [byName] = buildEvidenceIndex([supporting({ fileName: 'a', type: '', columns: ['Account'], rows: [['Utility Expense Recovery']] })])
-  assert.equal(scoreMatch('Utility Expense Recovery', byName), 0.9)
+  assert.equal(scoreMatchDetailed('Utility Expense Recovery', byName).score, 0.9)
   const [bySub] = buildEvidenceIndex([supporting({ fileName: 'a', type: '', columns: ['Account'], rows: [['Total Utility Expense Recovery Detail']] })])
-  assert.equal(scoreMatch('Utility Expense Recovery', bySub), 0.7)
+  assert.equal(scoreMatchDetailed('Utility Expense Recovery', bySub).score, 0.7)
 })
 
 // --- multiple files: deterministic order + dedupe --------------------------

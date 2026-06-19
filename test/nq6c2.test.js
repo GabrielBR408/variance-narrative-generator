@@ -26,7 +26,7 @@ import {
   SECTIONED_GL_COLUMNS
 } from '../src/lib/extract/fileType.js'
 import { normalize } from '../src/lib/extract/normalize.js'
-import { buildEvidenceIndex, matchAccount, scoreMatch } from '../src/lib/enrich/match.js'
+import { buildEvidenceIndex, matchAccount, scoreMatchDetailed } from '../src/lib/enrich/match.js'
 import { enrichNarrative } from '../src/lib/enrich/index.js'
 import { generateNarrative } from '../src/lib/narrative/index.js'
 import { _buildPackets } from '../server/llm.js'
@@ -199,7 +199,7 @@ test('buildEvidenceIndex maps each sectioned-GL account to its transaction rows'
     idx.map((e) => e.normName),
     ['hvac contract', 'hvac contract', 'janitorial contract', 'security contract']
   )
-  assert.equal(scoreMatch('HVAC Contract', idx[0]), 0.9)
+  assert.equal(scoreMatchDetailed('HVAC Contract', idx[0]).score, 0.9)
 })
 
 test('matchAccount returns thick, debit-typed citations for each contract account', () => {
