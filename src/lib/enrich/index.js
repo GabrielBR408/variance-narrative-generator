@@ -310,7 +310,7 @@ export {
   RESOLVED_SUBSET_SCORE,
   RESOLVE_JACCARD_MIN
 } from './accountResolve.js'
-export { explanationClause, glEvidenceSentence, commentarySentence, detailedCommentarySentence, polishVendor, polishMemo, displayAccount, descriptorFor, approxMoney } from './templates.js'
+export { explanationClause, commentarySentence, detailedCommentarySentence, polishVendor, polishMemo, displayAccount, descriptorFor, approxMoney } from './templates.js'
 export { DEFAULT_COMMENTARY_DETAIL, commentaryModeFromStyle } from './commentaryMode.js'
 export {
   classifyGLCommentary,

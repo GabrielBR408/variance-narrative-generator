@@ -20,6 +20,7 @@
 //   • Never say "current-period" for a year-to-date period.
 
 import { normalizeName } from './match.js'
+import { SUPPRESS_RATIO } from './contribution.js'
 
 // A readable account label: strip a leading numeric code so
 // "5100 Utility Expense Recovery" reads as "Utility Expense Recovery". Falls
@@ -89,39 +90,6 @@ export function approxMoney(total) {
   return `$${rounded.toLocaleString('en-US')}`
 }
 
-// Build the STANDALONE GL evidence sentence (Phase 17.1). It states what the GL
-// contains — context only — and never asserts or implies causation. Always
-// returns a full sentence (ending in a period) for a GL match. NQ-1A reworks the
-// wording from extraction-style ("Detail shows…") to owner-facing prose:
-//   • reliable total → "Related <type> activity totaled approximately $X."
-//   • descriptions present (no reliable total) → "The movement reflects related
-//     transaction activity."
-//   • count only (amounts ambiguous, no descriptions) → "Activity was spread
-//     across N related transactions."
-//   • thin / name-only match → "Account-level activity was available for review."
-export function glEvidenceSentence({ account, thick, detail, period } = {}) {
-  if (!thick) return 'Account-level activity was available for review.'
-
-  const d = detail || {}
-  const count = Number(d.count) || 0
-  const totalReliable = typeof d.total === 'number' && Number.isFinite(d.total) && d.total !== 0
-  const yp = periodClause(period)
-
-  if (totalReliable) {
-    const descriptor = descriptorFor(account)
-    const activity = descriptor ? `${descriptor} activity` : 'account activity'
-    return `Related ${activity} totaled approximately ${approxMoney(d.total)}${yp}.`
-  }
-  if (d.topVendor) {
-    return `The movement reflects related transaction activity${yp}.`
-  }
-  if (count > 0) {
-    const noun = count === 1 ? 'transaction' : 'transactions'
-    return `Activity was spread across ${count} related ${noun}${yp}.`
-  }
-  return 'Account-level activity was available for review.'
-}
-
 // --- Phase 19A: classified GL commentary ----------------------------------
 // Render the owner-facing GL sentence for a classifier category (see
 // classify.js). Pure string builder: it reads only the category and the same
@@ -151,7 +119,7 @@ export function commentarySentence({ type, account, detail, period, contribution
   // larger than the net total, and suppress the dollar entirely when the GL
   // activity is more than ~10× the variance (ratio > SUPPRESS_RATIO).
   const ratio = contribution && typeof contribution.ratio === 'number' ? contribution.ratio : null
-  const suppress = ratio === null || ratio > 10
+  const suppress = ratio === null || ratio > SUPPRESS_RATIO
 
   switch (type) {
     case 'DC': // Direction conflict — GL net sign opposes the variance direction.
@@ -431,9 +399,9 @@ function shapeSentence({ type, account, count, total, reliableTotal, maxTxn, yp,
 
 // Build a NON-GL supporting-evidence clause (no leading comma, no trailing
 // period — the caller merges it into the variance sentence). GL evidence is NOT
-// handled here; it renders as its own sentence via glEvidenceSentence. All
-// wording is conservative context, with no causal language. Returns '' when no
-// clause applies, leaving the variance sentence untouched.
+// handled here; it renders as its own sentence elsewhere. All wording is
+// conservative context, with no causal language. Returns '' when no clause
+// applies, leaving the variance sentence untouched.
 export function explanationClause({ classificationType = '' } = {}) {
   const type = String(classificationType)
 
