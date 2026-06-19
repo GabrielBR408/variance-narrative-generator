@@ -10,7 +10,6 @@ import assert from 'node:assert/strict'
 
 import {
   buildEvidenceIndex,
-  scoreMatch,
   scoreMatchDetailed,
   resolveScore,
   significantTokens,
@@ -73,7 +72,7 @@ test('every true positive is cited end-to-end (>= floor)', () => {
   // the pre-existing substring tier rather than resolution — either way they now
   // enrich, which is the goal. So assert citation, not the specific tier here.
   for (const [base, gl] of TRUE_POSITIVES) {
-    assert.ok(scoreMatch(base, entryOf(gl)) >= CONFIDENCE_FLOOR, `${base} → ${gl} should be cited`)
+    assert.ok(scoreMatchDetailed(base, entryOf(gl)).score >= CONFIDENCE_FLOOR, `${base} → ${gl} should be cited`)
   }
 })
 
@@ -104,7 +103,7 @@ test('the resolution layer rejects every false positive', () => {
 test('false positives not preempted by the substring tier stay below the floor', () => {
   for (const [base, gl] of FALSE_POSITIVES) {
     if (base === 'Real Estate Tax') continue // pre-existing substring match (out of scope)
-    assert.ok(scoreMatch(base, entryOf(gl)) < CONFIDENCE_FLOOR, `${base} → ${gl}: below floor`)
+    assert.ok(scoreMatchDetailed(base, entryOf(gl)).score < CONFIDENCE_FLOOR, `${base} → ${gl}: below floor`)
   }
 })
 

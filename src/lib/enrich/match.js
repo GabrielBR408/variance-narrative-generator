@@ -365,8 +365,7 @@ function mostFrequent(rows, field) {
 }
 
 // Score one base account against one index entry, returning BOTH the 0..1 score
-// and the `matchMethod` tier that produced it (NQ-4C.1). `scoreMatch` wraps this
-// to preserve its numeric contract for existing callers and tests.
+// and the `matchMethod` tier that produced it (NQ-4C.1):
 //   'exact_code' | 'exact_name' | 'substring' | 'resolved_equal' |
 //   'resolved_subset' | null (sub-floor token overlap — never cited)
 export function scoreMatchDetailed(baseAccount, entry) {
@@ -403,11 +402,6 @@ export function scoreMatchDetailed(baseAccount, entry) {
   for (const t of new Set(entry.tokens)) if (baseSet.has(t)) shared++
   const denom = Math.max(baseTokens.length, entry.tokens.length, 1)
   return { score: 0.6 * (shared / denom), method: null }
-}
-
-// Score one base account against one index entry. Returns 0..1.
-export function scoreMatch(baseAccount, entry) {
-  return scoreMatchDetailed(baseAccount, entry).score
 }
 
 // Match one flagged account to supporting evidence. Returns a deterministic,

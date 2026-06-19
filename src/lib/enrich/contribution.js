@@ -31,14 +31,22 @@ export const VENDOR_MAX_LEN = 30
 export const VENDOR_MAX_COUNT = 3
 export const DESCRIPTION_MAX_LEN = 50
 
+// DATE_RE is the one pattern shared with the render-safety gate (identical).
+import { DATE_RE } from './sanitationPatterns.js'
+
 // A cell that is purely numeric/symbolic (no real name).
 const NUMERIC_ONLY_RE = /^[\s\d.,$()%\-]+$/
 // Reference / invoice / check / PO / doc / journal tokens, or any long digit run
-// — the marks of an ID, never rendered as a vendor or description.
+// — the marks of an ID, never rendered as a vendor or description. NOTE: this is
+// intentionally BROADER than the render-safety gate's REFERENCE_RE — it matches a
+// bare keyword (no trailing digit required) and adds a long-digit-run clause,
+// because here it filters ranking-time description tokens, not render output. Kept
+// local on purpose; do not replace with the shared pattern.
 const REFERENCE_LIKE_RE = /\b(inv|invoice|chk|check|ck|ref|po|ap|ar|doc|gs|je)\b|#\s*\d|\b\d{4,}\b/i
-// A money or date token leaking into text → not a clean phrase.
+// A money or date token leaking into text → not a clean phrase. NOTE: also broader
+// than the shared MONEY_RE (matches a bare "$" or "(<digit"); kept local for the
+// same ranking-time filtering reason above.
 const MONEY_RE = /\$|\(\s*\d|\d[\d,]*\.\d{2}\b/
-const DATE_RE = /\b\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?\b|\b\d{4}-\d{2}-\d{2}\b/
 
 function isReliableTotal(total) {
   return typeof total === 'number' && Number.isFinite(total) && total !== 0

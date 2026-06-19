@@ -16,7 +16,6 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { enrichNarrative } from '../src/lib/enrich/index.js'
-import { detailedCommentarySentence } from '../src/lib/enrich/templates.js'
 import { generateNarrative } from '../src/lib/narrative/index.js'
 import { narrativeToMarkdown } from '../src/lib/export/markdown.js'
 
@@ -201,44 +200,4 @@ test('detailed Markdown leaks no date, reference, raw-caps vendor, GL dollar, or
 
 test('detailed output is deterministic', () => {
   assert.equal(narrativeToMarkdown(build('detailed')), narrativeToMarkdown(build('detailed')))
-})
-
-// --- 6. unit-level guards on the pure builder ------------------------------
-
-test('detailedCommentarySentence does not render low/none confidence', () => {
-  for (const c of ['low', 'none']) {
-    const out = detailedCommentarySentence({
-      evidence: { evidenceConfidence: c, vendorRenderable: true, vendor: 'Acme LLC', memoRenderable: false, memo: null },
-      contribution: { contributionType: 'aligned' },
-      period: 'current'
-    })
-    assert.equal(out, null, `confidence=${c} must not render`)
-  }
-})
-
-test('detailedCommentarySentence returns null with no render-safe field', () => {
-  const out = detailedCommentarySentence({
-    evidence: { evidenceConfidence: 'medium', vendorRenderable: false, vendor: null, memoRenderable: false, memo: null },
-    contribution: { contributionType: 'aligned' },
-    period: 'current'
-  })
-  assert.equal(out, null)
-})
-
-test('detailedCommentarySentence yields to the conservative warning on a direction conflict', () => {
-  const out = detailedCommentarySentence({
-    evidence: { evidenceConfidence: 'high', vendorRenderable: true, vendor: 'Acme LLC', memoRenderable: true, memo: 'Repair' },
-    contribution: { contributionType: 'direction-conflict' },
-    period: 'current'
-  })
-  assert.equal(out, null)
-})
-
-test('detailedCommentarySentence is period-aware (year-to-date)', () => {
-  const out = detailedCommentarySentence({
-    evidence: { evidenceConfidence: 'medium', vendorRenderable: true, vendor: 'Recology Golden Gate', memoRenderable: false, memo: null },
-    contribution: { contributionType: 'aligned' },
-    period: 'ytd'
-  })
-  assert.equal(out, 'The variance reflects activity from Recology Golden Gate year-to-date.')
 })

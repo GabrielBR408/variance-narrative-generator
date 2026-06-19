@@ -27,16 +27,17 @@
 // vendors; reject generic memos unless paired with a high-confidence vendor;
 // enforce length caps; NEVER mutate the reconstructed metadata.
 
+import { DATE_RE, REFERENCE_RE, MONEY_RE, PAGE_BLEED_RE } from './sanitationPatterns.js'
+
 // Render-safety length caps (mirror the Phase 21.1 reconstruction caps; we
 // re-check here so the gate is self-contained and reject-on-doubt).
 export const VENDOR_RENDER_MAX_LEN = 40
 export const MEMO_RENDER_MAX_LEN = 60
 
 // Forbidden tokens that must never survive into a renderable vendor or memo.
-const DATE_RE = /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b|\b\d{4}-\d{2}-\d{2}\b/
-const REFERENCE_RE = /\b(inv|invoice|chk|check|ck|ref|po|ap|ar|doc|gs|cm|je)\b\s*\d|#\s*\d/i
-const MONEY_RE = /\$\s*\d|\d[\d,]*\.\d{2}\b/
-const PAGE_BLEED_RE = /general\s+ledger/i
+// The date/reference/money/page-bleed patterns are the shared render-safety set
+// (see sanitationPatterns.js); imported so this gate and reconstructDetail.js
+// can never drift apart.
 // A long digit run (≥4) is a code, check number, or stray ID — never a name.
 const LONG_CODE_RE = /\d{4,}/
 

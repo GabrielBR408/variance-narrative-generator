@@ -104,8 +104,8 @@ function detectionText({ account, detail, reconstructed, detailEvidence }) {
 }
 
 // The render-safe SUBJECT of the explanation, drawn from the Phase 21.2 detail
-// evidence (already gated for safety). Mirrors detailedCommentarySentence's
-// subject selection: memo (optionally "… from <vendor>"), else "activity from
+// evidence (already gated for safety). Uses the same subject selection as the
+// detailed commentary: memo (optionally "… from <vendor>"), else "activity from
 // <vendor>". A trailing corporate "." (Inc./LLC.) is stripped so the vendor sits
 // cleanly mid-sentence and never reads as a sentence boundary. Returns
 // { subject, isMemo } or null when nothing render-safe survives.

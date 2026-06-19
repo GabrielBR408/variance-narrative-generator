@@ -300,7 +300,7 @@ export function enrichNarrative(narrative, { supporting = [], floor = CONFIDENCE
   return { ...narrative, periods }
 }
 
-export { buildEvidenceIndex, matchAccount, scoreMatch, scoreMatchDetailed, normalizeName, accountCode, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
+export { buildEvidenceIndex, matchAccount, scoreMatchDetailed, normalizeName, accountCode, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
 export {
   significantTokens,
   resolveScore,
@@ -310,7 +310,7 @@ export {
   RESOLVED_SUBSET_SCORE,
   RESOLVE_JACCARD_MIN
 } from './accountResolve.js'
-export { explanationClause, commentarySentence, detailedCommentarySentence, polishVendor, polishMemo, displayAccount, descriptorFor, approxMoney } from './templates.js'
+export { explanationClause, commentarySentence, polishVendor, polishMemo, displayAccount, descriptorFor, approxMoney } from './templates.js'
 export { DEFAULT_COMMENTARY_DETAIL, commentaryModeFromStyle } from './commentaryMode.js'
 export {
   classifyGLCommentary,
