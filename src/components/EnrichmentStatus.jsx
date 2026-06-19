@@ -11,16 +11,14 @@ import React from 'react'
 export default function EnrichmentStatus({ enrichment }) {
   if (!enrichment || typeof enrichment !== 'object' || !enrichment.message) return null
 
+  // The message is the single source of truth per state (the partial state
+  // already carries its "X of Y" counts), so there is no separate counts span to
+  // contradict it.
   const kind = enrichment.statusKind || 'none'
   return (
     <div className={`enrich-status enrich-status--${kind}`} role="status">
       <span className="enrich-status-dot" aria-hidden="true" />
       <span className="enrich-status-message">{enrichment.message}</span>
-      {enrichment.eligibleCount > 0 && (
-        <span className="enrich-status-counts">
-          {enrichment.enrichedCount} of {enrichment.eligibleCount} lines AI-enriched
-        </span>
-      )}
     </div>
   )
 }

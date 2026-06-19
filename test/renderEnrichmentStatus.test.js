@@ -85,18 +85,37 @@ function enrichedNarrative() {
 
 // --- 1. The status component renders the text (leaf-level) ------------------
 
-test('EnrichmentStatus renders the positive AI-enriched message on success', async () => {
+test('EnrichmentStatus renders the positive AI-enriched message when all lines enriched', async () => {
   const { default: EnrichmentStatus } = await loadComponent('src/components/EnrichmentStatus.jsx')
   const enrichment = enrichmentStatus({ narrative: enrichedNarrative(), reason: 'ok' })
   const html = renderToStaticMarkup(React.createElement(EnrichmentStatus, { enrichment }))
   assert.match(html, /AI-enriched — narrative reflects your style settings\./)
-  assert.match(html, /1 of 1 lines AI-enriched/)
+  // The contradictory standalone counts span is gone — no "unavailable" anywhere.
+  assert.doesNotMatch(html, /unavailable/i)
 })
 
-test('EnrichmentStatus renders the fallback message + reason on a rate-limit run', async () => {
+test('EnrichmentStatus renders the PARTIAL message with counts and no "unavailable"', async () => {
+  const { default: EnrichmentStatus } = await loadComponent('src/components/EnrichmentStatus.jsx')
+  // One enriched line, one fallback line in the same period → partial.
+  const narrative = enrichedNarrative()
+  narrative.periods[0].highVariances.push({
+    account: 'Utilities',
+    varianceAmount: -3000,
+    text: 'Utilities exceeded budget by $3,000.',
+    support: [{ fileName: 'GL.xlsx', classificationType: 'General Ledger (GL)', confidence: 0.9 }],
+    sourceRows: [1]
+  })
+  const enrichment = enrichmentStatus({ narrative, reason: 'ok' })
+  const html = renderToStaticMarkup(React.createElement(EnrichmentStatus, { enrichment }))
+  assert.match(html, /Partial AI enrichment — 1 of 2 lines AI-enriched/)
+  assert.match(html, /the rest use the basic narrative/)
+  assert.doesNotMatch(html, /unavailable/i)
+})
+
+test('EnrichmentStatus renders the fallback message + reason when ZERO lines enriched', async () => {
   const { default: EnrichmentStatus } = await loadComponent('src/components/EnrichmentStatus.jsx')
   const narrative = enrichedNarrative()
-  // Same narrative but the line did NOT get enriched (fallback).
+  // The only line did NOT get enriched (zero enriched) → genuine fallback.
   narrative.periods[0].highVariances[0].llmEnriched = false
   const enrichment = enrichmentStatus({ narrative, reason: 'rate_limit' })
   const html = renderToStaticMarkup(React.createElement(EnrichmentStatus, { enrichment }))
@@ -134,9 +153,8 @@ test('ResultPanel renders the AI-enriched status for a successful result', async
 
 // --- 3. The AI Status line is in the actual XLSX output --------------------
 
-test('XLSX Owner Summary header contains the AI Status line in the real workbook', async () => {
-  const narrative = enrichedNarrative()
-  const enrichment = enrichmentStatus({ narrative, reason: 'rate_limit' })
+// Read the "AI Status" value from a real generated workbook.
+async function aiStatusCell(narrative, enrichment) {
   const buf = await narrativeToExcelBuffer(narrative, {
     generatedDate: new Date('2026-06-19T00:00:00Z'),
     enrichment
@@ -145,13 +163,33 @@ test('XLSX Owner Summary header contains the AI Status line in the real workbook
   await wb.xlsx.load(buf)
   const owner = wb.getWorksheet(OWNER_SHEET)
   assert.ok(owner, 'owner sheet exists')
-
-  // Find the "AI Status" label cell and read its value cell (next column).
   let found = null
   owner.eachRow((row) => {
-    const label = row.getCell(1).value
-    if (String(label) === 'AI Status') found = row.getCell(2).value
+    if (String(row.getCell(1).value) === 'AI Status') found = row.getCell(2).value
   })
-  assert.ok(found, 'AI Status row present in Owner Summary header')
+  return found
+}
+
+test('XLSX AI Status header reads "AI unavailable" only when ZERO lines enriched', async () => {
+  const narrative = enrichedNarrative()
+  narrative.periods[0].highVariances[0].llmEnriched = false // zero enriched
+  const found = await aiStatusCell(narrative, enrichmentStatus({ narrative, reason: 'rate_limit' }))
+  assert.ok(found, 'AI Status row present')
   assert.match(String(found), /Basic narrative \(AI unavailable\) — daily limit reached/)
+})
+
+test('XLSX AI Status header reads the PARTIAL line (counts, no "unavailable") and matches the screen', async () => {
+  const narrative = enrichedNarrative()
+  narrative.periods[0].highVariances.push({
+    account: 'Utilities',
+    varianceAmount: -3000,
+    text: 'Utilities exceeded budget by $3,000.',
+    support: [{ fileName: 'GL.xlsx', classificationType: 'General Ledger (GL)', confidence: 0.9 }],
+    sourceRows: [1]
+  })
+  const enrichment = enrichmentStatus({ narrative, reason: 'ok' })
+  const found = await aiStatusCell(narrative, enrichment)
+  assert.ok(found, 'AI Status row present')
+  assert.equal(String(found), 'Partial AI enrichment — 1 of 2 lines AI-enriched')
+  assert.doesNotMatch(String(found), /unavailable/i)
 })

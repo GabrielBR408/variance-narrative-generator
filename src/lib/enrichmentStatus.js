@@ -73,17 +73,23 @@ function countNotes(narrative) {
 //   { reason, reasonText, status, statusKind, message,
 //     enrichedCount, eligibleCount, fallbackCount }
 // statusKind is one of:
-//   'enriched' — the LLM ran and every eligible line was enriched ("AI-enriched")
-//   'fallback' — the LLM was unavailable, so a basic narrative is shown + a reason
-//   'none'     — the AI was available but there was no GL detail to enrich
-// Pure: same inputs always yield the same object.
+//   'enriched' — every eligible line was AI-enriched ("AI-enriched")
+//   'partial'  — SOME eligible lines were AI-enriched, the rest use the basic
+//                narrative (honest middle state — never says "unavailable")
+//   'fallback' — zero of the eligible lines were enriched → AI was unavailable
+//   'none'     — there were no GL-eligible lines, so there was nothing to enrich
+// The state is driven purely by enrichedCount vs the eligible (total) line count,
+// which countNotes already computed — no new data source. Pure: same inputs
+// always yield the same object.
 export function enrichmentStatus({ narrative, reason } = {}) {
   const r = normalizeReason(reason)
   const { eligibleCount, enrichedCount } = countNotes(narrative)
-  const fallbackCount = r === 'ok' ? Math.max(0, eligibleCount - enrichedCount) : eligibleCount
+  // The number of lines that COULD be AI-enriched (the "of 25" denominator).
+  const totalCount = eligibleCount
+  const fallbackCount = Math.max(0, totalCount - enrichedCount)
 
-  // The AI ran cleanly and every eligible line was enriched.
-  if (r === 'ok' && enrichedCount > 0 && fallbackCount === 0) {
+  // FULL — every eligible line was enriched.
+  if (enrichedCount > 0 && enrichedCount === totalCount) {
     return {
       reason: 'ok',
       reasonText: '',
@@ -91,49 +97,70 @@ export function enrichmentStatus({ narrative, reason } = {}) {
       statusKind: 'enriched',
       message: 'AI-enriched — narrative reflects your style settings.',
       enrichedCount,
-      eligibleCount,
+      eligibleCount: totalCount,
       fallbackCount: 0
     }
   }
 
-  // The AI was available but there was no GL-supported line to enrich. Not a
-  // fallback — just nothing for the LLM to add. We do NOT claim the style
-  // settings were applied, because no line was enriched.
-  if (r === 'ok' && eligibleCount === 0) {
+  // PARTIAL — some lines enriched, some fell back. This is the honest middle
+  // state: it reports the counts and NEVER says "unavailable" (the AI clearly
+  // worked for the enriched lines).
+  if (enrichedCount > 0 && enrichedCount < totalCount) {
     return {
-      reason: 'ok',
+      reason: r,
       reasonText: '',
-      status: 'Basic narrative',
-      statusKind: 'none',
-      message:
-        'Basic narrative shown — no supporting general-ledger detail to enrich. Add a GL file to enable AI commentary.',
+      status: 'Partial AI enrichment',
+      statusKind: 'partial',
+      message: `Partial AI enrichment — ${enrichedCount} of ${totalCount} lines AI-enriched; the rest use the basic narrative. Style settings other than dollar formatting may not apply to the basic lines.`,
       enrichedCount,
-      eligibleCount: 0,
-      fallbackCount: 0
+      eligibleCount: totalCount,
+      fallbackCount
     }
   }
 
-  // Fallback: the LLM did not enrich some/all eligible lines. When the server
-  // reported a specific reason use it; a partial failure with no specific reason
-  // ('ok' but lines still fell back) collapses to the 'api_error' catch-all.
-  const effReason = r === 'ok' ? 'api_error' : r
-  const reasonText = REASON_TEXT[effReason] || REASON_TEXT.api_error
+  // ZERO enriched, but there WERE eligible lines → the AI was genuinely
+  // unavailable for this run. Use the server's reason when it has one; a zero
+  // run with no specific reason ('ok' but nothing enriched) collapses to the
+  // 'api_error' catch-all.
+  if (enrichedCount === 0 && totalCount > 0) {
+    const effReason = r === 'ok' ? 'api_error' : r
+    const reasonText = REASON_TEXT[effReason] || REASON_TEXT.api_error
+    return {
+      reason: effReason,
+      reasonText,
+      status: 'Basic narrative (AI unavailable)',
+      statusKind: 'fallback',
+      message: `Basic narrative shown — AI was unavailable (${reasonText}). Style settings other than dollar formatting may not apply.`,
+      enrichedCount: 0,
+      eligibleCount: totalCount,
+      fallbackCount: totalCount
+    }
+  }
+
+  // No GL-eligible lines at all → there was nothing for the AI to enrich. Not a
+  // failure, and we do NOT claim the style settings were applied.
   return {
-    reason: effReason,
-    reasonText,
-    status: 'Basic narrative (AI unavailable)',
-    statusKind: 'fallback',
-    message: `Basic narrative shown — AI was unavailable (${reasonText}). Style settings other than dollar formatting may not apply.`,
-    enrichedCount,
-    eligibleCount,
-    fallbackCount
+    reason: 'ok',
+    reasonText: '',
+    status: 'Basic narrative',
+    statusKind: 'none',
+    message:
+      'Basic narrative shown — no supporting general-ledger detail to enrich. Add a GL file to enable AI commentary.',
+    enrichedCount: 0,
+    eligibleCount: 0,
+    fallbackCount: 0
   }
 }
 
 // A single, self-documenting line for a downloaded export header (XLSX Owner
-// Summary). Mirrors the on-screen status so a saved file explains itself.
+// Summary). Mirrors the on-screen status (same three-state logic) so a saved
+// file and the screen always agree.
 export function enrichmentStatusLine(enrichment) {
   if (!enrichment || typeof enrichment !== 'object') return ''
+  // Partial carries its counts so the header matches the on-screen line.
+  if (enrichment.statusKind === 'partial') {
+    return `Partial AI enrichment — ${enrichment.enrichedCount} of ${enrichment.eligibleCount} lines AI-enriched`
+  }
   const base = enrichment.status || ''
   return enrichment.reasonText ? `${base} — ${enrichment.reasonText}` : base
 }
