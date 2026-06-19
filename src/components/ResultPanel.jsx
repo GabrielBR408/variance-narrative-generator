@@ -7,6 +7,7 @@ import { OWNER_SECTIONS, CONTEXT_SECTION } from '../lib/narrative/sectionDefs.js
 import { prettySize } from './uiFormat.js'
 import ExportActions from './ExportActions.jsx'
 import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
+import EnrichmentStatus from './EnrichmentStatus.jsx'
 import PeriodTabs from './PeriodTabs.jsx'
 
 const NO_FRESHNESS = { stale: false, changed: [] }
@@ -120,10 +121,15 @@ export default function ResultPanel({ status, result, periodScope = DEFAULT_PERI
 
           {result.diagnostic && <EnrichmentDiagnostic diagnostic={result.diagnostic} />}
 
+          {/* Fix A: honest AI-enrichment status for this generation (near the
+              output and download buttons), so the user knows when a basic
+              narrative is shown and why. */}
+          <EnrichmentStatus enrichment={result.enrichment} />
+
           <ResultNarrative narrative={scopedNarrative} />
 
           {canExport({ status, narrative: scopedNarrative }) && (
-            <ExportActions narrative={scopedNarrative} />
+            <ExportActions narrative={scopedNarrative} enrichment={result.enrichment} />
           )}
         </>
       )}

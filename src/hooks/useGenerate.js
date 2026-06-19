@@ -4,6 +4,7 @@ import { clientGenerate } from '../lib/clientGenerate.js'
 import { commentaryModeFromStyle } from '../lib/enrich/commentaryMode.js'
 import { applyDollarAbbreviation } from '../lib/narrative/dollarAbbrev.js'
 import { enrichmentDiagnostic } from '../lib/enrichmentDiagnostic.js'
+import { enrichmentStatus } from '../lib/enrichmentStatus.js'
 import { fileKey } from '../lib/fileKey.js'
 
 // Compact, faithful view of a browser extraction to ship to /generate. We send
@@ -132,6 +133,12 @@ export function useGenerate({
         narratives: [narrative]
       })
 
+      // Fix A: per-run enrichment status. Reads the server's fallback reason
+      // (absent on the static-host clientGenerate path → normalizes to the
+      // 'api_error' catch-all) plus the per-line llmEnriched flags. Surface-only;
+      // never alters the narrative.
+      const enrichment = enrichmentStatus({ narrative, reason: data.enrichmentReason })
+
       setResult({
         jobId: data.jobId,
         filesReceived: data.filesReceived,
@@ -141,6 +148,7 @@ export function useGenerate({
         variance: data.variance,
         narrative,
         diagnostic,
+        enrichment,
         // Phase 22.2: snapshot the settings this result was generated with, so the
         // UI can warn when the live settings drift from it (period scope excluded —
         // it is applied live at render/export time, so it never makes a result stale).

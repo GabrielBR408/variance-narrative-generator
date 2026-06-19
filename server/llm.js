@@ -204,12 +204,21 @@ export function buildSystemPrompt(style) {
 // On any failure, returns the original notes unchanged (no error surfaced).
 //
 //   flaggedNotes : array of variance note objects (post-deterministic-enrichment)
-//   context      : { period, style } — the period key for this set of notes plus
-//                  the active Style settings (folded into the system prompt)
-export async function enrichWithLLM(flaggedNotes, { period = '', style = null } = {}) {
+//   context      : { period, style, diagnostics } — the period key for this set
+//                  of notes, the active Style settings (folded into the system
+//                  prompt), and an OPTIONAL mutable `diagnostics` object the caller
+//                  may pass to learn WHY enrichment fell back (Fix A, surface-only).
+//                  When the LLM call fails (no key, or an API/network error)
+//                  `diagnostics.reason` is set to 'api_error'; the no-support and
+//                  success paths leave it untouched, so a shared object across
+//                  periods stays 'ok' unless a real failure occurs. This NEVER
+//                  changes the return value or the fallback behavior — the notes
+//                  are returned unchanged on every failure exactly as before.
+export async function enrichWithLLM(flaggedNotes, { period = '', style = null, diagnostics = null } = {}) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     console.log('[LLM] ANTHROPIC_API_KEY not set — returning deterministic notes')
+    if (diagnostics) diagnostics.reason = 'api_error'
     return flaggedNotes
   }
 
@@ -263,6 +272,7 @@ export async function enrichWithLLM(flaggedNotes, { period = '', style = null } 
     return result
   } catch (err) {
     console.log('[LLM] API call failed — returning deterministic notes:', String(err && err.message ? err.message : err))
+    if (diagnostics) diagnostics.reason = 'api_error'
     return flaggedNotes
   }
 }

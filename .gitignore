@@ -9,3 +9,6 @@ dist-ssr/
 *.local
 .DS_Store
 .vscode/
+
+# Transient render-test bundles (test/renderEnrichmentStatus.test.js)
+.render-test-*.mjs

@@ -494,6 +494,23 @@ body {
 .enrich-diag--none .enrich-diag-dot { background: var(--muted); }
 .enrich-diag--none .enrich-diag-status { color: var(--muted); }
 
+/* Fix A: per-run AI enrichment status (near the output / download buttons). */
+.enrich-status {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem;
+  margin: 0.4rem 0 0.7rem; padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); font-size: 0.82rem;
+}
+.enrich-status-dot { width: 0.55rem; height: 0.55rem; border-radius: 999px; background: var(--muted); flex: none; }
+.enrich-status-message { font-weight: 600; }
+.enrich-status-counts { color: var(--muted); }
+.enrich-status--enriched .enrich-status-dot { background: var(--accent); }
+.enrich-status--enriched .enrich-status-message { color: var(--accent-ink); }
+.enrich-status--fallback .enrich-status-dot { background: #c8901f; }
+.enrich-status--fallback .enrich-status-message { color: #9a6c10; }
+.enrich-status--none .enrich-status-dot { background: var(--muted); }
+.enrich-status--none .enrich-status-message { color: var(--muted); }
+
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {

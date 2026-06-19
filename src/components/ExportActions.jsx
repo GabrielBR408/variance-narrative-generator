@@ -72,9 +72,9 @@ async function downloadDocx(narrative) {
 // date is stamped at click time. The Excel builder (and its ExcelJS dependency)
 // is loaded lazily on first use, so the bundled ExcelJS is kept out of the
 // initial PWA payload and only fetched when the owner actually exports Excel.
-async function downloadExcel(narrative) {
+async function downloadExcel(narrative, enrichment) {
   const { narrativeToExcelBlob } = await import('../lib/export/excel.js')
-  const blob = await narrativeToExcelBlob(narrative, { generatedDate: new Date() })
+  const blob = await narrativeToExcelBlob(narrative, { generatedDate: new Date(), enrichment })
   downloadBlob(blob, excelFileName(narrative))
 }
 
@@ -98,7 +98,7 @@ const EXCEL_LABEL = {
   error: 'Excel failed — try again'
 }
 
-export default function ExportActions({ narrative }) {
+export default function ExportActions({ narrative, enrichment = null }) {
   const [copyState, setCopyState] = useState('idle') // idle | copied | error
   const [docxState, setDocxState] = useState('idle') // idle | working | done | error
   const [excelState, setExcelState] = useState('idle') // idle | working | done | error
@@ -125,7 +125,7 @@ export default function ExportActions({ narrative }) {
   async function handleExcel() {
     setExcelState('working')
     try {
-      await downloadExcel(narrative)
+      await downloadExcel(narrative, enrichment)
       setExcelState('done')
     } catch {
       setExcelState('error')
