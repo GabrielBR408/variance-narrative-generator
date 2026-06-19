@@ -17,7 +17,7 @@
 // `comparisons`/`summary`/`confidence` mirror the Current period so every
 // existing consumer keeps working unchanged.
 
-import { detectColumns, detectComparisonSets } from './detectColumns.js'
+import { detectComparisonSets } from './detectColumns.js'
 import { alignRows } from './alignRows.js'
 import { calculate } from './calculate.js'
 import { summarize } from './summarize.js'
@@ -111,4 +111,4 @@ export function computeVariance(extraction, thresholds = DEFAULT_THRESHOLDS) {
   }
 }
 
-export { detectColumns, detectComparisonSets, alignRows, calculate, summarize, DEFAULT_THRESHOLDS }
+export { detectComparisonSets, alignRows, calculate, summarize, DEFAULT_THRESHOLDS }
