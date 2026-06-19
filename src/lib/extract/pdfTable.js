@@ -226,12 +226,17 @@ export function detectVarianceReport(lines = []) {
 // The caller only consults this when NO table could be reconstructed.
 export function looksGarbledText(lines = []) {
   if (!Array.isArray(lines) || lines.length === 0) return false
-  const words = lines.join(' ').split(/\s+/).filter(Boolean)
-  if (words.length < 30) return false
-  // Require CLEAN accounting numbers: purely numeric tokens with optional
-  // commas, periods, parentheses, or a leading minus (e.g. 1,234.56 or
-  // (230,602.00) or -5,702.05). Garbled PDFs produce mixed letter+digit
-  // tokens like "P<AQ:;K8" that contain digits but are not valid figures.
+  const joined = lines.join(' ')
+  const words = joined.split(/\s+/).filter(Boolean)
+  if (words.length < 10) return false
+  // Control characters (outside tab/newline) never appear in real income
+  // statement text — their presence means the font encoding is broken and
+  // the text layer is unusable. Detect before the numeric-density check.
+  const controlChars = (joined.match(/[\x00-\x08\x0E-\x1F]/g) || []).length
+  if (controlChars > 5) return true
+  // Secondary check: require clean accounting-number tokens (e.g. 1,234.56
+  // or (230,602.00)). Single-digit tokens from garbled encodings can pass a
+  // naive digit check — this requires proper multi-character figure tokens.
   const cleanNumeric = words.filter((w) => /^-?\(?\d[\d,]*\.?\d*\)?$/.test(w)).length
   return cleanNumeric / words.length < 0.02
 }
