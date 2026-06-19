@@ -185,7 +185,6 @@ export async function runOcr({ images = [], ip = 'unknown', mode = 'gl' } = {}) 
       .join('\n')
     return mode === 'incomeStatement' ? { rows: parseOcrRows(text) } : { accounts: parseOcrResponse(text) }
   } catch (err) {
-    console.log('[OCR] vision call failed — returning empty:', err && err.message)
     return empty
   }
 }

@@ -93,9 +93,6 @@ export async function extractPdf(file, maxPages, classification) {
   const table = reconstructTable(lines, { lineCells, classificationType: classification?.type })
   const tables = table ? [table] : []
 
-  console.log('[PDF] lines extracted:', lines.length, '| first 15:', lines.slice(0, 15))
-  console.log('[PDF] tables found:', tables.length, '| garbled:', looksGarbledText(lines), '| scanned:', totalPages > 0 && text.length === 0)
-
   return {
     text,
     tables,
