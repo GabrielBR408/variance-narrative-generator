@@ -525,7 +525,7 @@ function cleanAccountHeading(text) {
 
 // Drop a leading entity/site code from a heading that carries two or more
 // consecutive leading numeric tokens (a multi-entity GL prints "<site>
-// <account-code> <Name>", e.g. "715141 40120 Rental Income"). Keeps only the
+// <account-code> <Name>", e.g. "990001 40120 Rental Income"). Keeps only the
 // LAST leading code (the account code) + name, so the row keys off the account
 // code that the income statement line also carries. A single-code heading is
 // returned unchanged.
@@ -743,7 +743,7 @@ function hasGLDateToken(line) {
 
 // An account-section heading from text: "<code> <Name>", optionally preceded by
 // one or more entity/site codes (a MULTI-ENTITY GL prints "<site> <account-code>
-// <Name>", e.g. "715141 40120 Rental Income") and optionally followed by the
+// <Name>", e.g. "990001 40120 Rental Income") and optionally followed by the
 // "Balance Forward" opening marker and/or an opening balance figure on the same
 // line. Returns the cleaned "<account-code> <Name>" label — keyed off the
 // ACCOUNT code (the last numeric token before the name), with any leading

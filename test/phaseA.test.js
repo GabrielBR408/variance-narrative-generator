@@ -2,7 +2,7 @@
 //
 // BUG 1 — GL enrichment not connecting to income statement lines.
 //   A multi-entity (sectioned, text-based) PDF GL prints account headings as
-//   "<site> <account-code> <Name>" (e.g. "715141 40120 Rental Income"). The text
+//   "<site> <account-code> <Name>" (e.g. "990001 40120 Rental Income"). The text
 //   reconstructor's heading regex required exactly ONE leading numeric token
 //   followed by a letter, so a two-code heading was dropped entirely → no account
 //   section opened → zero GL rows → a NULL table → generic "should be reviewed"
@@ -37,24 +37,24 @@ import { computeVariance } from '../src/lib/variance/index.js'
 
 // --- BUG 1: multi-entity sectioned GL --------------------------------------
 
-// A Northpark-style multi-entity GL: sites 715141/715142/715143, "Balance
+// A sample multi-entity GL: sites 990001/990002/990003, "Balance
 // Forward" openers, "Account Id Code" account codes (40120, 51051, 53110), and
 // "** Account Totals" section ends. Each heading is "<site> <account-code> <Name>".
 function multiEntityGlLines() {
   return [
     'Period Entry Date Src Reference Description Debit Credit Balance',
-    '715141 40120 Rental Income',
+    '990001 40120 Rental Income',
     'Balance Forward 0.00',
-    '715141 01/26 01/15/2026 INV900 Tenant rent collected 0.00 12000.00 12000.00',
-    '715141 01/26 01/31/2026 INV950 Tenant rent collected 0.00 12000.00 24000.00',
+    '990001 01/26 01/15/2026 INV900 Tenant rent collected 0.00 12000.00 12000.00',
+    '990001 01/26 01/31/2026 INV950 Tenant rent collected 0.00 12000.00 24000.00',
     '** Account Totals 0.00 24000.00 24000.00',
-    '715142 51051 Security Contract',
+    '990002 51051 Security Contract',
     'Balance Forward 0.00',
-    '715142 01/26 01/20/2026 CHK1200 SecureGuard LLC 4000.00 0.00 4000.00',
+    '990002 01/26 01/20/2026 CHK1200 SecureGuard LLC 4000.00 0.00 4000.00',
     '** Account Totals 4000.00 0.00 4000.00',
-    '715143 53110 Repairs & Maintenance',
+    '990003 53110 Repairs & Maintenance',
     'Balance Forward 0.00',
-    '715143 01/26 01/22/2026 INV777 Roof repair AceRoofing 5500.00 0.00 5500.00',
+    '990003 01/26 01/22/2026 INV777 Roof repair AceRoofing 5500.00 0.00 5500.00',
     '** Account Totals 5500.00 0.00 5500.00'
   ]
 }
@@ -63,7 +63,7 @@ test('BUG 1: multi-entity headings reconstruct rows keyed off the ACCOUNT code',
   const table = reconstructSectionedGLFromText(multiEntityGlLines())
   assert.ok(table, 'a table is reconstructed (not null)')
   const accounts = table.rows.slice(1).map((r) => r[0])
-  // The leading site code (715141/...) is dropped; the account code (40120/...) leads.
+  // The leading site code (990001/...) is dropped; the account code (40120/...) leads.
   assert.deepEqual(accounts, [
     '40120 Rental Income',
     '40120 Rental Income',
@@ -87,7 +87,7 @@ test('BUG 1: GL rows match income-statement lines by account code (exact_code 1.
   const table = reconstructTable(multiEntityGlLines(), { classificationType: 'General Ledger (GL)' })
   const { normalized } = normalize({ tables: [table] }, 'pdf')
   const idx = buildEvidenceIndex([
-    { fileName: 'Northpark GL.pdf', status: 'ok', classification: { type: 'General Ledger (GL)' }, normalized }
+    { fileName: 'Sample Property GL.pdf', status: 'ok', classification: { type: 'General Ledger (GL)' }, normalized }
   ])
   const expect = { '40120 Rental Income': 1.0, '51051 Security Contract': 1.0, '53110 Repairs & Maintenance': 1.0 }
   for (const [line, conf] of Object.entries(expect)) {
@@ -103,7 +103,7 @@ test('BUG 1: an income-statement line WITHOUT a code still matches by name', () 
   const table = reconstructTable(multiEntityGlLines(), { classificationType: 'General Ledger (GL)' })
   const { normalized } = normalize({ tables: [table] }, 'pdf')
   const idx = buildEvidenceIndex([
-    { fileName: 'Northpark GL.pdf', status: 'ok', classification: { type: 'General Ledger (GL)' }, normalized }
+    { fileName: 'Sample Property GL.pdf', status: 'ok', classification: { type: 'General Ledger (GL)' }, normalized }
   ])
   const cites = matchAccount('Rental Income', idx)
   assert.equal(cites.length, 1)
@@ -117,8 +117,8 @@ test('BUG 1: the position-aware path also drops the entity prefix', () => {
   const items = [
     // header
     item('Date', 40), item('Reference', 120), item('Description', 200), item('Debit', 400), item('Credit', 470, true),
-    // multi-entity heading: site 715142 + account code 51051 + name
-    item('715142', 10), item('51051', 60), item('Security', 120), item('Contract', 180, true),
+    // multi-entity heading: site 990002 + account code 51051 + name
+    item('990002', 10), item('51051', 60), item('Security', 120), item('Contract', 180, true),
     // a transaction under it
     item('01/20/2026', 40), item('CHK1200', 120), item('SecureGuard LLC', 200), item('4000.00', 400, true)
   ]
