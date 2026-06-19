@@ -102,14 +102,30 @@ test('an unknown/missing reason falls back via the api_error catch-all', () => {
   assert.equal(s.reasonText, 'AI temporarily unavailable')
 })
 
-test('partial enrichment with reason ok still reports a fallback (catch-all api_error)', () => {
+test('partial enrichment -> "Partial AI enrichment" with counts and NO "unavailable"', () => {
   const narrative = narrativeWith([enrichedNote('Repairs'), fallbackNote('Utilities')])
   const s = enrichmentStatus({ narrative, reason: 'ok' })
-  assert.equal(s.statusKind, 'fallback')
-  assert.equal(s.reason, 'api_error')
+  assert.equal(s.statusKind, 'partial')
+  assert.equal(s.status, 'Partial AI enrichment')
   assert.equal(s.enrichedCount, 1)
   assert.equal(s.eligibleCount, 2)
   assert.equal(s.fallbackCount, 1)
+  assert.match(s.message, /Partial AI enrichment — 1 of 2 lines AI-enriched/)
+  assert.match(s.message, /the rest use the basic narrative/)
+  assert.doesNotMatch(s.message, /unavailable/i)
+})
+
+test('partial state holds even when the server reason is a limit (some lines still enriched)', () => {
+  // If any line was enriched, the AI clearly worked — never report "unavailable".
+  const narrative = narrativeWith([
+    enrichedNote('Repairs'),
+    enrichedNote('Utilities'),
+    fallbackNote('Insurance')
+  ])
+  const s = enrichmentStatus({ narrative, reason: 'rate_limit' })
+  assert.equal(s.statusKind, 'partial')
+  assert.match(s.message, /Partial AI enrichment — 2 of 3 lines AI-enriched/)
+  assert.doesNotMatch(s.message, /unavailable/i)
 })
 
 // --- AI available but nothing to enrich ------------------------------------
@@ -134,7 +150,23 @@ test('enrichmentStatusLine combines status and reason for the export header', ()
     enrichmentStatusLine({ status: 'Basic narrative (AI unavailable)', reasonText: 'daily limit reached' }),
     'Basic narrative (AI unavailable) — daily limit reached'
   )
+  // Partial carries its counts so the export header matches the on-screen line.
+  assert.equal(
+    enrichmentStatusLine({ statusKind: 'partial', enrichedCount: 15, eligibleCount: 25 }),
+    'Partial AI enrichment — 15 of 25 lines AI-enriched'
+  )
   assert.equal(enrichmentStatusLine(null), '')
+})
+
+test('export header line is derived from the real status object for all three states', () => {
+  const full = enrichmentStatus({ narrative: narrativeWith([enrichedNote()]), reason: 'ok' })
+  assert.equal(enrichmentStatusLine(full), 'AI-enriched')
+
+  const partial = enrichmentStatus({ narrative: narrativeWith([enrichedNote('A'), fallbackNote('B')]), reason: 'ok' })
+  assert.equal(enrichmentStatusLine(partial), 'Partial AI enrichment — 1 of 2 lines AI-enriched')
+
+  const zero = enrichmentStatus({ narrative: narrativeWith([fallbackNote()]), reason: 'rate_limit' })
+  assert.equal(enrichmentStatusLine(zero), 'Basic narrative (AI unavailable) — daily limit reached')
 })
 
 test('XLSX Owner Summary meta includes the AI Status line when enrichment is supplied', () => {

@@ -506,6 +506,8 @@ body {
 .enrich-status-counts { color: var(--muted); }
 .enrich-status--enriched .enrich-status-dot { background: var(--accent); }
 .enrich-status--enriched .enrich-status-message { color: var(--accent-ink); }
+.enrich-status--partial .enrich-status-dot { background: #2f8f5b; }
+.enrich-status--partial .enrich-status-message { color: #1f6f44; }
 .enrich-status--fallback .enrich-status-dot { background: #c8901f; }
 .enrich-status--fallback .enrich-status-message { color: #9a6c10; }
 .enrich-status--none .enrich-status-dot { background: var(--muted); }
