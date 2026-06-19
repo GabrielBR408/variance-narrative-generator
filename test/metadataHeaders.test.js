@@ -1,7 +1,7 @@
 // Metadata-leading header tests — Phase 13B.
 // Runs on Node's built-in test runner (`node --test`), no extra dependencies.
 //
-// Real exports (e.g. a Lincoln Property "Comparative Income Statement") print
+// Real exports (e.g. a commercial property "Comparative Income Statement") print
 // several report-metadata rows before the table. These cover skipping that
 // metadata to find the real header block — grouped or flat — while preserving
 // the Phase 13 top-of-sheet behavior and never inventing a header on a
@@ -23,10 +23,10 @@ function spreadsheet(grid) {
 // Five leading metadata rows, then a merged group band over Actual/Budget/
 // Variance (twice), then accounts — the faithful real-file shape.
 const METADATA_GROUPED = [
-  ['Database: LPCWEST', 'Comparative Income Statement', '', '', '', 'Page:', ''],
+  ['Database: DEMO', 'Comparative Income Statement', '', '', '', 'Page:', ''],
   ['PROJ', 'CASH FLOW', '', '', '', 'Date:', ''],
-  ['Lincoln Property Company', '', '', '', '', 'Time:', ''],
-  ['Property: Westgate Plaza', '', '', '', '', '', ''],
+  ['Sample Property Company', '', '', '', '', 'Time:', ''],
+  ['Property: Example Plaza', '', '', '', '', '', ''],
   ['Accrual', '', '', '', '', '', ''],
   ['', 'Current Period', '', '', 'Year-To-Date', '', ''],
   ['Account', 'Actual', 'Budget', 'Variance', 'Actual', 'Budget', 'Variance'],
@@ -86,8 +86,8 @@ test('metadata + grouped header narrates and exports figures (Markdown + DOCX)',
 
 test('skips leading metadata rows and finds a flat header below them', () => {
   const grid = [
-    ['Database: LPCWEST', 'Comparative Income Statement', ''],
-    ['Lincoln Property Company', '', ''],
+    ['Database: DEMO', 'Comparative Income Statement', ''],
+    ['Sample Property Company', '', ''],
     ['Accrual', '', ''],
     ['Account', 'Actual', 'Budget'],
     ['Rent', '1200', '1000'],
@@ -128,15 +128,15 @@ test('existing flat single-row header at the top is unchanged', () => {
 
 test('a metadata-only sheet invents no header and reports no comparison', () => {
   const grid = [
-    ['Database: LPCWEST', 'Comparative Income Statement', ''],
+    ['Database: DEMO', 'Comparative Income Statement', ''],
     ['PROJ', 'CASH FLOW', ''],
-    ['Lincoln Property Company', '', ''],
-    ['Property: Westgate Plaza', '', ''],
+    ['Sample Property Company', '', ''],
+    ['Property: Example Plaza', '', ''],
     ['Accrual', '', '']
   ]
   const { normalized } = normalize(spreadsheet(grid), 'spreadsheet')
   // Falls back to the first row; no value-header row is fabricated.
-  assert.deepEqual(normalized.columns, ['Database: LPCWEST', 'Comparative Income Statement', ''])
+  assert.deepEqual(normalized.columns, ['Database: DEMO', 'Comparative Income Statement', ''])
   const result = computeVariance({
     fileId: 'f1', fileName: 'meta.xlsx', status: 'ok', confidence: 95,
     classification: { type: 'variance-report' }, normalized
