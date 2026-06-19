@@ -184,3 +184,34 @@ test('YTD columns parse and flow to the Excel export when only Current carries s
   assert.equal(rental.ytdVarianceAmount, 100000)
   assert.ok(Math.abs(rental.ytdVariancePercent - 16.6667) < 0.01)
 })
+
+// --- flat duplicated header with NO period band (the reported regression) -----
+// Some exports drop the merged "Current Period | Year-To-Date" band entirely,
+// leaving a single flat header row that simply REPEATS "Actual | Budget |
+// Variance | Variance %" twice with no period marker. The second block is the
+// YTD figures (cols 5–8); without splitting it positionally those columns are
+// discarded as duplicates and every YTD cell in the Owner Summary is null.
+const FLAT_DUPLICATE = [
+  ['Account', 'Actual', 'Budget', 'Variance', 'Variance %', 'Actual', 'Budget', 'Variance', 'Variance %'],
+  ['Rental Inc. - Commercial', '661061.20', '661061.20', '0', '0', '2644244.80', '2644244.80', '0', '0'],
+  ['Repairs Expense', '60000', '40000', '20000', '50', '300000', '250000', '50000', '20']
+]
+
+test('YTD columns flow to the Excel export from a flat duplicated header with no period band', () => {
+  const { normalized, confidence } = normalize(spreadsheet(FLAT_DUPLICATE), 'spreadsheet')
+  const result = computeVariance({
+    fileId: 'f1', fileName: 'Comparative Income Statement.xlsx',
+    status: 'ok', confidence, classification: { type: 'variance-report' }, normalized
+  })
+  assert.deepEqual(result.comparisonSets.map((s) => s.period), ['current', 'ytd'])
+
+  const model = buildExcelModel(generateNarrative(result), {})
+  const rental = model.ownerRows.find((r) => r.account === 'Rental Inc. - Commercial')
+  // Current side reads from cols 1–2.
+  assert.equal(rental.currentActual, 661061.2)
+  assert.equal(rental.currentComparison, 661061.2)
+  // YTD side reads from cols 5–6 (real numbers, not null).
+  assert.equal(rental.ytdActual, 2644244.8)
+  assert.equal(rental.ytdComparison, 2644244.8)
+  assert.equal(rental.ytdVarianceAmount, 0)
+})

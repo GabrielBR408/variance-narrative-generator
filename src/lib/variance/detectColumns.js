@@ -27,6 +27,19 @@ function detectPeriod(header) {
   return YTD_RE.test(String(header)) ? 'ytd' : 'current'
 }
 
+// Explicit period markers in a header. Returns 'ytd' / 'current' only when the
+// header actually names the period, or null when it carries no period word (a
+// bare "Actual" / "Budget"). This is stricter than detectPeriod (which defaults
+// the unmarked case to 'current') so the block splitter below can tell a labeled
+// period apart from a positional one.
+const CURRENT_RE = /\bcurrent\b|\bmtd\b|month[-\s]*to[-\s]*date|this\s*month|current\s*period/i
+function explicitPeriod(header) {
+  const h = String(header)
+  if (YTD_RE.test(h)) return 'ytd'
+  if (CURRENT_RE.test(h)) return 'current'
+  return null
+}
+
 function matchType(header) {
   const h = String(header).toLowerCase()
   for (const [type, patterns] of COLUMN_PATTERNS) {
@@ -165,24 +178,65 @@ export function detectComparisonSets(columns = [], rows = []) {
     return { account: null, sets: [] }
   }
 
-  const byPeriod = new Map() // period -> { actual, budget, prior } indexes
-  const seen = [] // periods in first-seen order
+  // Block-aware grouping. A comparative statement lays its periods out as
+  // repeating value blocks ("Actual | Budget | … " once per period). We split
+  // those blocks so each period is detected on its own — even when the periods
+  // are NOT distinguished by a "Current"/"YTD" label (a flat header row that
+  // simply repeats "Actual | Budget | …", which the merged period band above it
+  // did not survive as). A new block starts whenever a value type repeats (a
+  // SECOND "Actual" begins the next period) or the explicit period label changes.
+  const blocks = [] // [{ explicit, set: { actual, budget, prior } }]
+  let block = null
   const valueIndexes = []
 
   columns.forEach((header, i) => {
     const type = matchType(header)
     if (!type) return
-    const period = detectPeriod(header)
-    if (!byPeriod.has(period)) {
-      byPeriod.set(period, { actual: null, budget: null, prior: null })
-      seen.push(period)
+    const ep = explicitPeriod(header)
+    const startNew =
+      block === null ||
+      block.set[type] !== null ||
+      (ep && block.explicit && ep !== block.explicit)
+    if (startNew) {
+      block = { explicit: ep || null, set: { actual: null, budget: null, prior: null } }
+      blocks.push(block)
+    } else if (ep && !block.explicit) {
+      block.explicit = ep
     }
-    const set = byPeriod.get(period)
-    if (set[type] === null) {
-      set[type] = i
-      valueIndexes.push(i)
-    }
+    block.set[type] = i
+    valueIndexes.push(i)
   })
+
+  // Resolve each block to a period: an explicitly labeled block keeps its label;
+  // the rest fall back to position (first block → current, second → ytd, …),
+  // skipping any period an explicit label already claimed.
+  const byPeriod = new Map() // period -> { actual, budget, prior } indexes
+  const seen = [] // periods in first-seen order
+  const used = new Set()
+  for (const b of blocks) {
+    if (b.explicit) used.add(b.explicit)
+  }
+  const fallback = ['current', 'ytd']
+  let fi = 0
+  for (const b of blocks) {
+    let period = b.explicit
+    if (!period) {
+      while (fi < fallback.length && used.has(fallback[fi])) fi++
+      period = fi < fallback.length ? fallback[fi++] : `period${blocks.indexOf(b) + 1}`
+      used.add(period)
+    }
+    if (!byPeriod.has(period)) {
+      byPeriod.set(period, b.set)
+      seen.push(period)
+    } else {
+      // Two blocks resolving to the same period (unusual): keep the first-seen
+      // value columns, mirroring the original "first column wins" rule.
+      const existing = byPeriod.get(period)
+      for (const t of ['actual', 'budget', 'prior']) {
+        if (existing[t] === null && b.set[t] !== null) existing[t] = b.set[t]
+      }
+    }
+  }
 
   const account = detectAccountColumn(columns, rows, valueIndexes)
 
