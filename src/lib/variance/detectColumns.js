@@ -80,26 +80,6 @@ function detectAccountColumn(columns, rows, valueIndexes) {
   return best >= 0 ? best : 0
 }
 
-// Returns { account, actual, budget, prior } as column indexes, each null when
-// absent. `rows` is only used to locate the label column when headers don't.
-export function detectColumns(columns = [], rows = []) {
-  const result = { account: null, actual: null, budget: null, prior: null }
-  if (!Array.isArray(columns) || columns.length === 0) return result
-
-  const valueIndexes = []
-  columns.forEach((header, i) => {
-    const type = matchType(header)
-    // First column to claim a value type wins; later duplicates are ignored.
-    if (type && result[type] === null) {
-      result[type] = i
-      valueIndexes.push(i)
-    }
-  })
-
-  result.account = detectAccountColumn(columns, rows, valueIndexes)
-  return result
-}
-
 // Group every non-account column by its detected period, preserving order, so a
 // column's position WITHIN its period band can be compared across periods. Used
 // to recover value columns whose sub-labels a merged group band swallowed.
@@ -172,7 +152,7 @@ function inferUnlabeledPeriodColumns(columns, account, byPeriod, seen, valueInde
 // Returns { account, sets: [{ period, columns: { actual, budget, prior } }] }.
 // Sets are ordered Current first (the default/backward-compatible view), then
 // YTD, then any other period in first-seen order. Within a period the first
-// column to claim a value type wins, mirroring detectColumns.
+// column to claim a value type wins.
 export function detectComparisonSets(columns = [], rows = []) {
   if (!Array.isArray(columns) || columns.length === 0) {
     return { account: null, sets: [] }
