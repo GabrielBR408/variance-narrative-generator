@@ -25,6 +25,7 @@
 import ExcelJS from 'exceljs'
 import { approxMoney } from '../enrich/index.js'
 import { metaEntries } from './exportShared.js'
+import { enrichmentStatusLine } from '../enrichmentStatus.js'
 
 export const OWNER_SHEET = 'Owner Summary'
 export const EVIDENCE_SHEET = 'Supporting Evidence'
@@ -111,10 +112,15 @@ function formatDate(value) {
 // present so the sheet never asserts a value the narrative did not carry. The
 // source file here is the BASE report (already shown in the Markdown/DOCX
 // exports) — never a supporting file.
-function buildMeta(narrative, generatedDate) {
+function buildMeta(narrative, generatedDate, enrichment) {
   const meta = metaEntries(narrative)
   const date = formatDate(generatedDate)
   if (date) meta.push({ label: 'Generated', value: date })
+  // Fix A: a single, self-documenting AI-status line so a downloaded file states
+  // whether it is AI-enriched or a basic fallback (and why). Added only when an
+  // enrichment status is supplied, so existing exports are unchanged.
+  const statusLine = enrichmentStatusLine(enrichment)
+  if (statusLine) meta.push({ label: 'AI Status', value: statusLine })
   return meta
 }
 
@@ -359,10 +365,10 @@ export function buildEvidenceRows(narrative) {
 }
 
 // The full pure model the renderer consumes and tests assert against.
-export function buildExcelModel(narrative, { generatedDate } = {}) {
+export function buildExcelModel(narrative, { generatedDate, enrichment } = {}) {
   return {
     title: EXCEL_TITLE,
-    meta: buildMeta(narrative, generatedDate),
+    meta: buildMeta(narrative, generatedDate, enrichment),
     ownerColumns: OWNER_COLUMNS,
     ownerRows: buildOwnerRows(narrative),
     evidenceColumns: EVIDENCE_COLUMNS,

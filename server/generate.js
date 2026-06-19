@@ -100,7 +100,15 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
   // explicitly requests cited mode AND both rate limits permit. On any limit
   // breach the deterministic narrative is returned unchanged, with no error
   // surfaced to the client.
+  //
+  // Fix A (surface-only): we ALSO capture WHY enrichment did not run, as a fixed
+  // enum ('ok' | 'rate_limit' | 'circuit_breaker' | 'api_error'), so the client
+  // and the exports can show an honest status. The default is 'api_error' (the
+  // catch-all: AI not available for this run, e.g. the flag is off). The rate-
+  // limiter and circuit-breaker calls, their order, and the "enrich only when
+  // both pass" condition are UNCHANGED — this only reads decisions already made.
   let finalNarrative = narrative
+  let enrichmentReason = 'api_error'
   if (LLM_ENABLED && llmMode === 'cited') {
     const ipAllowed = checkIpLimit(ip || 'unknown')
     const globalAllowed = ipAllowed && checkGlobalLimit()
@@ -113,13 +121,21 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
 
       // For each period, replace the evidence sentence with LLM commentary
       // where GL support data is available. Falls back per-note on any failure.
+      // The shared `llmDiagnostics` learns of any API/network failure (set to
+      // 'api_error') without altering the per-note fallback behavior.
+      const llmDiagnostics = { reason: 'ok' }
       const llmPeriods = await Promise.all(
         enrichedNarrative.periods.map(async (period) => ({
           ...period,
-          highVariances: await enrichWithLLM(period.highVariances, { period: period.period, style })
+          highVariances: await enrichWithLLM(period.highVariances, { period: period.period, style, diagnostics: llmDiagnostics })
         }))
       )
       finalNarrative = { ...enrichedNarrative, periods: llmPeriods }
+      enrichmentReason = llmDiagnostics.reason
+    } else {
+      // Short-circuit matches the original: checkGlobalLimit is only consulted
+      // when the IP limit passed, so !ipAllowed means the IP limit was the breach.
+      enrichmentReason = ipAllowed ? 'circuit_breaker' : 'rate_limit'
     }
   }
 
@@ -137,7 +153,10 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
       files,
       extraction,
       variance: varianceResult,
-      narrative: finalNarrative
+      narrative: finalNarrative,
+      // Fix A: the fixed-enum fallback reason for this run, so the client/exports
+      // can show an honest enrichment status. Surface-only; nothing else reads it.
+      enrichmentReason
     }
   }
 }
