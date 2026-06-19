@@ -13,7 +13,7 @@ import {
   pendingSupportingCount,
   generateClickAction
 } from './lib/generateState.js'
-import { commentaryModeFromStyle, DEFAULT_COMMENTARY_DETAIL } from './lib/enrich/commentaryMode.js'
+import { commentaryModeFromStyle } from './lib/enrich/commentaryMode.js'
 import { computeVariance } from './lib/variance/index.js'
 import { DEFAULT_THRESHOLDS, thresholdsFromSettings } from './lib/variance/thresholds.js'
 import { generateNarrative } from './lib/narrative/index.js'
@@ -23,16 +23,18 @@ import { useExtraction } from './hooks/useExtraction.js'
 import { useGenerate } from './hooks/useGenerate.js'
 import chiefeoLogo from './assets/chiefeo-logo.png'
 
-// Phase 22.2: only `commentaryDetail` affects output today. The remaining style
-// fields are rendered disabled ("Coming soon") and kept here purely so those
-// previews display a sensible default; "learn from uploads" and free-text notes
-// were removed entirely (UI + state + request wiring).
+// Phase 23: all five Style controls are active and shape the generated
+// narrative. Report Style / Tone / Length / Dollar Value References become
+// plain-English STYLE INSTRUCTIONS in the LLM prompt (server/llm.js); Abbreviate
+// Dollar Values additionally drives a deterministic dollar-abbreviation pass on
+// the finished narrative. (Audience and the old "Commentary detail" control were
+// removed — UI, state, and request wiring.)
 const DEFAULT_STYLE = {
-  audience: 'Owner',
-  reportStyle: 'Executive',
+  reportStyle: 'Detailed',
   tone: 'Neutral',
   length: 'Standard',
-  commentaryDetail: DEFAULT_COMMENTARY_DETAIL
+  abbreviateDollars: false,
+  dollarReferences: 'Detail'
 }
 const DEFAULT_VARIANCE = {
   // A row is flagged when it crosses EITHER threshold (dollar OR percent) — the

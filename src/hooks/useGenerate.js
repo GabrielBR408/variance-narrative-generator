@@ -2,6 +2,7 @@ import { AI_LLM_MODE } from '../lib/generateState.js'
 import { enrichNarrative } from '../lib/enrich/index.js'
 import { clientGenerate } from '../lib/clientGenerate.js'
 import { commentaryModeFromStyle } from '../lib/enrich/commentaryMode.js'
+import { applyDollarAbbreviation } from '../lib/narrative/dollarAbbrev.js'
 import { enrichmentDiagnostic } from '../lib/enrichmentDiagnostic.js'
 import { fileKey } from '../lib/fileKey.js'
 
@@ -117,7 +118,12 @@ export function useGenerate({
       // is still selectable). The chosen mode flows into the generated result
       // and the exports (which consume this enriched narrative).
       const mode = commentaryModeFromStyle(style)
-      const narrative = enrichNarrative(data.narrative, { supporting: supportingExtractions, mode })
+      const enriched = enrichNarrative(data.narrative, { supporting: supportingExtractions, mode })
+
+      // Phase 23: "Abbreviate Dollar Values" is a cosmetic pass over the finished
+      // narrative text. Default Off → identity (same reference), so the
+      // deterministic output is byte-identical to before. On → "$5,000" → "$5K".
+      const narrative = applyDollarAbbreviation(enriched, !!style.abbreviateDollars)
 
       // UI-only enrichment diagnostic (deterministic; reads counts only, never
       // amounts/rows). Tells the user whether GL enrichment actually ran.

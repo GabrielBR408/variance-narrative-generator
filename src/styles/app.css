@@ -194,6 +194,7 @@ body {
   border-radius: 6px; background: #fff; min-width: 150px;
 }
 .field-control--area { min-width: 0; width: 100%; resize: vertical; }
+.field-toggle { width: 1.1rem; height: 1.1rem; cursor: pointer; }
 
 .checkgroup { border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem 0.9rem; margin: 0.9rem 0 0; }
 .checkgroup legend { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 0.4rem; }

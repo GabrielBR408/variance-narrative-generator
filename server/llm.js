@@ -147,6 +147,56 @@ const SYSTEM_PROMPT =
   'do not use hedging language such as \'appears\', \'may\', or \'possibly\' — ' +
   'the GL rows are the evidence.'
 
+// --- Style instructions — Phase 23 (Style controls) -------------------------
+// Translate the five active Style controls into a plain-English STYLE
+// INSTRUCTIONS block appended to the system prompt, so the model follows the
+// owner's chosen Report Style / Tone / Length / dollar abbreviation / dollar
+// references. Pure and exported so the prompt wiring can be tested without a
+// live API call. Unknown/missing values fall back to the App defaults.
+export function buildStyleInstructions(style = {}) {
+  const s = style || {}
+  const reportStyle = s.reportStyle === 'Concise' ? 'Concise' : 'Detailed'
+  const tone = s.tone === 'Cautious' ? 'Cautious' : 'Neutral'
+  const length = ['Brief', 'Standard', 'Verbose'].includes(s.length) ? s.length : 'Standard'
+  const abbreviate = s.abbreviateDollars === true
+  const references = s.dollarReferences === 'Minimum' ? 'Minimum' : 'Detail'
+
+  const parts = []
+  parts.push(`Write in a ${reportStyle} style with ${tone} tone and ${length} length.`)
+
+  parts.push(reportStyle === 'Concise'
+    ? 'Concise style: tight, direct sentences with one clear statement per variance line.'
+    : 'Detailed style: a fuller explanation with more context around each variance.')
+
+  // Tone. Cautious explicitly overrides the no-hedging rule in the base prompt;
+  // Neutral keeps that rule (direct, factual language).
+  parts.push(tone === 'Cautious'
+    ? 'Cautious tone: use softer, hedging language such as "appears to", "may reflect", and "consistent with". This overrides the instruction above to avoid hedging.'
+    : 'Neutral tone: use direct, factual language without hedging.')
+
+  parts.push(length === 'Brief'
+    ? 'Brief length: the shortest viable commentary per line.'
+    : length === 'Verbose'
+      ? 'Verbose length: extended commentary with more supporting context.'
+      : 'Standard length: a normal, balanced amount of commentary per line.')
+
+  parts.push(abbreviate
+    ? 'Abbreviate dollar values (for example, $5K, $1.2M, $3.4M).'
+    : 'Do not abbreviate dollar values; write full figures (for example, $5,000 and $1,200,000).')
+
+  parts.push(references === 'Minimum'
+    ? 'Reference only the variance figure, not the actual or budget figures, in narrative text.'
+    : 'Reference the actual, budget, and variance figures in narrative text.')
+
+  return `STYLE INSTRUCTIONS: ${parts.join(' ')}`
+}
+
+// Compose the full system prompt: the fixed base rules plus the active style
+// instructions. Used by enrichWithLLM and exercised directly in tests.
+export function buildSystemPrompt(style) {
+  return `${SYSTEM_PROMPT}\n\n${buildStyleInstructions(style)}`
+}
+
 // --- enrichWithLLM ----------------------------------------------------------
 // Accepts enriched flaggedNotes (note.support + note.enriched must be set —
 // call enrichNarrative first) and context { period }.
@@ -154,8 +204,9 @@ const SYSTEM_PROMPT =
 // On any failure, returns the original notes unchanged (no error surfaced).
 //
 //   flaggedNotes : array of variance note objects (post-deterministic-enrichment)
-//   context      : { period } — the period key for this set of notes
-export async function enrichWithLLM(flaggedNotes, { period = '' } = {}) {
+//   context      : { period, style } — the period key for this set of notes plus
+//                  the active Style settings (folded into the system prompt)
+export async function enrichWithLLM(flaggedNotes, { period = '', style = null } = {}) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     console.log('[LLM] ANTHROPIC_API_KEY not set — returning deterministic notes')
@@ -181,7 +232,7 @@ export async function enrichWithLLM(flaggedNotes, { period = '' } = {}) {
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(style),
       messages: [{ role: 'user', content: userContent }]
     })
 

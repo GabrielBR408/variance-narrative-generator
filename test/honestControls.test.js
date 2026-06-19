@@ -25,12 +25,25 @@ function src(relPath) {
 
 // --- 1. Honest controls: active vs disabled --------------------------------
 
-test('only Commentary detail is an active Style control', () => {
-  assert.deepEqual(STYLE_ACTIVE_FIELDS.map((f) => f.key), ['commentaryDetail'])
+test('the five Style controls are all active (Phase 23)', () => {
+  assert.deepEqual(
+    STYLE_ACTIVE_FIELDS.map((f) => f.key),
+    ['reportStyle', 'tone', 'length', 'abbreviateDollars', 'dollarReferences']
+  )
 })
 
-test('Audience / Report Style / Tone / Length are the disabled "Coming soon" Style controls', () => {
-  assert.deepEqual(STYLE_COMING_SOON_FIELDS.map((f) => f.key), ['audience', 'reportStyle', 'tone', 'length'])
+test('no Style controls are deferred ("Coming soon") anymore', () => {
+  assert.deepEqual(STYLE_COMING_SOON_FIELDS, [])
+})
+
+test('Abbreviate Dollar Values is a toggle, the rest are selects', () => {
+  const byKey = Object.fromEntries(STYLE_ACTIVE_FIELDS.map((f) => [f.key, f]))
+  assert.equal(byKey.abbreviateDollars.type, 'toggle')
+  assert.equal(byKey.reportStyle.type, 'select')
+  assert.deepEqual(byKey.reportStyle.options, ['Concise', 'Detailed'])
+  assert.deepEqual(byKey.tone.options, ['Neutral', 'Cautious'])
+  assert.deepEqual(byKey.length.options, ['Brief', 'Standard', 'Verbose'])
+  assert.deepEqual(byKey.dollarReferences.options, ['Minimum', 'Detail'])
 })
 
 test('Variance Include/Ignore groups are the disabled "Coming soon" controls', () => {
@@ -38,12 +51,17 @@ test('Variance Include/Ignore groups are the disabled "Coming soon" controls', (
   assert.deepEqual(VARIANCE_IGNORE_FILTERS.map((f) => f.key), ['zeroVariances', 'smallRepeatItems'])
 })
 
-test('disabled controls render as non-interactive with a Coming soon tag', () => {
+test('the Style panel renders an active checkbox toggle and no Coming soon tag', () => {
   const stylePanel = src('../src/components/StylePanel.jsx')
+  // The toggle control renders as a checkbox input, not a disabled dropdown.
+  assert.match(stylePanel, /type="checkbox"/, 'Abbreviate Dollar Values renders as a checkbox')
+  // No Style control is disabled or tagged "Coming soon" anymore.
+  assert.doesNotMatch(stylePanel, /coming-soon-tag/, 'no Coming soon tags remain in the Style panel')
+  assert.doesNotMatch(stylePanel, /disabled/, 'no Style control is disabled')
+})
+
+test('the Variance coming-soon groups stay non-interactive with a Coming soon tag', () => {
   const varianceDetail = src('../src/components/VarianceDetail.jsx')
-  // The disabled blocks carry the disabled attribute and the Coming soon tag.
-  assert.match(stylePanel, /COMING_SOON_FIELDS\.map[\s\S]*disabled/, 'Style coming-soon selects are disabled')
-  assert.match(stylePanel, /coming-soon-tag/, 'Style coming-soon controls are tagged')
   assert.match(varianceDetail, /checkgroup--coming-soon/, 'Variance coming-soon groups are tagged')
   assert.match(varianceDetail, /disabled/, 'Variance coming-soon checkboxes are disabled')
   // No onChange wiring on the coming-soon Variance checkboxes (no fake behavior).
@@ -58,6 +76,9 @@ test('removed controls are gone from the UI', () => {
   assert.doesNotMatch(stylePanel, /Learn from uploaded reports/i)
   assert.doesNotMatch(stylePanel, /Optional notes/i)
   assert.doesNotMatch(stylePanel, /learnFromUploads/)
+  // Phase 23: Audience and the old "Commentary detail" control were removed.
+  assert.doesNotMatch(stylePanel, /Audience/i)
+  assert.doesNotMatch(stylePanel, /Commentary detail/i)
   assert.doesNotMatch(varianceDetail, /Narrative Detail/i)
   assert.doesNotMatch(varianceDetail, /narrativeDetail/)
 })
@@ -67,6 +88,9 @@ test('removed controls are gone from App state and request wiring', () => {
   // Local state no longer carries the removed fields.
   assert.doesNotMatch(app, /learnFromUploads/)
   assert.doesNotMatch(app, /narrativeDetail/)
+  // Phase 23: Audience and Commentary detail are no longer part of DEFAULT_STYLE.
+  assert.doesNotMatch(app, /audience:/)
+  assert.doesNotMatch(app, /commentaryDetail:/)
   // The free-text notes field is no longer destructured or sent.
   assert.doesNotMatch(app, /form\.append\('notes'/)
   assert.doesNotMatch(app, /const \{ notes/)

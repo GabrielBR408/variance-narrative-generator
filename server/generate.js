@@ -116,7 +116,7 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
       const llmPeriods = await Promise.all(
         enrichedNarrative.periods.map(async (period) => ({
           ...period,
-          highVariances: await enrichWithLLM(period.highVariances, { period: period.period })
+          highVariances: await enrichWithLLM(period.highVariances, { period: period.period, style })
         }))
       )
       finalNarrative = { ...enrichedNarrative, periods: llmPeriods }
