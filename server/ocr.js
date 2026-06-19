@@ -183,7 +183,10 @@ export async function runOcr({ images = [], ip = 'unknown', mode = 'gl' } = {}) 
       .filter((b) => b && b.type === 'text')
       .map((b) => b.text)
       .join('\n')
-    return mode === 'incomeStatement' ? { rows: parseOcrRows(text) } : { accounts: parseOcrResponse(text) }
+    console.log('[OCR-SERVER] raw vision response:', text && text.slice(0, 500))
+    const result = mode === 'incomeStatement' ? { rows: parseOcrRows(text) } : { accounts: parseOcrResponse(text) }
+    console.log('[OCR-SERVER] parsed rows count:', result && result.rows && result.rows.length)
+    return result
   } catch (err) {
     console.log('[OCR] vision call failed — returning empty:', err && err.message)
     return empty
