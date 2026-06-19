@@ -531,3 +531,42 @@ body {
   color: var(--muted);
 }
 .site-footer-line--muted { font-size: 0.74rem; opacity: 0.85; }
+
+/* PWA update banner — shown when a new service worker is waiting. Dark navy
+   bar, white text, ChiefEO blue accent action button; dismissible. */
+.update-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  padding: 0.6rem 1rem;
+  background: #1e2d3d;
+  color: #fff;
+  font-size: 0.88rem;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+}
+.update-banner-text { font-weight: 500; }
+.update-banner-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 0.35rem 0.85rem;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.update-banner-btn:hover { background: var(--accent-ink); }
+.update-banner-dismiss {
+  border: none;
+  background: none;
+  color: #cdd6e0;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+.update-banner-dismiss:hover { color: #fff; }

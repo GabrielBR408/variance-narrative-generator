@@ -36,12 +36,15 @@ export default defineConfig({
     react(),
     generateEndpoint(),
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      // 'prompt' (not 'autoUpdate') so a freshly deployed service worker waits
+      // and surfaces an "update available" banner via onNeedRefresh instead of
+      // silently swapping in on the next load. See src/pwa/registerUpdate.js.
+      registerType: 'prompt',
+      includeAssets: ['favicon.svg', 'icons/icon-180.png'],
       manifest: {
         name: 'Variance Narrative Generator',
         short_name: 'Variance',
-        description: 'Build property variance reports.',
+        description: 'Generate variance comments on income statements.',
         theme_color: '#1c2a3a',
         background_color: '#f4f5f7',
         display: 'standalone',
@@ -50,9 +53,9 @@ export default defineConfig({
         start_url: base,
         scope: base,
         icons: [
-          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
         ]
       }
     })
