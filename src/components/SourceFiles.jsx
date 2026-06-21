@@ -1,22 +1,9 @@
 import React, { useRef, useState } from 'react'
 import { classifyFile, confidenceTier } from '../lib/classify.js'
 import { routeUpload } from '../lib/uploadRouting.js'
-import { DEFAULT_THRESHOLDS } from '../lib/variance/thresholds.js'
-import ExtractionPreview from './ExtractionPreview.jsx'
-import PreviewBasis from './PreviewBasis.jsx'
-import VariancePreview from './VariancePreview.jsx'
-import NarrativeSummary from './NarrativeSummary.jsx'
 import { prettySize } from './uiFormat.js'
 
 const ACCEPT = '.pdf,.xlsx,.xls,.csv,.docx'
-const CATEGORIES = [
-  'General Ledger (GL)',
-  'Budget',
-  'Prior Month Report',
-  'Existing Variance Report',
-  'Owner Report Example',
-  'Supporting Documents'
-]
 
 function Chip({ file, role, onRemove }) {
   // Classification is purely advisory and computed from name + role only.
@@ -43,26 +30,13 @@ export default function SourceFiles({
   baseReport,
   setBaseReport,
   supportingFiles,
-  setSupportingFiles,
-  extractions = {},
-  fileKey,
-  periodScope,
-  commentaryMode = 'detailed',
-  thresholds = DEFAULT_THRESHOLDS
+  setSupportingFiles
 }) {
   const fileInput = useRef(null)
   const [dragOver, setDragOver] = useState(false)
   // Transient confirmation message describing the last routing decision (e.g.
   // a base report being identified or replaced). Cleared when files are removed.
   const [notice, setNotice] = useState('')
-
-  // Ordered extraction items (base first), if extraction is wired in.
-  const orderedFiles = []
-  if (baseReport) orderedFiles.push(baseReport)
-  supportingFiles.forEach((f) => orderedFiles.push(f))
-  const previewItems = fileKey
-    ? orderedFiles.map((f) => extractions[fileKey(f)]).filter(Boolean)
-    : []
 
   // Single entry point for every file the user drops or selects. The existing
   // filename classifier decides which file (if any) is the base variance report
@@ -118,10 +92,6 @@ export default function SourceFiles({
 
       <div className="card card--primary">
         <div className="card-label">Upload your files</div>
-        <p className="card-sub">
-          Drop the base variance report and any supporting files together — we'll sort out which
-          is which. The base is typically a comparative income statement, ideally in Excel.
-        </p>
 
         <input ref={fileInput} type="file" accept={ACCEPT} multiple hidden onChange={onPick} />
         <button
@@ -165,24 +135,7 @@ export default function SourceFiles({
             </div>
           </div>
         )}
-
-        <details className="helper">
-          <summary>What can I add here?</summary>
-          <ul className="helper-list">
-            {CATEGORIES.map((c) => <li key={c}>{c}</li>)}
-          </ul>
-        </details>
       </div>
-
-      <PreviewBasis items={previewItems} />
-      <ExtractionPreview items={previewItems} />
-      <VariancePreview items={previewItems} thresholds={thresholds} />
-      <NarrativeSummary
-        items={previewItems}
-        periodScope={periodScope}
-        commentaryMode={commentaryMode}
-        thresholds={thresholds}
-      />
     </section>
   )
 }
