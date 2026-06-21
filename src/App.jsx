@@ -6,6 +6,12 @@ import GeneratePanel from './components/GeneratePanel.jsx'
 import ResultPanel from './components/ResultPanel.jsx'
 import DisclosureModal from './components/DisclosureModal.jsx'
 import PrivacyModal from './components/PrivacyModal.jsx'
+import SettingsPanel from './components/SettingsPanel.jsx'
+import UploadGuidance from './components/UploadGuidance.jsx'
+import PreviewBasis from './components/PreviewBasis.jsx'
+import ExtractionPreview from './components/ExtractionPreview.jsx'
+import VariancePreview from './components/VariancePreview.jsx'
+import NarrativeSummary from './components/NarrativeSummary.jsx'
 import {
   extractionReadiness,
   resultFreshness,
@@ -131,6 +137,17 @@ export default function App() {
     .filter(Boolean)
   const pendingSupporting = pendingSupportingCount(supportingExtractionList)
 
+  // Ordered extraction items (base first) that feed the live previews. This used
+  // to live inside SourceFiles; it is lifted here so the previews can be rendered
+  // inside the "Settings & instructions" panel while still reading the same
+  // extraction map. Pure derivation — identical inputs, identical output.
+  const previewItems = useMemo(() => {
+    const ordered = []
+    if (baseReport) ordered.push(baseReport)
+    supportingFiles.forEach((f) => ordered.push(f))
+    return ordered.map((f) => extractions[fileKey(f)]).filter(Boolean)
+  }, [baseReport, supportingFiles, extractions])
+
   // Phase 22.2/22.3: is the displayed result (and its exports) still in sync with
   // the current inputs? Compares the snapshot taken at generate time against the
   // live thresholds, commentary mode, and uploaded file set. Period scope is
@@ -202,25 +219,39 @@ export default function App() {
         <h1>Variance Narrative Generator</h1>
       </header>
       <div className="workflow">
+        {/* Default view: only the upload area + file confirmation. */}
         <SourceFiles
           baseReport={baseReport}
           setBaseReport={setBaseReport}
           supportingFiles={supportingFiles}
           setSupportingFiles={setSupportingFiles}
-          extractions={extractions}
-          fileKey={fileKey}
-          periodScope={periodScope}
-          commentaryMode={commentaryModeFromStyle(style)}
-          thresholds={previewThresholds}
         />
-        <StylePanel style={style} setStyle={setStyle} />
-        <VarianceDetail
-          variance={variance}
-          setVariance={setVariance}
-          periodScope={periodScope}
-          setPeriodScope={setPeriodScope}
-          periodScopeOffered={periodScopeOffered}
-        />
+
+        {/* Everything else lives in one collapsible panel, closed on first load.
+            Controls first (they drive generation), then the upload guidance and
+            the live previews. All state stays lifted in App, so these work
+            identically whether the panel is open or closed. */}
+        <SettingsPanel>
+          <StylePanel style={style} setStyle={setStyle} />
+          <VarianceDetail
+            variance={variance}
+            setVariance={setVariance}
+            periodScope={periodScope}
+            setPeriodScope={setPeriodScope}
+            periodScopeOffered={periodScopeOffered}
+          />
+          <UploadGuidance />
+          <PreviewBasis items={previewItems} />
+          <ExtractionPreview items={previewItems} />
+          <VariancePreview items={previewItems} thresholds={previewThresholds} />
+          <NarrativeSummary
+            items={previewItems}
+            periodScope={periodScope}
+            commentaryMode={commentaryModeFromStyle(style)}
+            thresholds={previewThresholds}
+          />
+        </SettingsPanel>
+
         <GeneratePanel
           status={status}
           message={message}
