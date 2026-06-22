@@ -4,6 +4,14 @@
   "framework": "vite",
   "redirects": [
     {
+      "source": "/",
+      "has": [
+        { "type": "host", "value": "variance-narrative-generator.vercel.app" }
+      ],
+      "destination": "https://chiefeotool.com/",
+      "permanent": true
+    },
+    {
       "source": "/:path*",
       "has": [
         { "type": "host", "value": "variance-narrative-generator.vercel.app" }
