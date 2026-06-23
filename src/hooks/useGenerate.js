@@ -102,6 +102,7 @@ export function useGenerate({
       } catch {
         data = clientGenerate({
           baseExtraction,
+          supportingExtractions,
           files: clientFiles,
           thresholds: previewThresholds,
           settingsReceived: Boolean(style && variance)

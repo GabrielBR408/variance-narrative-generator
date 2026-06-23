@@ -27,7 +27,7 @@ import { enrichNarrative } from '../src/lib/enrich/index.js'
 import { commentaryModeFromStyle } from '../src/lib/enrich/commentaryMode.js'
 import { LLM_ENABLED, checkIpLimit, checkGlobalLimit, enrichWithLLM } from './llm.js'
 import { validateFileRoles } from './validateRoles.js'
-import { checkBaseIsVarianceReport } from '../src/lib/variance/baseGate.js'
+import { evaluateBaseRouting } from '../src/lib/variance/baseGate.js'
 
 // Reasonable safety limits. Files are never stored, so these only guard memory
 // and request time, not storage.
@@ -123,15 +123,33 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
 
   // Pre-generate base gate (structural, no LLM): after any role correction is
   // applied, the FINAL base file `computeVariance` is about to run on must read
-  // structurally as a comparative variance report (an Actual column AND at least
-  // a Budget OR Prior column). Without that, computeVariance would silently
-  // return zero variances and the user would see "Generation complete" with no
-  // findings — the bug this gate prevents. The check uses the same column
-  // detector the variance engine itself uses, so the gate fails iff the engine
-  // could not have produced a comparable set anyway.
-  const gate = checkBaseIsVarianceReport(base.normalized)
-  if (!gate.ok) {
+  // structurally as a comparative variance report (an Actual column AND at
+  // least a Budget OR Prior column). The orchestrator extends the gate from a
+  // pure stop to a four-outcome decision: pass / auto-correct (a single
+  // supporting file passes — swap and proceed) / stop with a smarter message
+  // naming the file. Same column detector the variance engine itself uses.
+  const gate = evaluateBaseRouting({ base, supporting })
+  if (gate.outcome === 'stop_no_candidate' || gate.outcome === 'stop_multiple_candidates') {
     return { status: 422, body: { success: false, error: gate.message, errorCode: gate.reason } }
+  }
+  if (gate.outcome === 'auto_correct') {
+    base = gate.base
+    supporting = gate.supporting
+    const baseFileName = (gate.base && gate.base.fileName) || ''
+    filesOut = (Array.isArray(filesOut) ? filesOut : []).map((f) => {
+      if (!f || typeof f !== 'object') return f
+      if (f.name === baseFileName) return { ...f, role: 'baseReport' }
+      return { ...f, role: 'supportingFile' }
+    })
+    // A structural correction supersedes any prior LLM correction: it reflects
+    // the FINAL routing the pipeline actually used. Same object shape so
+    // ResultPanel / ExportActions / excel "File Roles" render identically.
+    correction = {
+      corrected: true,
+      notice: gate.correction.notice,
+      baseFileId: gate.correction.baseFileId,
+      supportingFileIds: gate.correction.supportingFileIds
+    }
   }
 
   const thresholds = thresholdsFromSettings(variance)

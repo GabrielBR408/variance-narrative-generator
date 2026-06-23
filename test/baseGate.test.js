@@ -2,22 +2,29 @@
 // Runs on Node's built-in test runner (`node --test`).
 //
 // Contract:
-//   • A misrouted base (a budget or a GL in the base slot) is REJECTED with a
-//     clear, actionable message. Generation stops — computeVariance is never
-//     called and no zero-variance result is produced.
+//   • A misrouted base (a budget or a GL in the base slot) is either
+//     auto-corrected (when EXACTLY one supporting file passes the structural
+//     check) or REJECTED with a smarter, file-naming message. No silent
+//     zero-variance result is produced.
 //   • A real comparative income statement PASSES; generation proceeds normally.
 //   • Both the server path (buildGenerateResponse) and the static-host fallback
-//     (clientGenerate) gate identically (one helper, two callers).
+//     (clientGenerate) gate identically (one orchestrator, two callers).
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
   checkBaseIsVarianceReport,
-  BASE_GATE_MESSAGE,
+  evaluateBaseRouting,
+  buildSwapNotice,
+  messageNoCandidate,
+  messageMultipleCandidates,
   BASE_GATE_NO_COLUMNS,
   BASE_GATE_NO_COMPARISON,
-  BASE_GATE_OK
+  BASE_GATE_OK,
+  BASE_GATE_AUTO_CORRECTED,
+  BASE_GATE_NO_CANDIDATE,
+  BASE_GATE_MULTIPLE_CANDIDATES
 } from '../src/lib/variance/baseGate.js'
 import { buildGenerateResponse } from '../server/generate.js'
 import { clientGenerate } from '../src/lib/clientGenerate.js'
@@ -52,40 +59,40 @@ function glNorm() {
   }
 }
 
-const wrap = (normalized, fileName = 'Base.pdf') => ({
-  fileId: fileName, fileName, status: 'ok', confidence: 95,
+const wrap = (normalized, fileName = 'Base.pdf', fileId = null) => ({
+  fileId: fileId || fileName, fileName, status: 'ok', confidence: 95,
   classification: { type: 'Base Variance Report' }, normalized
 })
 
-// --- checkBaseIsVarianceReport (unit) --------------------------------------
+// --- checkBaseIsVarianceReport (single-file pass/fail) ---------------------
 
-test('Kardin budget as base → gate FAILS (no Actual column)', () => {
-  const r = checkBaseIsVarianceReport(kardinBudgetNorm())
+test('Kardin budget as base → check FAILS (no Actual column)', () => {
+  const r = checkBaseIsVarianceReport(kardinBudgetNorm(), 'Budget.pdf')
   assert.equal(r.ok, false)
   assert.equal(r.reason, BASE_GATE_NO_COMPARISON)
-  assert.equal(r.message, BASE_GATE_MESSAGE)
+  assert.match(r.message, /Budget\.pdf/)
 })
 
-test('General Ledger as base → gate FAILS (Debit/Credit, no Actual/Budget)', () => {
-  const r = checkBaseIsVarianceReport(glNorm())
+test('General Ledger as base → check FAILS (Debit/Credit, no Actual/Budget)', () => {
+  const r = checkBaseIsVarianceReport(glNorm(), 'Ledger.pdf')
   assert.equal(r.ok, false)
   assert.equal(r.reason, BASE_GATE_NO_COMPARISON)
 })
 
-test('Real comparative income statement as base → gate PASSES', () => {
-  const r = checkBaseIsVarianceReport(varianceReportNorm())
+test('Real comparative income statement → check PASSES', () => {
+  const r = checkBaseIsVarianceReport(varianceReportNorm(), 'IS.pdf')
   assert.equal(r.ok, true)
   assert.equal(r.reason, BASE_GATE_OK)
   assert.equal(r.message, '')
 })
 
-test('Empty / non-tabular normalized → gate FAILS (no-columns)', () => {
+test('Empty / non-tabular normalized → check FAILS (no-columns)', () => {
   assert.equal(checkBaseIsVarianceReport({ columns: [], rows: [] }).reason, BASE_GATE_NO_COLUMNS)
   assert.equal(checkBaseIsVarianceReport(null).reason, BASE_GATE_NO_COLUMNS)
   assert.equal(checkBaseIsVarianceReport(undefined).reason, BASE_GATE_NO_COLUMNS)
 })
 
-test('Actual + Prior (no budget) is also a comparable set → gate PASSES', () => {
+test('Actual + Prior (no budget) is also a comparable set → check PASSES', () => {
   const r = checkBaseIsVarianceReport({
     columns: ['Account', 'Actual', 'Prior Month'],
     rows: [['Utilities Expense', 25000, 15000]],
@@ -94,63 +101,252 @@ test('Actual + Prior (no budget) is also a comparable set → gate PASSES', () =
   assert.equal(r.ok, true)
 })
 
-test('Gate message names "Actual vs Budget" and tells the user what to do next', () => {
-  const m = BASE_GATE_MESSAGE
+// --- Messages (named + actionable) -----------------------------------------
+
+test('No-candidate message names the offending base file and tells the user what to do', () => {
+  const m = messageNoCandidate('GL Worksheet (1).pdf')
+  assert.match(m, /GL Worksheet \(1\)\.pdf/)
   assert.match(m, /comparative variance report/i)
-  assert.match(m, /Actual vs Budget/i)
+  assert.match(m, /no Actual vs Budget columns/i)
   assert.match(m, /upload a comparative income statement/i)
-  assert.match(m, /Supporting files like budgets and GL detail can be added alongside/i)
+  assert.match(m, /actual and budget figures/i)
 })
 
-// --- buildGenerateResponse: gate stops generation before computeVariance ---
+test('Multiple-candidates message names the base AND lists candidates', () => {
+  const m = messageMultipleCandidates('Budget.pdf', ['IS-Q1.pdf', 'IS-Q2.pdf'])
+  assert.match(m, /Budget\.pdf/)
+  assert.match(m, /Multiple files could be the base/i)
+  assert.match(m, /IS-Q1\.pdf/)
+  assert.match(m, /IS-Q2\.pdf/)
+  assert.match(m, /re-upload with the correct income statement as the first file/i)
+})
 
-function args({ baseNormalized, baseName = 'Base.pdf' }) {
+test('Swap notice names BOTH the original (wrong) base AND the promoted file', () => {
+  const m = buildSwapNotice('GL Worksheet (1).pdf', 'Income Statement.pdf')
+  assert.match(m, /GL Worksheet \(1\)\.pdf/)
+  assert.match(m, /Income Statement\.pdf/)
+  assert.match(m, /not a variance report/i)
+  assert.match(m, /right base file/i)
+  assert.match(m, /adjusted the roles automatically/i)
+})
+
+// --- evaluateBaseRouting (orchestrator) ------------------------------------
+
+test('orchestrator: real IS as base → PASS (no correction)', () => {
+  const out = evaluateBaseRouting({
+    base: wrap(varianceReportNorm(), 'IS.pdf'),
+    supporting: [wrap(glNorm(), 'Ledger.pdf')]
+  })
+  assert.equal(out.outcome, 'pass')
+  assert.equal(out.reason, BASE_GATE_OK)
+})
+
+test('orchestrator: budget as base, IS as supporting → AUTO-CORRECT (swap)', () => {
+  const baseEx = wrap(kardinBudgetNorm(), 'Kardin Budget.pdf')
+  const supEx = wrap(varianceReportNorm(), 'Income Statement.pdf')
+  const out = evaluateBaseRouting({ base: baseEx, supporting: [supEx] })
+  assert.equal(out.outcome, 'auto_correct')
+  assert.equal(out.reason, BASE_GATE_AUTO_CORRECTED)
+  // The variance report is now the base; the original base is demoted.
+  assert.equal(out.base.fileName, 'Income Statement.pdf')
+  assert.equal(out.supporting[0].fileName, 'Kardin Budget.pdf')
+  // Correction object carries the notice and IDs downstream UI/exports expect.
+  assert.equal(out.correction.corrected, true)
+  assert.match(out.correction.notice, /Kardin Budget\.pdf/)
+  assert.match(out.correction.notice, /Income Statement\.pdf/)
+  assert.equal(out.correction.baseFileId, 'Income Statement.pdf')
+  assert.deepEqual(out.correction.supportingFileIds, ['Kardin Budget.pdf'])
+})
+
+test('orchestrator: GL as base, IS as supporting → AUTO-CORRECT', () => {
+  const out = evaluateBaseRouting({
+    base: wrap(glNorm(), 'Ledger.pdf'),
+    supporting: [wrap(varianceReportNorm(), 'IS.pdf')]
+  })
+  assert.equal(out.outcome, 'auto_correct')
+  assert.equal(out.base.fileName, 'IS.pdf')
+})
+
+test('orchestrator: budget as base, GL as supporting (no IS) → STOP_NO_CANDIDATE', () => {
+  const out = evaluateBaseRouting({
+    base: wrap(kardinBudgetNorm(), 'Kardin Budget.pdf'),
+    supporting: [wrap(glNorm(), 'Ledger.pdf')]
+  })
+  assert.equal(out.outcome, 'stop_no_candidate')
+  assert.equal(out.reason, BASE_GATE_NO_CANDIDATE)
+  assert.equal(out.baseFileName, 'Kardin Budget.pdf')
+  assert.match(out.message, /Kardin Budget\.pdf/)
+  assert.match(out.message, /actual and budget figures/i)
+})
+
+test('orchestrator: budget as only file → STOP_NO_CANDIDATE (original gate behavior, smarter message)', () => {
+  const out = evaluateBaseRouting({
+    base: wrap(kardinBudgetNorm(), 'Kardin Budget.pdf'),
+    supporting: []
+  })
+  assert.equal(out.outcome, 'stop_no_candidate')
+  assert.match(out.message, /Kardin Budget\.pdf/)
+})
+
+test('orchestrator: budget as base + TWO IS supporting → STOP_MULTIPLE_CANDIDATES', () => {
+  const out = evaluateBaseRouting({
+    base: wrap(kardinBudgetNorm(), 'Kardin Budget.pdf'),
+    supporting: [
+      wrap(varianceReportNorm(), 'IS-Q1.pdf'),
+      wrap(varianceReportNorm(), 'IS-Q2.pdf')
+    ]
+  })
+  assert.equal(out.outcome, 'stop_multiple_candidates')
+  assert.equal(out.reason, BASE_GATE_MULTIPLE_CANDIDATES)
+  assert.deepEqual(out.candidateNames, ['IS-Q1.pdf', 'IS-Q2.pdf'])
+  assert.match(out.message, /Kardin Budget\.pdf/)
+  assert.match(out.message, /IS-Q1\.pdf/)
+  assert.match(out.message, /IS-Q2\.pdf/)
+})
+
+// --- buildGenerateResponse: orchestrator wired into the server path --------
+
+function args({ baseNormalized, baseName = 'Base.pdf', supporting = [], extras = {} }) {
   return {
-    files: [{ name: baseName, size: 1, type: '', role: 'baseReport' }],
-    extractions: { base: wrap(baseNormalized, baseName), supporting: [] },
+    files: [
+      { name: baseName, size: 1, type: '', role: 'baseReport' },
+      ...supporting.map((s) => ({ name: s.fileName, size: 1, type: '', role: 'supportingFile' }))
+    ],
+    extractions: { base: wrap(baseNormalized, baseName), supporting },
     style: { reportStyle: 'Detailed' },
     variance: { dollarThreshold: 1000, percentThreshold: 10 },
-    llmMode: 'cited'
+    llmMode: 'cited',
+    ...extras
   }
 }
 
-test('buildGenerateResponse: a Kardin budget in the base slot → 422 + gate message; no variance produced', async () => {
-  const { status, body } = await buildGenerateResponse(args({ baseNormalized: kardinBudgetNorm(), baseName: 'GL Worksheet (1).pdf' }))
+test('buildGenerateResponse: budget as base, IS as supporting → 200, auto-corrected, variance produced', async () => {
+  const supporting = [wrap(varianceReportNorm(), 'Income Statement.pdf')]
+  const { status, body } = await buildGenerateResponse(
+    args({ baseNormalized: kardinBudgetNorm(), baseName: 'Kardin Budget.pdf', supporting })
+  )
+  assert.equal(status, 200)
+  assert.equal(body.success, true)
+  assert.ok(body.variance)
+  assert.ok(body.variance.summary.totalVariancesFound > 0)
+  // Correction notice carried out for the UI and Excel "File Roles" header.
+  assert.ok(body.correction)
+  assert.equal(body.correction.corrected, true)
+  assert.match(body.correction.notice, /Kardin Budget\.pdf/)
+  assert.match(body.correction.notice, /Income Statement\.pdf/)
+  // Roles in the response files[] are re-stamped to the corrected routing.
+  const baseFile = body.files.find((f) => f.role === 'baseReport')
+  assert.equal(baseFile.name, 'Income Statement.pdf')
+})
+
+test('buildGenerateResponse: budget as ONLY file → 422 + smarter message naming the base', async () => {
+  const { status, body } = await buildGenerateResponse(
+    args({ baseNormalized: kardinBudgetNorm(), baseName: 'Kardin Budget.pdf', supporting: [] })
+  )
   assert.equal(status, 422)
   assert.equal(body.success, false)
-  assert.equal(body.error, BASE_GATE_MESSAGE)
-  assert.equal(body.errorCode, BASE_GATE_NO_COMPARISON)
-  // No variance / narrative body at all — the silent zero-variance result the
-  // gate replaces is gone.
+  assert.equal(body.errorCode, BASE_GATE_NO_CANDIDATE)
+  assert.match(body.error, /Kardin Budget\.pdf/)
+  assert.match(body.error, /actual and budget figures/i)
   assert.equal(body.variance, undefined)
   assert.equal(body.narrative, undefined)
 })
 
-test('buildGenerateResponse: a GL in the base slot → 422 + gate message', async () => {
-  const { status, body } = await buildGenerateResponse(args({ baseNormalized: glNorm(), baseName: 'Ledger.pdf' }))
+test('buildGenerateResponse: budget as base + GL as supporting → 422 + smarter message naming the base', async () => {
+  const supporting = [wrap(glNorm(), 'Ledger.pdf')]
+  const { status, body } = await buildGenerateResponse(
+    args({ baseNormalized: kardinBudgetNorm(), baseName: 'Kardin Budget.pdf', supporting })
+  )
   assert.equal(status, 422)
-  assert.equal(body.error, BASE_GATE_MESSAGE)
+  assert.equal(body.errorCode, BASE_GATE_NO_CANDIDATE)
+  assert.match(body.error, /Kardin Budget\.pdf/)
 })
 
-test('buildGenerateResponse: a real comparative IS in the base slot → 200 + variance produced', async () => {
-  const { status, body } = await buildGenerateResponse(args({ baseNormalized: varianceReportNorm(), baseName: 'Income Statement.pdf' }))
+test('buildGenerateResponse: budget as base + TWO IS supporting → 422 + multiple-candidates message', async () => {
+  const supporting = [
+    wrap(varianceReportNorm(), 'IS-Q1.pdf'),
+    wrap(varianceReportNorm(), 'IS-Q2.pdf')
+  ]
+  const { status, body } = await buildGenerateResponse(
+    args({ baseNormalized: kardinBudgetNorm(), baseName: 'Kardin Budget.pdf', supporting })
+  )
+  assert.equal(status, 422)
+  assert.equal(body.errorCode, BASE_GATE_MULTIPLE_CANDIDATES)
+  assert.match(body.error, /Kardin Budget\.pdf/)
+  assert.match(body.error, /IS-Q1\.pdf/)
+  assert.match(body.error, /IS-Q2\.pdf/)
+})
+
+test('buildGenerateResponse: a real comparative IS in the base slot → 200, no correction', async () => {
+  const { status, body } = await buildGenerateResponse(
+    args({ baseNormalized: varianceReportNorm(), baseName: 'Income Statement.pdf' })
+  )
   assert.equal(status, 200)
   assert.equal(body.success, true)
-  assert.ok(body.variance, 'variance produced')
+  assert.ok(body.variance)
   assert.ok(body.variance.summary.totalVariancesFound > 0)
+  assert.equal(body.correction, null)
 })
 
 // --- clientGenerate (static-host fallback) gates identically ---------------
 
-test('clientGenerate: a Kardin budget in the base slot → { success:false, gate message }', () => {
-  const res = clientGenerate({ baseExtraction: wrap(kardinBudgetNorm()), files: [], thresholds: { amount: 1000, percent: 10 } })
-  assert.equal(res.success, false)
-  assert.equal(res.error, BASE_GATE_MESSAGE)
-  assert.equal(res.errorCode, BASE_GATE_NO_COMPARISON)
-})
-
-test('clientGenerate: a real comparative IS → success', () => {
-  const res = clientGenerate({ baseExtraction: wrap(varianceReportNorm()), files: [], thresholds: { amount: 1000, percent: 10 } })
+test('clientGenerate: budget as base, IS as supporting → success + correction (auto-correct)', () => {
+  const baseExtraction = wrap(kardinBudgetNorm(), 'Kardin Budget.pdf')
+  const supportingExtractions = [wrap(varianceReportNorm(), 'Income Statement.pdf')]
+  const res = clientGenerate({
+    baseExtraction,
+    supportingExtractions,
+    files: [
+      { name: 'Kardin Budget.pdf', size: 1, type: '', role: 'baseReport' },
+      { name: 'Income Statement.pdf', size: 1, type: '', role: 'supportingFile' }
+    ],
+    thresholds: { amount: 1000, percent: 10 }
+  })
   assert.equal(res.success, true)
   assert.ok(res.variance)
+  assert.ok(res.correction)
+  assert.match(res.correction.notice, /Kardin Budget\.pdf/)
+  assert.match(res.correction.notice, /Income Statement\.pdf/)
+  const baseFile = res.files.find((f) => f.role === 'baseReport')
+  assert.equal(baseFile.name, 'Income Statement.pdf')
+})
+
+test('clientGenerate: budget as only file → { success:false, smarter message }', () => {
+  const res = clientGenerate({
+    baseExtraction: wrap(kardinBudgetNorm(), 'Kardin Budget.pdf'),
+    supportingExtractions: [],
+    files: [{ name: 'Kardin Budget.pdf', size: 1, type: '', role: 'baseReport' }],
+    thresholds: { amount: 1000, percent: 10 }
+  })
+  assert.equal(res.success, false)
+  assert.equal(res.errorCode, BASE_GATE_NO_CANDIDATE)
+  assert.match(res.error, /Kardin Budget\.pdf/)
+})
+
+test('clientGenerate: budget as base + 2 IS supporting → { success:false, multiple-candidates message }', () => {
+  const res = clientGenerate({
+    baseExtraction: wrap(kardinBudgetNorm(), 'Kardin Budget.pdf'),
+    supportingExtractions: [
+      wrap(varianceReportNorm(), 'IS-Q1.pdf'),
+      wrap(varianceReportNorm(), 'IS-Q2.pdf')
+    ],
+    files: [],
+    thresholds: { amount: 1000, percent: 10 }
+  })
+  assert.equal(res.success, false)
+  assert.equal(res.errorCode, BASE_GATE_MULTIPLE_CANDIDATES)
+  assert.match(res.error, /Kardin Budget\.pdf/)
+  assert.match(res.error, /IS-Q1\.pdf/)
+})
+
+test('clientGenerate: a real comparative IS → success, no correction', () => {
+  const res = clientGenerate({
+    baseExtraction: wrap(varianceReportNorm()),
+    supportingExtractions: [],
+    files: [],
+    thresholds: { amount: 1000, percent: 10 }
+  })
+  assert.equal(res.success, true)
+  assert.ok(res.variance)
+  assert.equal(res.correction, null)
 })

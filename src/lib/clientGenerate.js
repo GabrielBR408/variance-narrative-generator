@@ -12,31 +12,54 @@
 // only enrich the base narrative downstream), exactly like the server path.
 
 import { runPipeline } from './pipeline.js'
-import { checkBaseIsVarianceReport } from './variance/baseGate.js'
+import { evaluateBaseRouting } from './variance/baseGate.js'
 
 // Build the same { success, jobId, filesReceived, settingsReceived, files,
 // extraction, variance, narrative } shape server/generate.js returns. Mirrors
-// the server's pre-generate base gate so the static-host fallback fails the same
-// way (with the same message) when a non-variance file is in the base slot.
-//   baseExtraction : the slim normalized extraction for the base report
-//   files          : [{ name, size, type, role }] metadata (base + supporting)
-//   thresholds     : { amount, percent } (already resolved from settings)
-export function clientGenerate({ baseExtraction, files = [], thresholds, settingsReceived = true } = {}) {
-  const gate = checkBaseIsVarianceReport(baseExtraction && baseExtraction.normalized)
-  if (!gate.ok) {
+// the server's pre-generate base routing decision so the static-host fallback
+// behaves identically: a misrouted base auto-corrects when exactly one
+// supporting file is structurally a variance report; otherwise it stops with
+// the same smarter, file-naming message the server returns.
+//   baseExtraction        : the slim normalized extraction for the base report
+//   supportingExtractions : slim normalized extractions for the supporting files
+//   files                 : [{ name, size, type, role }] metadata (base + supporting)
+//   thresholds            : { amount, percent } (already resolved from settings)
+export function clientGenerate({ baseExtraction, supportingExtractions = [], files = [], thresholds, settingsReceived = true } = {}) {
+  const gate = evaluateBaseRouting({ base: baseExtraction, supporting: supportingExtractions })
+  if (gate.outcome === 'stop_no_candidate' || gate.outcome === 'stop_multiple_candidates') {
     return { success: false, error: gate.message, errorCode: gate.reason }
   }
 
-  const { extraction, variance, narrative } = runPipeline(baseExtraction, { thresholds })
+  let baseForPipeline = baseExtraction
+  let filesOut = Array.isArray(files) ? files : []
+  let correction = null
+  if (gate.outcome === 'auto_correct') {
+    baseForPipeline = gate.base
+    const baseFileName = (gate.base && gate.base.fileName) || ''
+    filesOut = filesOut.map((f) => {
+      if (!f || typeof f !== 'object') return f
+      if (f.name === baseFileName) return { ...f, role: 'baseReport' }
+      return { ...f, role: 'supportingFile' }
+    })
+    correction = {
+      corrected: true,
+      notice: gate.correction.notice,
+      baseFileId: gate.correction.baseFileId,
+      supportingFileIds: gate.correction.supportingFileIds
+    }
+  }
+
+  const { extraction, variance, narrative } = runPipeline(baseForPipeline, { thresholds })
   return {
     success: true,
     // Distinguish a locally computed job from a server-minted one.
     jobId: 'LOCAL-' + String(Date.now()).slice(-6),
-    filesReceived: Array.isArray(files) ? files.length : 0,
+    filesReceived: filesOut.length,
     settingsReceived: !!settingsReceived,
-    files: Array.isArray(files) ? files : [],
+    files: filesOut,
     extraction,
     variance,
-    narrative
+    narrative,
+    correction
   }
 }

@@ -255,16 +255,30 @@ test('buildGenerateResponse: no correction → variance from the original base, 
   assert.equal(body.correction, null)
 })
 
-test('buildGenerateResponse: a budget left in the base slot is now REJECTED by the base gate (no silent zero-variance)', async () => {
-  // Before the gate: a budget base produced a silent empty variance result
-  // (status 200, totalVariancesFound 0) — the bug. After the gate: generation
-  // stops with 422 + a clear actionable message, and computeVariance never runs.
+test('buildGenerateResponse: a budget left in the base slot is now AUTO-CORRECTED by the structural gate (no silent zero-variance, no manual swap)', async () => {
+  // Phase: structural auto-correct. When the LLM validator returns null (no
+  // API key, low confidence, etc.) and exactly one supporting file structurally
+  // looks like a variance report, the base gate swaps roles automatically and
+  // generation proceeds — same correction object shape the LLM path produces,
+  // so the UI notice and Excel "File Roles" header render identically.
   const base = budgetEx()
   const supporting = [varianceReportEx()]
   const { status, body } = await buildGenerateResponse(genArgs({ base, supporting, validate: () => null }))
+  assert.equal(status, 200)
+  assert.equal(body.success, true)
+  assert.equal(body.variance.fileName, 'Income Statement.pdf')
+  assert.ok(body.variance.summary.totalVariancesFound > 0)
+  assert.ok(body.correction && body.correction.corrected)
+  assert.match(body.correction.notice, /Income Statement\.pdf/)
+})
+
+test('buildGenerateResponse: a budget left in the base slot AND no IS supporting is REJECTED with the smarter, file-naming message', async () => {
+  const base = budgetEx()
+  const { status, body } = await buildGenerateResponse(genArgs({ base, supporting: [], validate: () => null }))
   assert.equal(status, 422)
   assert.equal(body.success, false)
   assert.match(body.error, /comparative variance report/i)
+  assert.match(body.error, new RegExp(base.fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   assert.equal(body.variance, undefined)
 })
 
