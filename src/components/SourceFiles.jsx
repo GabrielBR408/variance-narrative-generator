@@ -1,14 +1,21 @@
 import React, { useRef, useState } from 'react'
 import { classifyFile, confidenceTier } from '../lib/classify.js'
 import { routeUpload } from '../lib/uploadRouting.js'
+import { fileKey } from '../lib/fileKey.js'
 import { prettySize } from './uiFormat.js'
 
 const ACCEPT = '.pdf,.xlsx,.xls,.csv,.docx'
 
-function Chip({ file, role, onRemove }) {
-  // Classification is purely advisory and computed from name + role only.
-  // It never gates the upload; the file is already here regardless.
-  const { type, confidence } = classifyFile({ name: file.name, role })
+function Chip({ file, role, extraction, onRemove }) {
+  // The label is advisory. Before extraction it is the name/role guess; once a
+  // NON-BASE file has been parsed and CONTENT reclassified it (basis 'content' —
+  // e.g. a budget exported with a GL-ish filename), show the corrected type so the
+  // file list reflects what will actually be mined. Display-only: this never feeds
+  // base selection or variance, which read the name/role classifier directly.
+  const filename = classifyFile({ name: file.name, role })
+  const refined = extraction && extraction.classification
+  const { type, confidence } =
+    refined && refined.basis === 'content' ? refined : filename
   return (
     <span className="chip">
       <span className="chip-top">
@@ -30,7 +37,8 @@ export default function SourceFiles({
   baseReport,
   setBaseReport,
   supportingFiles,
-  setSupportingFiles
+  setSupportingFiles,
+  extractions = {}
 }) {
   const fileInput = useRef(null)
   const [dragOver, setDragOver] = useState(false)
@@ -122,7 +130,7 @@ export default function SourceFiles({
               <div className="upload-group-label">Base Variance Report</div>
               {baseReport ? (
                 <div className="chips">
-                  <Chip file={baseReport} role="baseReport" onRemove={removeBase} />
+                  <Chip file={baseReport} role="baseReport" extraction={extractions[fileKey(baseReport)]} onRemove={removeBase} />
                 </div>
               ) : (
                 <p className="upload-group-empty">No base report yet — drop a variance report above.</p>
@@ -134,7 +142,7 @@ export default function SourceFiles({
               {supportingFiles.length > 0 ? (
                 <div className="chips">
                   {supportingFiles.map((f, i) => (
-                    <Chip key={`${f.name}-${i}`} file={f} role="supportingFile" onRemove={() => removeSupport(i)} />
+                    <Chip key={`${f.name}-${i}`} file={f} role="supportingFile" extraction={extractions[fileKey(f)]} onRemove={() => removeSupport(i)} />
                   ))}
                 </div>
               ) : (
