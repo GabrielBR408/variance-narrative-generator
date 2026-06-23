@@ -26,6 +26,7 @@ import { runPipeline } from '../src/lib/pipeline.js'
 import { enrichNarrative } from '../src/lib/enrich/index.js'
 import { commentaryModeFromStyle } from '../src/lib/enrich/commentaryMode.js'
 import { LLM_ENABLED, checkIpLimit, checkGlobalLimit, enrichWithLLM } from './llm.js'
+import { validateFileRoles } from './validateRoles.js'
 
 // Reasonable safety limits. Files are never stored, so these only guard memory
 // and request time, not storage.
@@ -76,7 +77,7 @@ function thresholdsFromSettings(varianceSettings) {
 //   extractions  : { base, supporting:[...] }     (browser-normalized results)
 //   style        : parsed style settings object (or null)
 //   variance     : parsed variance settings object (or null)
-export async function buildGenerateResponse({ files = [], extractions = null, style = null, variance = null, ip = null, llmMode = 'conservative' } = {}) {
+export async function buildGenerateResponse({ files = [], extractions = null, style = null, variance = null, ip = null, llmMode = 'conservative', _validateForTest = null } = {}) {
   // A base variance report must be present before anything is analyzed.
   const hasBase = files.some((f) => f.role === 'baseReport')
   if (!hasBase) {
@@ -86,12 +87,37 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
   // The pipeline needs the base report's normalized extraction. The browser
   // produces this; if it is missing or did not extract cleanly we say so plainly
   // rather than inventing an analysis.
-  const base = extractions && typeof extractions === 'object' ? extractions.base : null
+  let base = extractions && typeof extractions === 'object' ? extractions.base : null
   if (!base || typeof base !== 'object') {
     return { status: 422, body: { success: false, error: 'The base report could not be read for analysis.' } }
   }
   if (base.status && base.status !== 'ok') {
     return { status: 422, body: { success: false, error: 'The base report could not be read for analysis.' } }
+  }
+
+  // Generate-time file-role validation (Option A: auto-correct with notice). One
+  // LLM call BEFORE computeVariance looks at a small content sample from each file
+  // and, when the user's base assignment is wrong (e.g. a budget selected as the
+  // base), re-routes so the real variance report becomes the base. Gated by the
+  // SAME flag + rate limit + circuit breaker as enrichment, so it counts against
+  // the same limits; any failure / low confidence ⇒ no correction (silent). Only
+  // generate-time routing changes here — never variance logic or display labels.
+  let supporting = Array.isArray(extractions && extractions.supporting) ? extractions.supporting : []
+  let filesOut = files
+  let correction = null
+  const validator = _validateForTest
+    ? _validateForTest
+    : LLM_ENABLED && llmMode === 'cited' && checkIpLimit(ip || 'unknown') && checkGlobalLimit()
+      ? validateFileRoles
+      : null
+  if (validator) {
+    const result = await validator({ base, supporting, files })
+    if (result && result.corrected) {
+      base = result.base
+      supporting = result.supporting
+      filesOut = result.files || files
+      correction = { corrected: true, notice: result.notice, baseFileId: result.baseFileId, supportingFileIds: result.supportingFileIds }
+    }
   }
 
   const thresholds = thresholdsFromSettings(variance)
@@ -116,8 +142,8 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
     if (ipAllowed && globalAllowed) {
       // Run deterministic enrichment server-side to populate note.support and
       // note.preparedEvidence on matching notes. The client will skip notes
-      // already marked enriched:true, so there is no double-enrichment.
-      const supporting = Array.isArray(extractions && extractions.supporting) ? extractions.supporting : []
+      // already marked enriched:true, so there is no double-enrichment. Uses the
+      // (possibly corrected) supporting set from role validation above.
       // Fix B (wiring): honor the active Style panel's reportStyle instead of a
       // hardcoded 'detailed', so Concise vs Detailed reaches the deterministic
       // commentary even on the LLM-enriched path.
@@ -154,13 +180,16 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
       jobId,
       filesReceived: files.length,
       settingsReceived,
-      files,
+      files: filesOut,
       extraction,
       variance: varianceResult,
       narrative: finalNarrative,
       // Fix A: the fixed-enum fallback reason for this run, so the client/exports
       // can show an honest enrichment status. Surface-only; nothing else reads it.
-      enrichmentReason
+      enrichmentReason,
+      // Generate-time role correction (Option A). null when no re-route happened;
+      // the client shows the notice and re-routes its own enrichment supporting set.
+      correction
     }
   }
 }

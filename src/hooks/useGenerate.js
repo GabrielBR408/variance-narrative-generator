@@ -120,7 +120,18 @@ export function useGenerate({
       // is still selectable). The chosen mode flows into the generated result
       // and the exports (which consume this enriched narrative).
       const mode = commentaryModeFromStyle(style)
-      const enriched = enrichNarrative(data.narrative, { supporting: supportingExtractions, mode })
+
+      // Generate-time role correction (server-side, Option A): if the server
+      // re-routed which file is the base, enrich with the CORRECTED supporting
+      // set (so the demoted file is now mined as supporting and the promoted base
+      // is not). fileId === fileKey, so the corrected ids resolve straight out of
+      // the extraction map. With no correction this is the original supporting set
+      // and behavior is unchanged.
+      const correction = data.correction && data.correction.corrected ? data.correction : null
+      const enrichSupporting = correction
+        ? correction.supportingFileIds.map((id) => slimExtraction(extractions[id])).filter(Boolean)
+        : supportingExtractions
+      const enriched = enrichNarrative(data.narrative, { supporting: enrichSupporting, mode })
 
       // Phase 23: "Abbreviate Dollar Values" is a cosmetic pass over the finished
       // narrative text. Default Off → identity (same reference), so the
@@ -157,6 +168,9 @@ export function useGenerate({
         diagnostic,
         enrichment,
         backup,
+        // Generate-time role correction notice (Option A). null when nothing was
+        // re-routed; ResultPanel and the Excel export render it when present.
+        correction: correction ? { notice: correction.notice } : null,
         // Phase 22.2: snapshot the settings this result was generated with, so the
         // UI can warn when the live settings drift from it (period scope excluded —
         // it is applied live at render/export time, so it never makes a result stale).
@@ -167,9 +181,11 @@ export function useGenerate({
         },
         // Phase 22.3: snapshot the file set too (base + sorted supporting), so the
         // same freshness banner fires when files are added, removed, or replaced.
+        // On a role correction, snapshot the CORRECTED routing so freshness stays
+        // consistent with what was actually generated.
         source: {
-          baseKey: fileKey(baseReport),
-          supportingKeys: supportingFiles.map(fileKey).sort()
+          baseKey: correction ? correction.baseFileId : fileKey(baseReport),
+          supportingKeys: (correction ? [...correction.supportingFileIds] : supportingFiles.map(fileKey)).sort()
         }
       })
       setStatus('success')
