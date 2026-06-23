@@ -5,6 +5,7 @@ import { commentaryModeFromStyle } from '../lib/enrich/commentaryMode.js'
 import { applyDollarAbbreviation } from '../lib/narrative/dollarAbbrev.js'
 import { enrichmentDiagnostic } from '../lib/enrichmentDiagnostic.js'
 import { enrichmentStatus } from '../lib/enrichmentStatus.js'
+import { backupNotice } from '../lib/backupNotice.js'
 import { fileKey } from '../lib/fileKey.js'
 
 // Compact, faithful view of a browser extraction to ship to /generate. We send
@@ -139,6 +140,12 @@ export function useGenerate({
       // never alters the narrative.
       const enrichment = enrichmentStatus({ narrative, reason: data.enrichmentReason })
 
+      // Input-guidance phase: a short, non-alarming notice recommending a
+      // supporting input that was not provided and would have strengthened the
+      // commentary. Presence/file-type detection only; null when the app made do.
+      const files = Array.isArray(data.files) ? data.files : []
+      const backup = backupNotice({ narrative, variance: data.variance, files })
+
       setResult({
         jobId: data.jobId,
         filesReceived: data.filesReceived,
@@ -149,6 +156,7 @@ export function useGenerate({
         narrative,
         diagnostic,
         enrichment,
+        backup,
         // Phase 22.2: snapshot the settings this result was generated with, so the
         // UI can warn when the live settings drift from it (period scope excluded —
         // it is applied live at render/export time, so it never makes a result stale).

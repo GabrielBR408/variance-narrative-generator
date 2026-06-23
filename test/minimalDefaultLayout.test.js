@@ -116,6 +116,10 @@ test('SourceFiles renders only the upload area + file confirmation', async () =>
   assert.match(html, /Upload your files/)
   assert.match(html, /Drag &amp; drop files here/)
   assert.match(html, /income-statement\.xlsx/)
+  // Part B: the short default-view upload-guidance line is present near the
+  // dropzone (visible without opening the Settings & instructions panel).
+  assert.match(html, /Upload a variance report, plus a year-to-date GL and detailed budget\./)
+  assert.match(html, /the variance commentary will be more limited\./)
   // Moved out: the upload note, the "What can I add here?" helper, and the
   // preview cards must no longer live in the upload area.
   assert.doesNotMatch(html, /comparative income statement/)
