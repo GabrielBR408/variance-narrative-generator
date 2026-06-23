@@ -106,6 +106,14 @@ export default function SourceFiles({
           <span className="dropzone-sub">or click to choose — you can add several at once</span>
         </button>
 
+        {/* Short default-view guidance (the detailed note lives in the Settings
+            & instructions panel). Muted helper styling, no new components. */}
+        <p className="card-sub upload-hint">
+          Upload a variance report, plus a year-to-date GL and detailed budget. You can
+          upload less — a current-month GL, or no budget — but the variance commentary
+          will be more limited.
+        </p>
+
         {notice && <p className="upload-notice" role="status">{notice}</p>}
 
         {hasFiles && (

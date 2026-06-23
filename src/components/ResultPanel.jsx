@@ -8,6 +8,7 @@ import { prettySize } from './uiFormat.js'
 import ExportActions from './ExportActions.jsx'
 import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
 import EnrichmentStatus from './EnrichmentStatus.jsx'
+import BackupNotice from './BackupNotice.jsx'
 import PeriodTabs from './PeriodTabs.jsx'
 
 const NO_FRESHNESS = { stale: false, changed: [] }
@@ -125,6 +126,11 @@ export default function ResultPanel({ status, result, periodScope = DEFAULT_PERI
               output and download buttons), so the user knows when a basic
               narrative is shown and why. */}
           <EnrichmentStatus enrichment={result.enrichment} />
+
+          {/* Input-guidance phase: recommends a supporting input that would have
+              strengthened the commentary (presence/type only). Renders nothing
+              when every needed input was present. */}
+          <BackupNotice notice={result.backup} />
 
           <ResultNarrative narrative={scopedNarrative} />
 
