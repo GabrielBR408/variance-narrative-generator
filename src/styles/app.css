@@ -45,6 +45,19 @@ body {
   margin: 0 0 1.5rem;
 }
 
+/* Hero line — large, bold call-to-action at the very top of the page, just
+   below the brand header. Uses the ChiefEO blue accent so it reads as the
+   primary instruction before the upload zone. */
+.hero-line {
+  text-align: center;
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--accent-ink);
+  margin: 0 0 1.5rem;
+}
+
 .workflow {
   display: flex;
   flex-direction: column;
