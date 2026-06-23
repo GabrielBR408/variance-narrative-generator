@@ -137,14 +137,49 @@ function num(x) {
 // Rule 3 — a zero-actual budgeted line (actual = 0, budget > 0 on a budget
 // basis). Clear, factual, no speculation about WHY. Expense lines read as "no
 // service or expense"; everything else as "no activity posted".
+//
+// NQ-2B.1 — wording rotation. A report can carry many zero-actual budgeted lines
+// (every "budgeted, $0 actual, 100% under" account), and a single canned
+// sentence repeated down the list reads like a machine. So the phrasing rotates
+// across a small set of accurate equivalents, selected DETERMINISTICALLY from the
+// account name — the same account always reads the same way, and a list of
+// distinct accounts varies. Index 0 is the canonical phrasing and is the
+// fallback when no account is present, so callers without an account (and the
+// conservative byte-identity invariant) are unaffected. Every variant states the
+// same fact — nothing posted against the budget — and none speculates about WHY.
+const ZERO_ACTUAL_EXPENSE = [
+  'No service or expense was recorded in the period.',
+  'No spending posted against the budget this period.',
+  'This budgeted item saw no activity in the period.',
+  'No charges were recorded against this account in the period.'
+]
+const ZERO_ACTUAL_OTHER = [
+  'No activity posted against the budgeted amount.',
+  'No amounts were recorded against the budget this period.',
+  'This budgeted line saw no activity in the period.',
+  'Nothing posted to this account in the period.'
+]
+
+// Deterministic index into a rotation set, derived from the account string. An
+// empty/absent key always maps to 0 (the canonical phrasing). Pure: same key,
+// same index, every run.
+function rotationIndex(key, n) {
+  const s = String(key || '')
+  if (!s) return 0
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return ((h % n) + n) % n
+}
+
+export const ZERO_ACTUAL_VARIANTS = { expense: ZERO_ACTUAL_EXPENSE, other: ZERO_ACTUAL_OTHER }
+
 export function zeroActualCommentary(note = {}) {
   if (note.comparisonType !== 'budget') return null
   const actual = num(note.actual)
   const budget = num(note.comparison)
   if (actual !== 0 || budget === null || budget <= 0) return null
-  return note.accountType === 'expense'
-    ? 'No service or expense was recorded in the period.'
-    : 'No activity posted against the budgeted amount.'
+  const variants = note.accountType === 'expense' ? ZERO_ACTUAL_EXPENSE : ZERO_ACTUAL_OTHER
+  return variants[rotationIndex(note.account, variants.length)]
 }
 
 // Rule 5a — a negative reported actual reads as a net credit / reversal. Stated

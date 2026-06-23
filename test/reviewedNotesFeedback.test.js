@@ -19,6 +19,7 @@ import assert from 'node:assert/strict'
 import {
   enrichNarrative,
   zeroActualCommentary,
+  ZERO_ACTUAL_VARIANTS,
   negativeActualCommentary,
   isMaterialVariance,
   isImmaterialVariance,
@@ -124,19 +125,46 @@ test('HVAC Contract: boilerplate avoided when vendor/service detail is available
 
 // --- 3. zero-actual / 100%-under-budget lines ------------------------------
 
-test('zero-actual expense line: "No service or expense was recorded in the period."', () => {
+test('zero-actual expense line ends with one of the rotation variants', () => {
+  // NQ-2B.1: the phrasing rotates across accurate equivalents, selected
+  // deterministically from the account, so the sentence is one of the expense set.
   const note = enriched({ account: '51500 Window Cleaning', actual: 0, budget: 19000 })
-  assert.match(note.text, /No service or expense was recorded in the period\.$/)
+  assert.ok(ZERO_ACTUAL_VARIANTS.expense.some((v) => note.text.endsWith(v)),
+    `expected a zero-actual expense variant, got: ${note.text}`)
   assertSafe(note.text)
 })
 
-test('zero-actual revenue line: "No activity posted against the budgeted amount."', () => {
+test('zero-actual revenue line ends with one of the rotation variants', () => {
   const note = enriched({
     account: '40100 Rental Income-Storage', actual: 0, budget: 200,
     accountType: 'revenue', category: 'unfavorable'
   })
-  assert.match(note.text, /No activity posted against the budgeted amount\.$/)
+  assert.ok(ZERO_ACTUAL_VARIANTS.other.some((v) => note.text.endsWith(v)),
+    `expected a zero-actual revenue variant, got: ${note.text}`)
   assertSafe(note.text)
+})
+
+test('zero-actual phrasing rotates across a list (no robotic repetition)', () => {
+  // NQ-2B.1: the original symptom was ~20 identical sentences down the expense
+  // list. Across distinct accounts the deterministic rotation must produce more
+  // than one phrasing, while every line stays an accurate, non-speculative fact.
+  const accounts = [
+    '51100 Alarm System Maint', '51200 HVAC-Repairs', '51300 Fire Sprinkler',
+    '51400 Computer Supplies', '51500 Cleaning-Misc', '51600 Electrical Repairs',
+    '51700 Pest Control', '51800 Landscaping'
+  ]
+  const sentences = accounts.map((account) => {
+    const note = enriched({ account, actual: 0, budget: 1500 })
+    const variant = ZERO_ACTUAL_VARIANTS.expense.find((v) => note.text.endsWith(v))
+    assert.ok(variant, `expected a zero-actual expense variant, got: ${note.text}`)
+    assertSafe(note.text)
+    return variant
+  })
+  assert.ok(new Set(sentences).size > 1, 'rotation produced only one phrasing across the list')
+
+  // Deterministic: the same account always reads the same way.
+  const again = enriched({ account: '51100 Alarm System Maint', actual: 0, budget: 1500 })
+  assert.ok(again.text.endsWith(sentences[0]), 'rotation is not deterministic for a fixed account')
 })
 
 test('zero-actual commentary does not speculate about why', () => {
@@ -229,7 +257,9 @@ test('materiality thresholds are deterministic', () => {
 
 test('conservative mode carries none of the NQ-2B detailed phrasings', () => {
   const za = enriched({ account: '51500 Window Cleaning', actual: 0, budget: 19000, mode: 'conservative' })
-  assert.doesNotMatch(za.text, /No service or expense was recorded|No activity posted against/)
+  for (const v of [...ZERO_ACTUAL_VARIANTS.expense, ...ZERO_ACTUAL_VARIANTS.other]) {
+    assert.ok(!za.text.includes(v), `conservative mode leaked a zero-actual variant: ${v}`)
+  }
   const mat = enriched({ account: '51600 Fire/Life Safety-Other', actual: 20000, budget: 5000, mode: 'conservative' })
   assert.doesNotMatch(mat.text, /material variance and should be reviewed/)
 })

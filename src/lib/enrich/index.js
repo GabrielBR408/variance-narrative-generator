@@ -335,6 +335,7 @@ export {
   explanationCommentary,
   finalizeNoteCommentary,
   zeroActualCommentary,
+  ZERO_ACTUAL_VARIANTS,
   negativeActualCommentary,
   isMaterialVariance,
   isImmaterialVariance,
