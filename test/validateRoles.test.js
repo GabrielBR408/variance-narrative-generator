@@ -255,14 +255,17 @@ test('buildGenerateResponse: no correction → variance from the original base, 
   assert.equal(body.correction, null)
 })
 
-test('buildGenerateResponse: a budget left in the base slot yields no variances (the bug, unguarded)', async () => {
-  // Confirms the failure mode the validation fixes: without correction, a budget
-  // base produces an empty variance result rather than an error.
+test('buildGenerateResponse: a budget left in the base slot is now REJECTED by the base gate (no silent zero-variance)', async () => {
+  // Before the gate: a budget base produced a silent empty variance result
+  // (status 200, totalVariancesFound 0) — the bug. After the gate: generation
+  // stops with 422 + a clear actionable message, and computeVariance never runs.
   const base = budgetEx()
   const supporting = [varianceReportEx()]
   const { status, body } = await buildGenerateResponse(genArgs({ base, supporting, validate: () => null }))
-  assert.equal(status, 200)
-  assert.equal(body.variance.summary.totalVariancesFound, 0)
+  assert.equal(status, 422)
+  assert.equal(body.success, false)
+  assert.match(body.error, /comparative variance report/i)
+  assert.equal(body.variance, undefined)
 })
 
 // --- Excel export header carries the notice --------------------------------

@@ -12,13 +12,21 @@
 // only enrich the base narrative downstream), exactly like the server path.
 
 import { runPipeline } from './pipeline.js'
+import { checkBaseIsVarianceReport } from './variance/baseGate.js'
 
 // Build the same { success, jobId, filesReceived, settingsReceived, files,
-// extraction, variance, narrative } shape server/generate.js returns.
+// extraction, variance, narrative } shape server/generate.js returns. Mirrors
+// the server's pre-generate base gate so the static-host fallback fails the same
+// way (with the same message) when a non-variance file is in the base slot.
 //   baseExtraction : the slim normalized extraction for the base report
 //   files          : [{ name, size, type, role }] metadata (base + supporting)
 //   thresholds     : { amount, percent } (already resolved from settings)
 export function clientGenerate({ baseExtraction, files = [], thresholds, settingsReceived = true } = {}) {
+  const gate = checkBaseIsVarianceReport(baseExtraction && baseExtraction.normalized)
+  if (!gate.ok) {
+    return { success: false, error: gate.message, errorCode: gate.reason }
+  }
+
   const { extraction, variance, narrative } = runPipeline(baseExtraction, { thresholds })
   return {
     success: true,

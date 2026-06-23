@@ -27,6 +27,7 @@ import { enrichNarrative } from '../src/lib/enrich/index.js'
 import { commentaryModeFromStyle } from '../src/lib/enrich/commentaryMode.js'
 import { LLM_ENABLED, checkIpLimit, checkGlobalLimit, enrichWithLLM } from './llm.js'
 import { validateFileRoles } from './validateRoles.js'
+import { checkBaseIsVarianceReport } from '../src/lib/variance/baseGate.js'
 
 // Reasonable safety limits. Files are never stored, so these only guard memory
 // and request time, not storage.
@@ -118,6 +119,19 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
       filesOut = result.files || files
       correction = { corrected: true, notice: result.notice, baseFileId: result.baseFileId, supportingFileIds: result.supportingFileIds }
     }
+  }
+
+  // Pre-generate base gate (structural, no LLM): after any role correction is
+  // applied, the FINAL base file `computeVariance` is about to run on must read
+  // structurally as a comparative variance report (an Actual column AND at least
+  // a Budget OR Prior column). Without that, computeVariance would silently
+  // return zero variances and the user would see "Generation complete" with no
+  // findings — the bug this gate prevents. The check uses the same column
+  // detector the variance engine itself uses, so the gate fails iff the engine
+  // could not have produced a comparable set anyway.
+  const gate = checkBaseIsVarianceReport(base.normalized)
+  if (!gate.ok) {
+    return { status: 422, body: { success: false, error: gate.message, errorCode: gate.reason } }
   }
 
   const thresholds = thresholdsFromSettings(variance)
