@@ -219,7 +219,7 @@ export default function App() {
         <h1>Variance Narrative Generator</h1>
       </header>
       <p className="hero-line">
-        Upload your variance report and year-to-date GL, and click Generate Report
+        Upload your variance report and year-to-date GL, and click Generate Narrative
       </p>
       <div className="workflow">
         {/* Default view: only the upload area + file confirmation. */}
