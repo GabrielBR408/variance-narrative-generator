@@ -367,5 +367,22 @@ export function explanationClause({ classificationType = '' } = {}) {
   return 'matched against detail in the source records'
 }
 
+// --- Phase 2B: uploaded-budget supplemental context -----------------------
+// Build a NON-GL clause from SUPPLEMENTAL context found in a separately uploaded
+// budget file (an explanation of what the budget provides for, and/or qualitative
+// monthly phasing). Like explanationClause, it returns no leading comma and no
+// trailing period — the caller merges it into the variance sentence. It NEVER
+// contains a figure: the explanation is pre-sanitized of currency upstream and
+// the phasing is qualitative, so the base report stays the only source of any
+// stated budget number. Returns '' when there is no genuinely-new context.
+export function budgetContextClause({ explanation = '', phasing = '' } = {}) {
+  const exp = String(explanation || '').trim()
+  const ph = String(phasing || '').trim()
+  if (exp && ph) return `where the budget provides for ${exp}, ${ph}`
+  if (exp) return `where the budget provides for ${exp}`
+  if (ph) return ph // already reads "with budgeted spend …"
+  return ''
+}
+
 // Re-export so callers can build an index/normalize without reaching into match.
 export { normalizeName }

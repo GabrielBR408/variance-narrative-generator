@@ -29,7 +29,8 @@
 //         revenueNotes, expenseNotes, sourceRows }, ... ] }
 
 import { buildEvidenceIndex, matchAccount, CONFIDENCE_FLOOR, MAX_CITATIONS_PER_NOTE } from './match.js'
-import { explanationClause, commentarySentence } from './templates.js'
+import { explanationClause, commentarySentence, budgetContextClause } from './templates.js'
+import { buildBudgetContextIndex, matchBudgetContext } from './budgetContext.js'
 import { classifyGLCommentary } from './classify.js'
 import { rankContribution } from './contribution.js'
 import { reconstructDetail } from './reconstructDetail.js'
@@ -185,10 +186,27 @@ function buildGLCommentary({ note, primary, period, options, preparedEvidence })
 // confident match, or a new note carrying structured `support` metadata and an
 // owner-facing explanation merged into its sentence when there is. `period` is
 // the period key ('current' | 'ytd' | …) so wording is period-aware.
-function enrichNote(note, index, options, period) {
+function enrichNote(note, index, options, period, budgetIndex = []) {
   if (!note || typeof note !== 'object' || !note.account || note.enriched) return note
   const citations = matchAccount(note.account, index, options)
-  if (citations.length === 0) return enrichNoteWithoutCitations(note, options)
+  if (citations.length === 0) {
+    // Phase 2B: with no GL/supporting citation, a separately uploaded budget file
+    // may still carry genuinely-new SUPPLEMENTAL context (e.g. a content-detected
+    // budget summary, which the evidence index skips). Surface it as a figure-free
+    // clause; otherwise fall back to the existing no-citation handling.
+    const ctx = matchBudgetContext(note.account, budgetIndex, options)
+    const clause = ctx ? budgetContextClause(ctx) : ''
+    if (clause) {
+      return {
+        ...note,
+        text: mergeClause(note.text, clause),
+        originalText: note.text,
+        enriched: true,
+        budgetContext: { explanation: ctx.explanation, phasing: ctx.phasing }
+      }
+    }
+    return enrichNoteWithoutCitations(note, options)
+  }
 
   // Structured metadata for tooling/tests and the Excel export — never rendered
   // as final owner narrative text. `detail` carries the GL-detail summary.
@@ -246,6 +264,7 @@ function enrichNote(note, index, options, period) {
   let diagDetail = primary.detail || null
 
   let text = note.text
+  let budgetCtxUsed = null
   if (isGL(primary.classificationType)) {
     // Phase 19B: rank the GL evidence by contribution relevance to THIS variance,
     // classify it (contribution-gated), and render — see buildGLCommentary.
@@ -256,10 +275,23 @@ function enrichNote(note, index, options, period) {
     diagDetail = gl.detail
     if (gl.sentence) text = appendSentence(note.text, gl.sentence)
   } else {
-    const clause = explanationClause({ classificationType: primary.classificationType })
+    // Phase 2B: when the primary citation is the uploaded budget file and it
+    // carries genuinely-new supplemental context, replace the static "scheduled
+    // budget assumptions" clause with one that reflects that real context. Any
+    // other supporting type, or a budget file with no extra detail, is unchanged.
+    let clause = ''
+    if (/budget|forecast/i.test(String(primary.classificationType))) {
+      const ctx = matchBudgetContext(note.account, budgetIndex, options)
+      if (ctx) {
+        clause = budgetContextClause(ctx)
+        if (clause) budgetCtxUsed = { explanation: ctx.explanation, phasing: ctx.phasing }
+      }
+    }
+    if (!clause) clause = explanationClause({ classificationType: primary.classificationType })
     if (clause) text = mergeClause(note.text, clause)
   }
   const result = { ...note, text, originalText: note.text, support, enriched: true }
+  if (budgetCtxUsed) result.budgetContext = budgetCtxUsed
   if (preparedEvidence) result.preparedEvidence = preparedEvidence
   // NQ-5A: attach diagnosis metadata. The note is already a new object here, so the
   // no-match / no-supporting reference-identity invariants are untouched. Diagnosis
@@ -284,7 +316,9 @@ export function enrichNarrative(narrative, { supporting = [], floor = CONFIDENCE
   if (!narrative || !Array.isArray(narrative.periods) || narrative.periods.length === 0) return narrative
 
   const index = buildEvidenceIndex(supporting)
-  if (index.length === 0) return narrative
+  // Phase 2B: a separate, figure-free index of supplemental budget context.
+  const budgetIndex = buildBudgetContextIndex(supporting)
+  if (index.length === 0 && budgetIndex.length === 0) return narrative
 
   const options = { floor, cap, mode }
   let changed = false
@@ -295,7 +329,7 @@ export function enrichNarrative(narrative, { supporting = [], floor = CONFIDENCE
     for (const key of ENRICHABLE_SECTIONS) {
       const notes = Array.isArray(period[key]) ? period[key] : []
       next[key] = notes.map((note) => {
-        const enriched = enrichNote(note, index, options, period.period)
+        const enriched = enrichNote(note, index, options, period.period, budgetIndex)
         if (enriched !== note) changed = true
         return enriched
       })
@@ -318,7 +352,8 @@ export {
   RESOLVED_SUBSET_SCORE,
   RESOLVE_JACCARD_MIN
 } from './accountResolve.js'
-export { explanationClause, commentarySentence, polishVendor, polishMemo, displayAccount, descriptorFor, approxMoney } from './templates.js'
+export { explanationClause, commentarySentence, budgetContextClause, polishVendor, polishMemo, displayAccount, descriptorFor, approxMoney } from './templates.js'
+export { buildBudgetContextIndex, matchBudgetContext, sanitizeExplanation, derivePhasing } from './budgetContext.js'
 export { DEFAULT_COMMENTARY_DETAIL, commentaryModeFromStyle } from './commentaryMode.js'
 export {
   classifyGLCommentary,
