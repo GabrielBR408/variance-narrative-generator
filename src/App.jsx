@@ -218,6 +218,9 @@ export default function App() {
         <img className="brand-logo" src={chiefeoLogo} alt="ChiefEO" />
         <h1>Variance Narrative Generator</h1>
       </header>
+      <p className="hero-line">
+        Upload your variance report and year-to-date GL, and click Generate Report
+      </p>
       <div className="workflow">
         {/* Default view: only the upload area + file confirmation. */}
         <SourceFiles
