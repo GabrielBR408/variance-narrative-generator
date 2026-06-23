@@ -8,6 +8,7 @@ import { prettySize } from './uiFormat.js'
 import ExportActions from './ExportActions.jsx'
 import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
 import EnrichmentStatus from './EnrichmentStatus.jsx'
+import CorrectionNotice from './CorrectionNotice.jsx'
 import BackupNotice from './BackupNotice.jsx'
 import PeriodTabs from './PeriodTabs.jsx'
 
@@ -127,6 +128,10 @@ export default function ResultPanel({ status, result, periodScope = DEFAULT_PERI
               narrative is shown and why. */}
           <EnrichmentStatus enrichment={result.enrichment} />
 
+          {/* Generate-time role correction (Option A): explains an automatic
+              base/supporting swap. Renders nothing when no correction occurred. */}
+          <CorrectionNotice correction={result.correction} />
+
           {/* Input-guidance phase: recommends a supporting input that would have
               strengthened the commentary (presence/type only). Renders nothing
               when every needed input was present. */}
@@ -135,7 +140,7 @@ export default function ResultPanel({ status, result, periodScope = DEFAULT_PERI
           <ResultNarrative narrative={scopedNarrative} />
 
           {canExport({ status, narrative: scopedNarrative }) && (
-            <ExportActions narrative={scopedNarrative} enrichment={result.enrichment} />
+            <ExportActions narrative={scopedNarrative} enrichment={result.enrichment} correction={result.correction} />
           )}
         </>
       )}

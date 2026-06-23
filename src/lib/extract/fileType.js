@@ -29,8 +29,12 @@ import { looksLikeDate } from './normalize.js'
 
 // normalized.fileType tags. Consumed by enrich/match.js: SECTIONED_GL rows are
 // already flattened to a GL shape; BUDGET_SUMMARY files are skipped entirely.
+// STANDALONE_BUDGET marks a content-detected budget (budget basis, no actuals/
+// variance) so enrich/budgetContext.js (Phase 2B) mines it even when its filename
+// implied another type (e.g. a real budget exported as "GL Worksheet").
 export const SECTIONED_GL = 'sectioned_gl'
 export const BUDGET_SUMMARY = 'budget_summary'
+export const STANDALONE_BUDGET = 'standalone_budget'
 
 // Flattened column layout produced from a sectioned GL. Headers are chosen so
 // the evidence index types them correctly: "Account" is the account label;
@@ -133,4 +137,78 @@ export function detectBudgetSummary(columns) {
     has(new RegExp(`${ytd}.*budget`)) &&
     has(new RegExp(`${ytd}.*variance`))
   )
+}
+
+// --- Month-column detection (shared) --------------------------------------
+// Lifted into the extract layer so BOTH the standalone-budget detector below and
+// enrich/budgetContext.js (Phase 2B phasing) share ONE month-run detector. The
+// dependency direction is enrich -> extract (budgetContext already imports from
+// this module), so there is no import cycle. Abbreviations match on a word
+// boundary so "may" inside a longer word never trips, and a full month header
+// ("January") still matches.
+export const MONTH_ABBR = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+const MONTH_FULL_LC = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december'
+]
+
+// A monthly layout must show most of the year before it counts as a budget
+// phasing grid (or as the month-run budget basis below).
+export const MIN_MONTH_COLS = 6
+
+// 0-based month index a header names, or -1. Matches either the FULL month name
+// ("January") or the 3-letter abbreviation ("Jan", "Jan-26") on a word boundary,
+// so "may" buried inside a longer word never trips but a real month header always
+// does. Pure; same input ⇒ same output.
+export function monthIndexOf(header) {
+  const h = String(header).toLowerCase()
+  for (let i = 0; i < 12; i++) {
+    if (new RegExp(`(^|[^a-z])${MONTH_FULL_LC[i]}([^a-z]|$)`).test(h)) return i
+    if (new RegExp(`(^|[^a-z])${MONTH_ABBR[i]}([^a-z]|$)`).test(h)) return i
+  }
+  return -1
+}
+
+// The month columns in a header row, as { col, month } in column order.
+export function monthCols(columns) {
+  const out = []
+  if (!Array.isArray(columns)) return out
+  for (let i = 0; i < columns.length; i++) {
+    const m = monthIndexOf(columns[i])
+    if (m >= 0) out.push({ col: i, month: m })
+  }
+  return out
+}
+
+// --- Standalone-budget content signature ----------------------------------
+// A STANDALONE budget is defined structurally, by content alone:
+//   • a BUDGET BASIS — a Budget/Forecast/Plan column, OR a run of >= 6 month
+//     columns (the annual phasing grid);  AND
+//   • NO Actuals  AND  NO Variance        — this is what separates it from a base
+//     comparative statement, which always carries Actual + Variance;  AND
+//   • NO GL signal (no Debit AND Credit)  — a general ledger is ruled out first.
+//
+// The conditions are a STRICT AND: a month run on its own is NEVER sufficient, so
+// a monthly *actuals* report (months + an Actual column) fails it, and a real
+// base report or GL can never match. Mirrors the precedence GL -> BASE -> BUDGET:
+// because BUDGET requires the absence of the actuals/variance/GL signals the
+// other two are defined by, the two presence-based types always win.
+const BUDGET_BASIS_RE = /\bbudget\b|\bforecast\b|\bplan(?:ned)?\b/i
+const ACTUAL_COL_RE = /\bactuals?\b/i
+const VARIANCE_COL_RE = /\bvariance\b/i
+const DEBIT_COL_RE = /\bdebit\b|\bdr\b/i
+const CREDIT_COL_RE = /\bcredit\b|\bcr\b/i
+
+export function detectStandaloneBudget(columns) {
+  if (!Array.isArray(columns) || columns.length === 0) return false
+  const cols = columns.map((c) => String(c))
+  const has = (re) => cols.some((c) => re.test(c))
+  // Presence-based exclusions first (precedence: GL, then BASE, then BUDGET).
+  if (has(DEBIT_COL_RE) && has(CREDIT_COL_RE)) return false // GL
+  if (has(ACTUAL_COL_RE)) return false // base report carries Actuals
+  if (has(VARIANCE_COL_RE)) return false // base report carries Variance
+  // Budget basis: an explicit budget/forecast column OR an annual month run.
+  const hasBudgetCol = has(BUDGET_BASIS_RE)
+  const hasMonthRun = monthCols(cols).length >= MIN_MONTH_COLS
+  return hasBudgetCol || hasMonthRun
 }

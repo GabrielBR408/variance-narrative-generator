@@ -24,7 +24,7 @@
 // no genuinely-new context, it contributes nothing and the narrative is unchanged.
 
 import { accountCode, normalizeName, tokensOf, scoreMatchDetailed, CONFIDENCE_FLOOR } from './match.js'
-import { BUDGET_SUMMARY } from '../extract/fileType.js'
+import { BUDGET_SUMMARY, STANDALONE_BUDGET, MIN_MONTH_COLS, monthCols } from '../extract/fileType.js'
 import { toNumber } from '../extract/normalize.js'
 
 // Headers that name the account column. Deliberately tighter than the evidence
@@ -35,16 +35,14 @@ const ACCOUNT_HEADER_RE = /account|acct|\bgl\b|\bg\/?l\b|ledger|chart|\bcode\b|i
 // Headers that carry a per-account budget EXPLANATION (qualitative, owner-facing).
 const EXPLANATION_HEADER_RE = /note|assumption|explanation|comment|description|detail|memo|narrative|basis|justification|purpose|remark/i
 
-// Month names for detecting a monthly-phasing layout and for the qualitative
-// descriptor. Abbreviations are matched on a word boundary so "may" inside a
-// longer word never trips, and a full month header ("January") still matches.
-const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+// Full month names for the qualitative phasing descriptor. The month-COLUMN
+// detector (MONTH_ABBR / monthIndexOf / monthCols) and MIN_MONTH_COLS now live in
+// the extract layer (extract/fileType.js) and are shared with the standalone-budget
+// content detector, so the two never drift.
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ]
-// A monthly budget must show most of the year before we describe its shape.
-const MIN_MONTH_COLS = 6
 // A month (or quarter) carrying at least this share of the year is "weighted".
 const WEIGHTED_SHARE = 0.4
 
@@ -75,13 +73,15 @@ const TRAILING_PREP_RE = /\b(of|for|to|at|by|in|with|from|on|per)$/i
 const MAX_EXPLANATION_LEN = 140
 const MIN_EXPLANATION_WORDS = 2
 
-// Is this supporting extraction a budget file we may mine for context? Either the
-// content-detected budget summary, or a file the filename classifier named Budget.
+// Is this supporting extraction a budget file we may mine for context? A
+// content-detected budget summary or STANDALONE budget (the latter covers a real
+// budget whose filename implied another type, e.g. a "GL Worksheet" export), or a
+// file the filename classifier named Budget.
 function isBudgetFile(ex) {
   if (!ex || typeof ex !== 'object') return false
   if (ex.status && ex.status !== 'ok') return false
   const normalized = ex.normalized || {}
-  if (normalized.fileType === BUDGET_SUMMARY) return true
+  if (normalized.fileType === BUDGET_SUMMARY || normalized.fileType === STANDALONE_BUDGET) return true
   const t = (ex.classification && ex.classification.type) || ''
   return /budget|forecast/i.test(String(t))
 }
@@ -98,23 +98,6 @@ function explanationCols(columns, accountCol) {
   for (let i = 0; i < columns.length; i++) {
     if (i === accountCol) continue
     if (EXPLANATION_HEADER_RE.test(String(columns[i]))) out.push(i)
-  }
-  return out
-}
-
-function monthIndexOf(header) {
-  const h = String(header).toLowerCase()
-  for (let i = 0; i < 12; i++) {
-    if (new RegExp(`(^|[^a-z])${MONTHS[i]}([^a-z]|$)`).test(h)) return i
-  }
-  return -1
-}
-
-function monthCols(columns) {
-  const out = []
-  for (let i = 0; i < columns.length; i++) {
-    const m = monthIndexOf(columns[i])
-    if (m >= 0) out.push({ col: i, month: m })
   }
   return out
 }

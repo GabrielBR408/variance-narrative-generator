@@ -225,6 +225,7 @@ export default function App() {
           setBaseReport={setBaseReport}
           supportingFiles={supportingFiles}
           setSupportingFiles={setSupportingFiles}
+          extractions={extractions}
         />
 
         {/* Everything else lives in one collapsible panel, closed on first load.

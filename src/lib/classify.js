@@ -9,6 +9,8 @@
 // number of files, tolerates duplicate names (each file is judged on its own),
 // and is shaped so a manual override can be layered on later.
 
+import { detectStandaloneBudget, STANDALONE_BUDGET } from './extract/fileType.js'
+
 export const FALLBACK_TYPE = 'Supporting Document'
 export const FALLBACK_CONFIDENCE = 55
 
@@ -62,4 +64,39 @@ export function confidenceTier(confidence) {
   if (confidence >= 85) return 'high'
   if (confidence >= 65) return 'med'
   return 'low'
+}
+
+// --- Content-aware refinement (Phase: content classification) --------------
+// Refine a filename/role baseline using PARSED CONTENT once a file has been
+// extracted. This is the only place content ever influences a type label, and it
+// is deliberately narrow:
+//
+//   • It NEVER touches the base report. A file in the baseReport role resolves to
+//     "Base Variance Report" by role precedence (basis 'upload role') BEFORE any
+//     content logic; that baseline is returned unchanged, so base selection and
+//     the computeVariance input contract are completely untouched.
+//   • It only ever flips a NON-BASE file to "Budget", and only when the strict
+//     standalone-budget content signature holds (budget basis AND no actuals AND
+//     no variance AND no GL signal — see extract/fileType.js). Because that rule
+//     requires the ABSENCE of the signals a GL or a comparative statement is
+//     defined by, a real GL or base report can never be flipped to Budget.
+//   • On any other content (or none), the filename/role baseline is kept as-is —
+//     never guess, never demote (the safe default).
+//
+// `basis: 'content'` records that content decided, so the UI can show the
+// corrected label distinctly.
+export function classifyWithContent({ name = '', role, normalized, baseline } = {}) {
+  const base = baseline || classifyFile({ name, role })
+  // Role wins outright — the base slot is never content-classified.
+  if (base.basis === 'upload role') return base
+
+  const fileType = normalized && normalized.fileType
+  const columns = normalized && normalized.columns
+  if (fileType === STANDALONE_BUDGET || detectStandaloneBudget(columns)) {
+    // Already named Budget by filename? Keep the filename basis/confidence; there
+    // is nothing to correct. Otherwise surface the content-detected type.
+    if (base.type === 'Budget') return base
+    return { type: 'Budget', confidence: 90, basis: 'content' }
+  }
+  return base
 }

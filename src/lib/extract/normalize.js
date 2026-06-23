@@ -17,8 +17,10 @@ import {
   detectSectionedGL,
   parseSectionedGL,
   detectBudgetSummary,
+  detectStandaloneBudget,
   SECTIONED_GL,
-  BUDGET_SUMMARY
+  BUDGET_SUMMARY,
+  STANDALONE_BUDGET
 } from './fileType.js'
 
 // Confidence is a coarse signal about how trustworthy the extraction is, NOT a
@@ -211,8 +213,16 @@ function normalizeSpreadsheet(extracted, kind) {
   // NQ-6C.2: a by-account budget/actual/variance summary carries no transaction
   // detail — tag it so the evidence index uses it for variance confirmation only
   // and never mines it for GL rows. Additive: columns/rows are left unchanged.
+  //
+  // Content-aware classification: a STANDALONE budget (budget basis, no actuals/
+  // variance/GL — e.g. an annual budget exported with a GL-ish filename) is tagged
+  // so Phase 2B mines it for supplemental context. Budget-summary is checked first
+  // (it carries Actual + Variance, so it can never match the standalone rule); the
+  // tag is purely additive — columns/rows are never altered, so a base report fed
+  // to computeVariance is byte-identical regardless of this tag.
   const normalized = { rows, columns, accounts: [], dates, values }
   if (detectBudgetSummary(columns)) normalized.fileType = BUDGET_SUMMARY
+  else if (detectStandaloneBudget(columns)) normalized.fileType = STANDALONE_BUDGET
   return normalized
 }
 

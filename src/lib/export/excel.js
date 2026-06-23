@@ -112,7 +112,7 @@ function formatDate(value) {
 // present so the sheet never asserts a value the narrative did not carry. The
 // source file here is the BASE report (already shown in the Markdown/DOCX
 // exports) — never a supporting file.
-function buildMeta(narrative, generatedDate, enrichment) {
+function buildMeta(narrative, generatedDate, enrichment, correction) {
   const meta = metaEntries(narrative)
   const date = formatDate(generatedDate)
   if (date) meta.push({ label: 'Generated', value: date })
@@ -121,6 +121,12 @@ function buildMeta(narrative, generatedDate, enrichment) {
   // enrichment status is supplied, so existing exports are unchanged.
   const statusLine = enrichmentStatusLine(enrichment)
   if (statusLine) meta.push({ label: 'AI Status', value: statusLine })
+  // Generate-time role correction (Option A): when the base/supporting routing was
+  // auto-corrected, record the notice so a downloaded file states it. Added only
+  // when a correction occurred, so existing exports are unchanged.
+  if (correction && typeof correction === 'object' && correction.notice) {
+    meta.push({ label: 'File Roles', value: String(correction.notice) })
+  }
   return meta
 }
 
@@ -365,10 +371,10 @@ export function buildEvidenceRows(narrative) {
 }
 
 // The full pure model the renderer consumes and tests assert against.
-export function buildExcelModel(narrative, { generatedDate, enrichment } = {}) {
+export function buildExcelModel(narrative, { generatedDate, enrichment, correction } = {}) {
   return {
     title: EXCEL_TITLE,
-    meta: buildMeta(narrative, generatedDate, enrichment),
+    meta: buildMeta(narrative, generatedDate, enrichment, correction),
     ownerColumns: OWNER_COLUMNS,
     ownerRows: buildOwnerRows(narrative),
     evidenceColumns: EVIDENCE_COLUMNS,

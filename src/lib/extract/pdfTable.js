@@ -24,6 +24,7 @@
 // preceded by the account label.
 
 import { detectVarianceReport, MAX_TABLE_ROWS } from './pdfShared.js'
+import { monthIndexOf, MIN_MONTH_COLS } from './fileType.js'
 import {
   looksLikeGL,
   looksLikeSectionedGLText,
@@ -180,7 +181,17 @@ export function reconstructTable(lines = [], options = {}) {
   const { lineCells = null, classificationType = '' } = options || {}
   const glByClass = /general\s*ledger|\bgl\b/i.test(String(classificationType))
   const glByContent = looksLikeGL(lines) || looksLikeSectionedGLText(lines)
-  if (glByClass || glByContent) {
+  // Content classification: a confident standalone-budget signature. Used to VETO
+  // a purely FILENAME-driven GL branch (a real budget exported as "GL Worksheet"),
+  // and to route the file to the budget reconstructor below.
+  const budgetByContent = looksLikeBudget(lines)
+
+  // GL branch is taken when CONTENT says GL, OR when the FILENAME says GL and a
+  // confident budget signature does NOT veto it. Content-detected GL always wins —
+  // the budget veto can never override a genuine Debit/Credit ledger — so a real GL
+  // with a budget-ish name is never misrouted. The veto requires the FULL budget
+  // signature (looksLikeBudget), so a weak/partial match never diverts a GL.
+  if (glByContent || (glByClass && !budgetByContent)) {
     // Position-aware reconstruction first (richest: Debit/Credit x-bands and a
     // reference/vendor/description split). It needs lineCells; without them, or
     // when it resolves no rows, fall through to the text reconstructor below.
@@ -195,6 +206,16 @@ export function reconstructTable(lines = [], options = {}) {
     const glText = reconstructSectionedGLFromText(lines)
     if (glText) return glText
   }
+
+  // Budget branch: a confident standalone budget (and NOT a content GL) is
+  // reconstructed into a per-account monthly grid so Phase 2B can mine its phasing.
+  // Returns null when no monthly grid resolves, falling through to the variance
+  // reconstructor — so a non-budget PDF is never forced into this shape.
+  if (budgetByContent && !glByContent) {
+    const budget = reconstructBudgetTable(lineCells)
+    if (budget) return budget
+  }
+
   return reconstructVarianceTable(lines)
 }
 
@@ -240,6 +261,160 @@ function reconstructVarianceTable(lines = []) {
     rows,
     columnCount: TABLE_COLUMNS.length,
     sections
+  }
+}
+
+// --- Standalone budget reconstruction (content-aware classification) -------
+// A standalone annual budget (e.g. a Kardin export) is neither a variance report
+// nor a GL: each account row carries a run of monthly budget figures (Jan…Dec),
+// often with extra $/RSF or annual-total columns. The variance reconstructor
+// (fixed 8-cell comparative shape) and the GL reconstructor (Debit/Credit bands)
+// both reject it, so without this path the file produces no table and Phase 2B
+// can never mine it. This rebuilds a per-account monthly grid so the budget-context
+// engine can derive QUALITATIVE phasing ("weighted toward March"). It never emits
+// a figure to the owner — Phase 2B sanitizes/qualifies everything downstream.
+//
+// DETERMINISTIC, position-aware parsing only (the same x-band technique the GL
+// reconstructor uses). NO OCR, NO AI/ML. Returns null when no monthly grid
+// resolves, so the dispatcher falls through cleanly.
+
+// Full month names for the reconstructed column labels. A full name still carries
+// its abbreviation, so the shared monthIndexOf / monthCols detect these columns.
+const MONTH_FULL = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+]
+
+// Corroborating budget markers anywhere in the text. Required (with a month run)
+// for the FULL, high-confidence signature that may veto a filename-driven GL.
+const BUDGET_MARKER_RE = /\bbudget\b|\bforecast\b|\$\s*\/?\s*rsf|\brsf\b|proforma/i
+
+// A single budget figure: optional currency sign / leading minus / thousands
+// separators / decimals, with accounting parentheses for negatives. No percent.
+const BUDGET_NUM_RE = /^\(?-?\$?\d[\d,]*(?:\.\d+)?\)?$/
+
+// Total / section chrome that is never a budget account row.
+const BUDGET_NOISE_RE = /^[\s*]*(total\b|subtotal\b|grand total\b|net (income|loss|operating)\b|noi\b)/i
+
+// x-distance within which a numeric cell is assigned to a month column.
+const BUDGET_BAND_TOLERANCE = 22
+
+function parseBudgetNumber(token) {
+  const s = String(token).trim()
+  if (!BUDGET_NUM_RE.test(s)) return null
+  const negative = s.includes('(') || s.startsWith('-')
+  const digits = s.replace(/[^0-9.]/g, '')
+  if (digits === '' || digits === '.') return null
+  const n = Number(digits)
+  if (!Number.isFinite(n)) return null
+  return negative ? -Math.abs(n) : n
+}
+
+// Distinct month tokens on a single line string.
+function monthTokenCount(line) {
+  const seen = new Set()
+  for (const tok of String(line).split(/\s+/)) {
+    const m = monthIndexOf(tok)
+    if (m >= 0) seen.add(m)
+  }
+  return seen.size
+}
+
+// True when the text carries the FULL standalone-budget signature: an annual
+// month-run header (>= MIN_MONTH_COLS distinct months on one line) AND a budget
+// marker, AND it is neither a variance report nor a GL. Conservative by design so
+// it never diverts a genuine GL or comparative statement.
+export function looksLikeBudget(lines = []) {
+  if (!Array.isArray(lines) || lines.length === 0) return false
+  if (detectVarianceReport(lines)) return false
+  if (looksLikeGL(lines) || looksLikeSectionedGLText(lines)) return false
+  const hasMonthRun = lines.some((l) => monthTokenCount(l) >= MIN_MONTH_COLS)
+  if (!hasMonthRun) return false
+  return BUDGET_MARKER_RE.test(lines.join(' \n '))
+}
+
+// Reconstruct a per-account monthly budget grid from position-aware line cells.
+// Returns { name, rows: [columns, ...dataRows], columnCount, sections } or null.
+export function reconstructBudgetTable(lineCells) {
+  if (!Array.isArray(lineCells) || lineCells.length === 0) return null
+
+  // 1) Header: the line carrying the most DISTINCT month columns (a budget prints
+  //    its month band once). Record each month's x-anchor.
+  let headerIdx = -1
+  let monthAnchors = []
+  const limit = Math.min(lineCells.length, 40)
+  for (let i = 0; i < limit; i++) {
+    const cells = lineCells[i]
+    if (!Array.isArray(cells) || cells.length === 0) continue
+    const anchors = []
+    const seen = new Set()
+    for (const c of cells) {
+      const m = monthIndexOf(c.str)
+      if (m >= 0 && !seen.has(m)) {
+        seen.add(m)
+        anchors.push({ x: c.x, month: m })
+      }
+    }
+    if (anchors.length > monthAnchors.length) {
+      monthAnchors = anchors
+      headerIdx = i
+    }
+  }
+  if (headerIdx < 0 || monthAnchors.length < MIN_MONTH_COLS) return null
+  monthAnchors.sort((a, b) => a.x - b.x)
+  const firstMonthX = monthAnchors[0].x
+
+  // 2) Columns: Account + one column per detected month, in x (calendar) order.
+  const columns = ['Account', ...monthAnchors.map((a) => MONTH_FULL[a.month])]
+
+  const dataRows = []
+  for (let li = headerIdx + 1; li < lineCells.length; li++) {
+    const cells = lineCells[li]
+    if (!Array.isArray(cells) || cells.length === 0) continue
+
+    // Account label: the text cells left of the first month column (a numeric or
+    // currency token there is not part of the label).
+    const labelCells = cells.filter(
+      (c) => c.x < firstMonthX - BUDGET_BAND_TOLERANCE && /[A-Za-z]/.test(c.str) && parseBudgetNumber(c.str) === null
+    )
+    const label = labelCells
+      .map((c) => c.str)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (!label || !/[A-Za-z]/.test(label) || BUDGET_NOISE_RE.test(label)) continue
+
+    // Month values: the numeric cell nearest each month anchor, within tolerance.
+    let filled = 0
+    const monthVals = monthAnchors.map((a) => {
+      let best = null
+      let bestD = Infinity
+      for (const c of cells) {
+        const n = parseBudgetNumber(c.str)
+        if (n === null) continue
+        const d = Math.abs(c.x - a.x)
+        if (d < bestD) {
+          bestD = d
+          best = n
+        }
+      }
+      if (best != null && bestD <= BUDGET_BAND_TOLERANCE) {
+        filled++
+        return String(best)
+      }
+      return ''
+    })
+    if (filled === 0) continue // a heading / non-data row carries no monthly figure
+
+    if (dataRows.length < MAX_TABLE_ROWS) dataRows.push([label, ...monthVals])
+  }
+
+  if (dataRows.length === 0) return null
+  return {
+    name: 'Reconstructed Budget',
+    rows: [columns, ...dataRows],
+    columnCount: columns.length,
+    sections: []
   }
 }
 

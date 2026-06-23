@@ -13,7 +13,7 @@
 // timeout, parser crash) is caught and reported as a friendly status so the UI
 // can render a message instead of breaking.
 
-import { classifyFile } from '../classify.js'
+import { classifyFile, classifyWithContent } from '../classify.js'
 import { normalize } from './normalize.js'
 
 // Parsers are loaded on demand (dynamic import) so the heavy PDF/spreadsheet/
@@ -98,8 +98,15 @@ export async function extractFile({ file, fileId, classification } = {}) {
     }
 
     const { normalized, confidence, empty } = normalize(extracted, kind, MAX_ROWS)
+    // Content-aware refinement: once the file is parsed, a NON-BASE file may be
+    // reclassified by its content (e.g. a budget exported with a GL-ish name). The
+    // base slot is never touched — classifyWithContent returns the role baseline
+    // unchanged for basis 'upload role'. Columns/rows and the base extraction fed
+    // to computeVariance are unaffected; only the advisory label can change.
+    const classification = classifyWithContent({ name: fileName, normalized, baseline: klass })
     return {
       ...base,
+      classification,
       status: empty ? 'empty' : 'ok',
       message: empty ? 'No readable content was found in this file.' : '',
       extracted,
