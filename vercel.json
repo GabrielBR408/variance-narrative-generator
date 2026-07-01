@@ -23,6 +23,8 @@
   "rewrites": [
     { "source": "/downdriller", "destination": "https://chiefeo-gl-down-driller.vercel.app" },
     { "source": "/downdriller/:path*", "destination": "https://chiefeo-gl-down-driller.vercel.app/:path*" },
+    { "source": "/orgen", "destination": "https://owner-report-generator.vercel.app" },
+    { "source": "/orgen/:path*", "destination": "https://owner-report-generator.vercel.app/:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
