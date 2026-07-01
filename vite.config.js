@@ -40,6 +40,20 @@ export default defineConfig({
       // and surfaces an "update available" banner via onNeedRefresh instead of
       // silently swapping in on the next load. See src/pwa/registerUpdate.js.
       registerType: 'prompt',
+      // Hub restructure: the previously-deployed Workbox service worker cached the
+      // VNG shell at '/' and hijacks ALL navigations, so returning visitors would
+      // keep getting the old VNG app for the new root hub, /vng, /downdriller, and
+      // /orgen. `selfDestroying` ships a service worker that UNREGISTERS the old
+      // one and clears its caches on next load, so every path is served fresh from
+      // the network. This is stronger than a navigate denylist alone — it removes
+      // the interception entirely. Trade-off: no offline precache while active;
+      // acceptable for these server-backed routing changes.
+      selfDestroying: true,
+      // Belt-and-suspenders: never let the SPA navigate-fallback answer the proxied
+      // / moved paths, so they always hit the network (and the Vercel rewrites).
+      workbox: {
+        navigateFallbackDenylist: [/^\/downdriller/, /^\/orgen/, /^\/vng/]
+      },
       includeAssets: ['favicon.svg', 'icons/icon-180.png'],
       manifest: {
         name: 'Variance Narrative Generator',

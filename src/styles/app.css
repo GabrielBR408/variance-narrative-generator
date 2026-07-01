@@ -658,3 +658,26 @@ body {
   padding: 0 0.25rem;
 }
 .update-banner-dismiss:hover { color: #fff; }
+
+/* --- Root hub landing page ------------------------------------------------ */
+/* Plain, clean styling that reuses the existing card/brand tokens. */
+.hub-title { margin: 0 0 0.25rem; font-size: 1.6rem; }
+.hub-tagline { color: var(--muted); margin: 0 0 1.25rem; }
+
+.hub-tools { display: flex; flex-direction: column; gap: 0.75rem; }
+.hub-tool {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  background: var(--surface);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.hub-tool:hover {
+  border-color: #c6dcec;
+  box-shadow: 0 1px 6px rgba(46, 125, 166, 0.12);
+}
+.hub-tool-label { display: block; font-weight: 600; color: var(--accent-ink); }
+.hub-tool-desc { display: block; color: var(--muted); font-size: 0.86rem; margin-top: 0.2rem; }
