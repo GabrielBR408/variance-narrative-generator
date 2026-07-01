@@ -198,6 +198,18 @@ function notesFromPlan(comparisons, plan, match, sort) {
 // lines belong to Revenue Notes. They have dedicated handling elsewhere.
 const EXPENSE_EXCLUDED_THEMES = new Set(['timing_balance_sheet', 'non_cash', 'revenue_leasing'])
 
+// Grouped REVENUE themes kept OUT of Revenue Notes: timing/balance-sheet and
+// non-cash lines are not operating-revenue commentary (mirrors the expense
+// side). Everything else revenue-typed — including 'recoveries' (e.g. a CAM or
+// tax recovery INCOME line) and other keyword-matched themes (taxes, utilities,
+// …) — belongs in Revenue Notes. Previously this section required the theme to
+// be exactly 'revenue_leasing', so any revenue-typed line whose account name
+// happened to match an operating-expense-style theme keyword (e.g. "Recovery",
+// "Tax", "Utility") was silently re-homed to Context Notes with no dedicated
+// handling there, even though it is ordinary flagged revenue commentary a
+// reader would expect under Revenue Notes (bug fix).
+const REVENUE_EXCLUDED_THEMES = new Set(['timing_balance_sheet', 'non_cash'])
+
 // --- Section membership predicates (single source of truth) ----------------
 // The four owner-prose sections that hold variance lines are defined by these
 // pairwise-disjoint predicates over the plan item (and its source comparison).
@@ -208,7 +220,7 @@ const EXPENSE_EXCLUDED_THEMES = new Set(['timing_balance_sheet', 'non_cash', 're
 const matchHighVariance = (i) =>
   i.disposition === 'individual' && (i.materiality === 'top_driver' || i.materiality === 'material')
 const matchRevenueNote = (i, c) =>
-  i.disposition === 'grouped' && i.theme === 'revenue_leasing' && c.accountType === 'revenue'
+  i.disposition === 'grouped' && !REVENUE_EXCLUDED_THEMES.has(i.theme) && c.accountType === 'revenue'
 const matchExpenseNote = (i, c) =>
   i.disposition === 'grouped' && !EXPENSE_EXCLUDED_THEMES.has(i.theme) && c.accountType === 'expense'
 

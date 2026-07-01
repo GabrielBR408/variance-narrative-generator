@@ -9,6 +9,9 @@ import assert from 'node:assert/strict'
 import { rankContribution } from '../src/lib/enrich/contribution.js'
 
 // Build a contribution input. `detail` defaults keep a clean reliable total.
+// `signed` defaults to false (matching a plain, unsigned "Amount" column) —
+// pass `signed: true` to model a source with genuine typed Debit/Credit
+// columns, the only case a revenue direction-conflict may be asserted.
 function input({
   varianceAmount = 1000,
   accountType = 'unknown',
@@ -18,14 +21,15 @@ function input({
   count = 1,
   vendor = null,
   description = null,
-  confidence = 0.9
+  confidence = 0.9,
+  signed = false
 } = {}) {
   return {
     varianceAmount,
     comparisonType: 'budget',
     accountType,
     category,
-    detail: { total, maxTxn, count, vendor, description, confidence }
+    detail: { total, maxTxn, count, vendor, description, confidence, signed }
   }
 }
 
@@ -80,10 +84,31 @@ test('revenue favorable with a net credit is aligned (normal income)', () => {
   assert.equal(out.contributionType, 'aligned')
 })
 
-test('revenue favorable with a net debit conflicts', () => {
-  const out = rankContribution(input({ accountType: 'revenue', category: 'favorable', varianceAmount: -3000, total: 6000, maxTxn: 6000 }))
+test('revenue favorable with a net debit conflicts, when the source genuinely typed Debit/Credit', () => {
+  const out = rankContribution(input({ accountType: 'revenue', category: 'favorable', varianceAmount: -3000, total: 6000, maxTxn: 6000, signed: true }))
   assert.equal(out.directionAligned, false)
   assert.equal(out.contributionType, 'direction-conflict')
+})
+
+// Bug fix: an unsigned "Amount" column cannot be trusted to carry
+// debit-positive/credit-negative meaning — many real GL exports simply record
+// a positive transaction size regardless of which way it moved a revenue
+// account (e.g. a new lease, a rent escalation, both legitimate revenue
+// increases posted as plain positive numbers). Previously this same input
+// (unsigned by default) was misread as a "direction conflict" and rendered a
+// false "runs opposite to the reported movement" warning on healthy revenue
+// activity. With no genuine sign evidence, no conflict is asserted and the
+// evidence falls through to the ordinary ratio-based shape classification.
+test('revenue favorable with an unsigned positive total is NOT a false direction conflict', () => {
+  const out = rankContribution(input({ accountType: 'revenue', category: 'favorable', varianceAmount: 10000, total: 15000, maxTxn: 9000 }))
+  assert.equal(out.directionAligned, true)
+  assert.notEqual(out.contributionType, 'direction-conflict')
+})
+
+test('revenue unfavorable with an unsigned positive total is also NOT a false direction conflict', () => {
+  const out = rankContribution(input({ accountType: 'revenue', category: 'unfavorable', varianceAmount: -3000, total: 3000, maxTxn: 3000 }))
+  assert.equal(out.directionAligned, true)
+  assert.notEqual(out.contributionType, 'direction-conflict')
 })
 
 test('unknown account type never asserts a direction conflict', () => {

@@ -120,6 +120,11 @@ function buildGLCommentary({ note, primary, period, options, preparedEvidence })
     detail.maxTxn = preparedEvidence.maxTxn
     detail.vendor = null
     detail.description = null
+    // The reconciled total is only genuinely SIGNED (trustworthy debit/credit
+    // evidence) when prepareEvidence resolved a true debit-credit column model;
+    // its 'single-amount' reconciliation carries the same sign ambiguity a
+    // plain Amount column does, so it must not be marked signed.
+    detail.signed = preparedEvidence.columnModel === 'debit-credit'
   }
   const contribution = rankContribution({
     varianceAmount: note.varianceAmount,

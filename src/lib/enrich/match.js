@@ -302,16 +302,27 @@ function firstDetailText(row, detailCols) {
 }
 
 // Aggregate the matched rows of ONE file into a deterministic GL-detail summary:
-//   { count, total, maxTxn, topVendor, topVendorCount }
+//   { count, total, maxTxn, topVendor, topVendorCount, signed }
 // total is the summed amount ONLY when every matched row contributed a reliable
 // amount (otherwise null, so we never present a partial/ambiguous total).
 // topVendor is the most frequent description/vendor across matched rows (ties
 // broken by first appearance), or null when none carries text.
+//
+// `signed` (bug fix, GL sign-convention) — true only when at least one matched
+// row carried a genuinely TYPED Debit or Credit value (see DEBIT_COL_RE /
+// CREDIT_COL_RE above), i.e. the source file distinguishes which way a
+// transaction moved the account, not just its size. A single generic "Amount"
+// column carries no such evidence: many real GL exports simply record a
+// positive transaction size regardless of which way it moved the account
+// (common for revenue postings), so its sign cannot be trusted to mean
+// "debit"/"credit" in the accounting sense. Consumers (contribution.js) use
+// this to decide whether a sign-based direction check is trustworthy.
 function summarizeDetail(rows) {
   const count = rows.length
   let total = 0
   let amountsSeen = 0
   let maxTxn = null
+  let signed = false
 
   for (const row of rows) {
     if (typeof row.amount === 'number' && Number.isFinite(row.amount)) {
@@ -319,6 +330,12 @@ function summarizeDetail(rows) {
       amountsSeen++
       const mag = Math.abs(row.amount)
       if (maxTxn === null || mag > maxTxn) maxTxn = mag
+    }
+    if (
+      (typeof row.debit === 'number' && Number.isFinite(row.debit)) ||
+      (typeof row.credit === 'number' && Number.isFinite(row.credit))
+    ) {
+      signed = true
     }
   }
 
@@ -337,7 +354,8 @@ function summarizeDetail(rows) {
     topVendor: top.value,
     topVendorCount: top.count,
     vendor,
-    description
+    description,
+    signed
   }
 }
 

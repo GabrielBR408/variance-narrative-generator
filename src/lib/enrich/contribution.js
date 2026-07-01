@@ -53,13 +53,27 @@ function isReliableTotal(total) {
 }
 
 // The sign GL net activity should carry to be *consistent with* the variance,
-// given the account type and favorable/unfavorable direction. GL amounts are
-// debit-positive (match.js nets debit − credit):
+// given the account type and favorable/unfavorable direction, UNDER A TRUE
+// double-entry debit-positive / credit-negative convention:
 //   expense unfavorable (over budget)  → costs added   → +1
 //   expense favorable   (under budget) → credits/true-ups → −1
 //   revenue favorable   (revenue up)   → income posts as credit → −1
 //   revenue unfavorable (revenue down) → reversals/debits → +1
 // Unknown type or neutral direction → 0 (no conflict can be asserted).
+//
+// This convention is only trustworthy when the source file actually TYPED its
+// amounts as Debit/Credit (see `detail.signed` in rankContribution below). A
+// single generic "Amount" column carries no such evidence — many real GL
+// exports simply record a positive transaction size regardless of which way
+// it moved the account, which is especially common for ordinary revenue
+// postings (e.g. a new lease, a rent escalation) being entered as plain
+// positive numbers. Applying the debit-positive assumption to an unsigned
+// revenue export previously produced a false "direction conflict" on
+// perfectly healthy revenue growth (bug: revenue GL evidence sign mismatch).
+// Expense accounts are unaffected either way: a flat positive "Amount" for an
+// expense transaction already matches the +1/-1 convention above in the
+// overwhelming majority of real exports, so this function's expense mapping
+// is unchanged and always trusted.
 function expectedSign(accountType, category) {
   if (accountType === 'expense') {
     if (category === 'unfavorable') return 1
@@ -108,9 +122,15 @@ export function rankContribution({
   const ratio = amountReliable && haveVariance ? Math.abs(total) / v : null
 
   // Direction: only assessable with a reliable total and a grounded expected
-  // sign; otherwise never assert a conflict.
+  // sign; otherwise never assert a conflict. For a REVENUE account, the
+  // debit-positive/credit-negative convention is only asserted when the
+  // source gave genuine typed Debit/Credit evidence (`detail.signed`) — a
+  // single unsigned "Amount" column cannot be trusted to carry that meaning
+  // (see expectedSign() above), so no conflict is asserted in that case.
+  // Expense accounts trust the convention either way (unchanged).
   const exp = expectedSign(accountType, category)
-  const directionAligned = !amountReliable || exp === 0 ? true : Math.sign(total) === exp
+  const trustSign = accountType !== 'revenue' || !!detail.signed
+  const directionAligned = !amountReliable || exp === 0 || !trustSign ? true : Math.sign(total) === exp
 
   // Offsets present when a single transaction is larger than the whole net total.
   const offset = amountReliable && maxAbs !== null && maxAbs > Math.abs(total)
