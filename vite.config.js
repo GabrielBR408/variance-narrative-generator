@@ -52,7 +52,7 @@ export default defineConfig({
       // Belt-and-suspenders: never let the SPA navigate-fallback answer the proxied
       // / moved paths, so they always hit the network (and the Vercel rewrites).
       workbox: {
-        navigateFallbackDenylist: [/^\/downdriller/, /^\/orgen/, /^\/vng/]
+        navigateFallbackDenylist: [/^\/downdriller/, /^\/orgen/, /^\/chiefeoinspector/, /^\/vng/]
       },
       includeAssets: ['favicon.svg', 'icons/icon-180.png'],
       manifest: {
