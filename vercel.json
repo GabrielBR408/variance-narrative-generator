@@ -21,6 +21,8 @@
     }
   ],
   "rewrites": [
+    { "source": "/downdriller", "destination": "https://chiefeo-gl-down-driller.vercel.app" },
+    { "source": "/downdriller/:path*", "destination": "https://chiefeo-gl-down-driller.vercel.app/:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
