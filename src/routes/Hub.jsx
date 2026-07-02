@@ -15,6 +15,16 @@ const TOOLS = [
     label: 'GL Down Driller',
     href: '/downdriller',
     desc: 'Drill into general-ledger detail behind a variance.'
+  },
+  {
+    label: 'ChiefEO Inspector',
+    href: '/chiefeoinspector',
+    desc: 'Talk through a property inspection → auto-drafted, editable report → PDF/Word.'
+  },
+  {
+    label: 'Owner Report Generator',
+    href: '/orgen',
+    desc: 'Monthly owner report: cover, income statement w/ commentary, balance sheet & cash flow, backups.'
   }
 ]
 
