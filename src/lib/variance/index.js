@@ -21,7 +21,7 @@ import { detectComparisonSets } from './detectColumns.js'
 import { alignRows } from './alignRows.js'
 import { calculate } from './calculate.js'
 import { summarize } from './summarize.js'
-import { assignSectionTypes } from './sectionType.js'
+import { assignSectionTypes, isRollupLabel } from './sectionType.js'
 import { DEFAULT_THRESHOLDS } from './thresholds.js'
 
 function empty(base, reason) {
@@ -84,7 +84,21 @@ export function computeVariance(extraction, thresholds = DEFAULT_THRESHOLDS) {
     if (!hasActual || !hasComparison) continue
 
     const aligned = alignRows(rows, columns)
-    const comparisons = calculate(aligned, thresholds, extraction.confidence, sectionByRow)
+    // Section subtotal / grand-total / NOI rows carry figures, so they parse as
+    // rows — but they are sums of the detail lines already compared and must never
+    // be FLAGGED or narrated (a note like "TOTAL OPERATING EXPENSES exceeded
+    // budget…" is pure noise). We keep them in the result — the export intentionally
+    // renders the COMPLETE statement, totals included — but clear their trigger so
+    // they drop out of the flagged counts, the high-variance headline, and every
+    // narrative section. (assignSectionTypes still runs on the full rows above, so
+    // these subtotal rows keep doing their real job: typing the detail lines
+    // revenue vs expense.)
+    const comparisons = calculate(aligned, thresholds, extraction.confidence, sectionByRow).map(
+      (c) =>
+        c && c.thresholdTriggered && isRollupLabel(c.account)
+          ? { ...c, thresholdTriggered: false, category: 'neutral' }
+          : c
+    )
     const summary = summarize(comparisons, rows.length)
     comparisonSets.push({
       period: set.period,

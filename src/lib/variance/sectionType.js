@@ -28,6 +28,25 @@ const SECTION_TOTAL_RE = /^[\s*•·-]*(total|subtotal|gross)\b/i
 const EXPENSE_SECTION_RE = /\b(expense|expenses|cost|costs|cogs)\b/i
 const REVENUE_SECTION_RE = /\b(revenue|income|sales)\b/i
 
+// Grand-total / net rows that aggregate ACROSS sections (Net Operating Income,
+// Grand Total, Net Income/Loss). Like section subtotals, these are never a
+// variance LINE ITEM — they are sums of lines already compared — so they are
+// excluded from the comparison set, not just typed.
+const NET_TOTAL_RE =
+  /^[\s*•·-]*(net\s+(operating\s+)?(income|loss|profit)|noi\b|grand[\s-]*total|net\s+(change|total))/i
+
+// True when a label is a section subtotal ("TOTAL OPERATING EXPENSES") or a grand/
+// net total ("NET OPERATING INCOME"). Used to keep these aggregate rows out of the
+// flagged line-item comparisons and the narrative, where commenting on a subtotal
+// (a sum of lines already commented) is always noise. Mirrors rollupSide's guard:
+// a coded account line ("6110 …") is a real line, never a rollup.
+export function isRollupLabel(label = '') {
+  const s = String(label).trim()
+  if (!s) return false
+  if (/^\s*\d/.test(s)) return false
+  return SECTION_TOTAL_RE.test(s) || NET_TOTAL_RE.test(s)
+}
+
 // The income-statement side a subtotal line defines, or null when the label is
 // not a section subtotal (a detail line, a coded account, or a NET/grand total).
 export function rollupSide(label = '') {

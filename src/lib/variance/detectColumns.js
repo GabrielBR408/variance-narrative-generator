@@ -52,16 +52,13 @@ function matchType(header) {
 // fall back to the first column that reads as mostly text across the data rows
 // (account names are non-numeric), and finally to column 0.
 function detectAccountColumn(columns, rows, valueIndexes) {
-  for (let i = 0; i < columns.length; i++) {
-    if (ACCOUNT_RE.test(String(columns[i]))) return i
-  }
-
   const taken = new Set(valueIndexes)
   const sample = rows.slice(0, 50) // bounded scan keeps detection O(columns)
-  let best = -1
-  let bestTextScore = -1
-  for (let i = 0; i < columns.length; i++) {
-    if (taken.has(i)) continue
+
+  // Fraction of a column's sampled cells that read as text (account NAMES read as
+  // text; GL CODES read as numbers). Used both to choose among several named label
+  // columns and as the no-header fallback.
+  const textScore = (i) => {
     let text = 0
     let seen = 0
     for (const row of sample) {
@@ -71,7 +68,43 @@ function detectAccountColumn(columns, rows, valueIndexes) {
       // Non-numeric cells signal a label column.
       if (!/^[\s$()%-]*\d/.test(String(cell).trim())) text++
     }
-    const score = seen === 0 ? 0 : text / seen
+    return seen === 0 ? 0 : text / seen
+  }
+
+  // Columns whose HEADER names a label column. When a statement carries BOTH a
+  // code column ("GL Code", "Acct #") and a name column ("Account", "Description")
+  // — both match ACCOUNT_RE — prefer the one whose data is actually text (the
+  // names). Choosing the numeric-code column would label every narrative line by a
+  // bare, unreadable code ("6230 exceeded budget…") AND blind the section-typing
+  // pass, which reads the subtotal labels ("TOTAL OPERATING EXPENSES") from this
+  // column to classify each line revenue vs expense. A code column is blank on
+  // those subtotal rows, so no section is ever detected and every line falls back
+  // to "unknown" (never favorable/unfavorable).
+  const named = []
+  for (let i = 0; i < columns.length; i++) {
+    if (ACCOUNT_RE.test(String(columns[i]))) named.push(i)
+  }
+  if (named.length === 1) return named[0]
+  if (named.length > 1) {
+    let best = named[0]
+    let bestScore = -1
+    for (const i of named) {
+      const score = textScore(i)
+      if (score > bestScore) {
+        bestScore = score
+        best = i
+      }
+    }
+    return best
+  }
+
+  // No header names a label column: fall back to the most text-like non-value
+  // column, and finally to column 0.
+  let best = -1
+  let bestTextScore = -1
+  for (let i = 0; i < columns.length; i++) {
+    if (taken.has(i)) continue
+    const score = textScore(i)
     if (score > bestTextScore) {
       bestTextScore = score
       best = i
