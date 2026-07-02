@@ -84,6 +84,26 @@ const SECTIONS = [
   { key: 'missingData', label: 'Missing Data' }
 ]
 
+// Every narrative section that carries a VARIANCE note (a toNote() record with
+// figures + prose). Since NQ-3B the High Variances list is a concise top-N
+// headline and the remaining triggered rows are narrated in Revenue Notes /
+// Expense Notes / Context Notes — so the Excel export must read ALL of them, or
+// a flagged line whose sentence lives in a category note would show
+// "High Variance" status with a BLANK Explanation (silent dropped commentary).
+const VARIANCE_NOTE_SECTIONS = ['highVariances', 'revenueNotes', 'expenseNotes', 'contextNotes']
+
+// All variance notes of one period, across the narrated sections, in section
+// order. The sections are pairwise disjoint by construction (NQ-3C), so this
+// never yields the same row twice.
+function varianceNotesOf(period) {
+  const notes = []
+  for (const key of VARIANCE_NOTE_SECTIONS) {
+    const sectionNotes = Array.isArray(period?.[key]) ? period[key] : []
+    notes.push(...sectionNotes)
+  }
+  return notes
+}
+
 function capitalize(s) {
   const t = String(s || '')
   return t ? t[0].toUpperCase() + t.slice(1) : ''
@@ -223,8 +243,11 @@ function buildPeriodEntries(period) {
   }
 
   // Index the narrated notes so each full-table row can pull its text/support.
+  // Notes are drawn from EVERY variance-note section (High Variances is only the
+  // top-N headline; the other triggered rows are narrated in Revenue / Expense /
+  // Context Notes) so no flagged row exports with a blank Explanation.
   const triggered = new Map()
-  for (const note of Array.isArray(period.highVariances) ? period.highVariances : []) {
+  for (const note of varianceNotesOf(period)) {
     triggered.set(rowKey(note.account, note.sourceRows), note)
   }
   const missing = new Map()
@@ -348,7 +371,10 @@ export function buildEvidenceRows(narrative) {
   const rows = []
   for (const period of periodsOf(narrative)) {
     const periodLabel = period?.periodLabel || 'Current'
-    const notes = Array.isArray(period?.highVariances) ? period.highVariances : []
+    // Enrichment attaches supporting evidence to notes in High Variances AND the
+    // category note sections (ENRICHABLE_SECTIONS in enrich/index.js), so the
+    // traceability sheet must read all of them.
+    const notes = varianceNotesOf(period)
     for (const note of notes) {
       const support = Array.isArray(note.support) ? note.support : []
       for (const s of support) {

@@ -272,3 +272,65 @@ test('an empty narrative still produces a valid workbook', async () => {
   await wb.xlsx.load(buf)
   assert.ok(wb.getWorksheet(OWNER_SHEET), 'owner sheet exists even with no periods')
 })
+
+// --- flagged rows narrated OUTSIDE High Variances keep their Explanation ----
+// Since NQ-3B the High Variances section is a concise top-3 headline; the other
+// triggered rows are narrated in Revenue Notes / Expense Notes / Context Notes.
+// The Excel Owner Summary must pull each flagged row's sentence from WHEREVER it
+// was narrated — a flagged line exporting with a blank Explanation is silent
+// dropped commentary (regression: rows 4+ used to export blank).
+
+const MANY_FLAGGED = [
+  // Two revenue lines + four expense lines, all triggered. Materiality ranking
+  // (|variance| desc) promotes the top three to High Variances; the remaining
+  // three land in Revenue/Expense Notes.
+  rec({ account: 'Base Rent', actual: 90000, budget: 100000, accountType: 'revenue', category: 'unfavorable', sourceRows: [1] }),
+  rec({ account: 'Parking Income', actual: 6000, budget: 10000, accountType: 'revenue', category: 'unfavorable', sourceRows: [2] }),
+  rec({ account: 'Utilities - Electricity', actual: 21000, budget: 12000, accountType: 'expense', category: 'unfavorable', sourceRows: [3] }),
+  rec({ account: 'Janitorial Services', actual: 9500, budget: 8000, accountType: 'expense', category: 'unfavorable', sourceRows: [4] }),
+  rec({ account: 'Repairs & Maintenance', actual: 5200, budget: 4000, accountType: 'expense', category: 'unfavorable', sourceRows: [5] }),
+  rec({ account: 'Landscaping', actual: 2600, budget: 2000, accountType: 'expense', category: 'unfavorable', sourceRows: [6] })
+]
+
+test('every flagged owner row carries its narrative, even when narrated in a category-note section', () => {
+  const narrative = baseNarrative(MANY_FLAGGED)
+  const period = narrative.periods[0]
+  // Preconditions: the headline really is capped and the rest really live elsewhere.
+  assert.equal(period.highVariances.length, 3)
+  assert.ok(period.revenueNotes.length + period.expenseNotes.length + (period.contextNotes?.length || 0) >= 3)
+
+  const rows = buildOwnerRows(narrative)
+  const flagged = rows.filter((r) => r.currentSection === 'High Variance')
+  assert.equal(flagged.length, MANY_FLAGGED.length)
+  for (const row of flagged) {
+    assert.ok(
+      row.currentNarrative && row.currentNarrative.length > 0,
+      `flagged row "${row.account}" exported with a blank Explanation`
+    )
+    assert.ok(
+      row.currentNarrative.includes(row.account),
+      `Explanation for "${row.account}" names the account (got: "${row.currentNarrative}")`
+    )
+  }
+})
+
+test('evidence sheet includes support attached to notes in category-note sections', () => {
+  const glForJanitorial = supporting({
+    fileName: 'GL Detail.pdf',
+    type: 'General Ledger (GL)',
+    columns: ['Account', 'Vendor', 'Amount'],
+    rows: [
+      ['Janitorial Services', 'CleanCo', '5000.00'],
+      ['Janitorial Services', 'CleanCo', '4500.00']
+    ]
+  })
+  const narrative = baseNarrative(MANY_FLAGGED)
+  // Precondition: Janitorial is NOT in the top-3 headline (it is a category note).
+  assert.ok(!narrative.periods[0].highVariances.some((n) => /Janitorial/.test(n.account)))
+
+  const enriched = enrichNarrative(narrative, { supporting: [glForJanitorial] })
+  const model = buildExcelModel(enriched, { generatedDate: FIXED_DATE })
+  const ev = model.evidenceRows.filter((r) => /Janitorial/.test(r.account))
+  assert.ok(ev.length >= 1, 'evidence for a category-note row appears on the evidence sheet')
+  assert.equal(ev[0].fileName, 'GL Detail.pdf')
+})
