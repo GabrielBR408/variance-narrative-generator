@@ -3,6 +3,7 @@ import { classifyFile, confidenceTier } from '../lib/classify.js'
 import { routeUpload } from '../lib/uploadRouting.js'
 import { fileKey } from '../lib/fileKey.js'
 import { prettySize } from './uiFormat.js'
+import { track } from '../lib/track.js'
 
 const ACCEPT = '.pdf,.xlsx,.xls,.csv,.docx'
 
@@ -52,6 +53,7 @@ export default function SourceFiles({
   const acceptFiles = (incoming) => {
     const files = Array.from(incoming || [])
     if (!files.length) return
+    track('vng', 'files_uploaded', { count: files.length })
     const routed = routeUpload({
       incoming: files,
       currentBase: baseReport,

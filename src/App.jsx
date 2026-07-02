@@ -28,7 +28,7 @@ import { fileKey } from './lib/fileKey.js'
 import { useExtraction } from './hooks/useExtraction.js'
 import { useGenerate } from './hooks/useGenerate.js'
 import chiefeoLogo from './assets/chiefeo-logo.png'
-import { Analytics } from '@vercel/analytics/react'
+import { track } from './lib/track.js'
 
 // Phase 23: all five Style controls are active and shape the generated
 // narrative. Report Style / Tone / Length / Dollar Value References become
@@ -57,6 +57,14 @@ const DEFAULT_VARIANCE = {
 }
 
 export default function App() {
+  // Analytics: fire once when the actual /vng app mounts. Empty deps so this
+  // never re-fires on re-renders. This file only ever renders for the /vng
+  // route (see src/main.jsx's pathname switch), so app_opened is never fired
+  // for the hub landing or the proxied /downdriller /orgen paths.
+  useEffect(() => {
+    track('vng', 'app_opened')
+  }, [])
+
   // Upload state (isolated slice)
   const [baseReport, setBaseReport] = useState(null)
   const [supportingFiles, setSupportingFiles] = useState([])
@@ -279,8 +287,6 @@ export default function App() {
           &copy; 2026 GREVE, operating as ChiefEO. All rights reserved.
         </p>
       </footer>
-
-      <Analytics />
     </main>
   )
 }

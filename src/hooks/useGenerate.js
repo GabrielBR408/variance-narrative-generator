@@ -7,6 +7,7 @@ import { enrichmentDiagnostic } from '../lib/enrichmentDiagnostic.js'
 import { enrichmentStatus } from '../lib/enrichmentStatus.js'
 import { backupNotice } from '../lib/backupNotice.js'
 import { fileKey } from '../lib/fileKey.js'
+import { track } from '../lib/track.js'
 
 // Compact, faithful view of a browser extraction to ship to /generate. We send
 // only the normalized shape the variance engine reads — never the raw text or
@@ -190,9 +191,22 @@ export function useGenerate({
         }
       })
       setStatus('success')
+
+      // Analytics: rows = total data rows the variance engine reviewed;
+      // flagged = rows that crossed the user's dollar/percent threshold (the
+      // engine's only "this is a variance worth narrating" signal — see
+      // src/lib/variance/summarize.js's highVarianceCount, the same count the
+      // live VariancePreview and generated narrative are both built from).
+      const summary = data.variance && data.variance.summary
+      track('vng', 'narrative_generated', {
+        rows: (summary && summary.totalRowsReviewed) || 0,
+        flagged: (summary && summary.highVarianceCount) || 0
+      })
     } catch (err) {
       setStatus('failure')
-      setMessage(err.message || 'Something went wrong. Try again.')
+      const failMessage = err.message || 'Something went wrong. Try again.'
+      setMessage(failMessage)
+      track('vng', 'generate_failed', { reason: failMessage.slice(0, 200) })
     }
   }
 

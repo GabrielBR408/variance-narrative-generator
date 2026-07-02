@@ -4,6 +4,7 @@ import App from './App.jsx'
 import Hub from './routes/Hub.jsx'
 import './styles/app.css'
 import { registerUpdatePrompt } from './pwa/registerUpdate.js'
+import { Analytics } from '@vercel/analytics/react'
 
 // --- Lightweight path routing ---------------------------------------------
 // The app has no router dependency; a single pathname switch keeps it that way.
@@ -19,7 +20,13 @@ function pickRoute() {
 }
 
 createRoot(document.getElementById('root')).render(
-  <React.StrictMode>{pickRoute()}</React.StrictMode>
+  <React.StrictMode>
+    {pickRoute()}
+    {/* App-wide Vercel Web Analytics (page views/traffic) for this single
+        deployment — covers the hub and every route/proxied view. Unrelated to
+        the /vng-only `app_opened` custom event, which is fired inside App.jsx. */}
+    <Analytics />
+  </React.StrictMode>
 )
 
 // Register the service worker and surface the "new version available" banner.

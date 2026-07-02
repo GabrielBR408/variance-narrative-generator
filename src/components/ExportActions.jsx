@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { narrativeToMarkdown, narrativeToClipboardText } from '../lib/export/markdown.js'
 import { narrativeToDocxBlob } from '../lib/export/docx.js'
 import { exportFileName, docxFileName, excelFileName } from '../lib/export/exportState.js'
+import { track } from '../lib/track.js'
 
 // --- Export actions — Phase 10A (Copy + Markdown) / 11 (DOCX) / 17 (Excel) --
 // Presentation only. Renders "Copy Narrative", "Download Markdown", "Download
@@ -107,6 +108,7 @@ export default function ExportActions({ narrative, enrichment = null, correction
     try {
       await writeClipboard(narrativeToClipboardText(narrative))
       setCopyState('copied')
+      track('vng', 'export', { type: 'copy' })
     } catch {
       setCopyState('error')
     }
@@ -117,6 +119,7 @@ export default function ExportActions({ narrative, enrichment = null, correction
     try {
       await downloadDocx(narrative)
       setDocxState('done')
+      track('vng', 'export', { type: 'docx' })
     } catch {
       setDocxState('error')
     }
@@ -127,6 +130,7 @@ export default function ExportActions({ narrative, enrichment = null, correction
     try {
       await downloadExcel(narrative, enrichment, correction)
       setExcelState('done')
+      track('vng', 'export', { type: 'excel' })
     } catch {
       setExcelState('error')
     }
@@ -147,7 +151,10 @@ export default function ExportActions({ narrative, enrichment = null, correction
         <button
           type="button"
           className="export-btn export-btn--secondary"
-          onClick={() => downloadMarkdown(narrative)}
+          onClick={() => {
+            downloadMarkdown(narrative)
+            track('vng', 'export', { type: 'markdown' })
+          }}
         >
           Download Markdown
         </button>
