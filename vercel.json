@@ -26,7 +26,7 @@
     { "source": "/downdriller/:path*", "destination": "https://chiefeo-gl-down-driller.vercel.app/:path*" },
     { "source": "/orgen", "destination": "https://owner-report-generator.vercel.app" },
     { "source": "/orgen/:path*", "destination": "https://owner-report-generator.vercel.app/:path*" },
-    { "source": "/chiefeoinspector", "destination": "https://chiefeo-inspector.vercel.app" },
+    { "source": "/chiefeoinspector", "destination": "https://chiefeo-inspector.vercel.app/chiefeoinspector/" },
     { "source": "/chiefeoinspector/:path*", "destination": "https://chiefeo-inspector.vercel.app/:path*" },
     { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
   ],
