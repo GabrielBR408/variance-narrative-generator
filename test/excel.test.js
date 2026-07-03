@@ -392,7 +392,10 @@ test('every flagged owner row carries its narrative, even when narrated in a cat
   assert.ok(period.revenueNotes.length + period.expenseNotes.length + (period.contextNotes?.length || 0) >= 3)
 
   const rows = buildOwnerRows(narrative)
-  const flagged = rows.filter((r) => r.currentSection === 'High Variance')
+  // The Status column names the section each note actually lives in — headline
+  // drivers read "High Variance", deferred rows read their category note label.
+  const NARRATED_STATUSES = new Set(['High Variance', 'Revenue Note', 'Expense Note', 'Context Note'])
+  const flagged = rows.filter((r) => NARRATED_STATUSES.has(r.currentSection))
   assert.equal(flagged.length, MANY_FLAGGED.length)
   for (const row of flagged) {
     assert.ok(

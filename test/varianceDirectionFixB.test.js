@@ -110,7 +110,12 @@ test('a favorable mid-statement NOI beat never reads unfavorable end-to-end', ()
   const noi = m['NET OPERATING INCOME']
   // Null section → name fallback reads the aggregate's own wording (income).
   assert.equal(noi.accountType, 'revenue')
-  assert.equal(noi.category, 'favorable') // an NOI beat is good news
+  // computeVariance neutralizes roll-up rows (isRollupLabel): a sum of lines
+  // already compared is never a flagged line item. The regression this guards
+  // is the INVERSION — a favorable NOI beat must never read 'unfavorable'.
+  assert.notEqual(noi.category, 'unfavorable')
+  assert.equal(noi.category, 'neutral')
+  assert.equal(noi.thresholdTriggered, false)
 })
 
 // --- 3. End-to-end direction by SECTION through computeVariance -------------
