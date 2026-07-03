@@ -9,6 +9,26 @@ import { backupNotice } from '../lib/backupNotice.js'
 import { fileKey } from '../lib/fileKey.js'
 import { track } from '../lib/track.js'
 
+// Should a /generate response hand off to the in-browser fallback? Only when
+// the endpoint is genuinely absent: the fetch itself rejected (no server /
+// network failure, res is null) or the host answered 404/405 (a static host
+// with no such route). Any other non-ok status came from a REAL server that
+// failed — falling back there would mask the failure as a quiet "success" with
+// a basic LOCAL- narrative. Pure so the policy is testable without a browser.
+export function shouldClientFallback(res) {
+  if (!res) return true
+  return res.status === 404 || res.status === 405
+}
+
+// Actionable message for a server that answered but could not complete the
+// generation (non-ok, non-404/405, and no structured error body to surface).
+export function serverFailureMessage(status) {
+  if (status === 413) {
+    return 'The uploaded files are too large for the server to accept. Remove or shrink a file and try again.'
+  }
+  return `The server could not complete the generation (HTTP ${status}). Try again in a moment.`
+}
+
 // Compact, faithful view of a browser extraction to ship to /generate. We send
 // only the normalized shape the variance engine reads — never the raw text or
 // parser internals. Returns null when the file hasn't been extracted yet.
@@ -92,22 +112,50 @@ export function useGenerate({
     setStatus('sending')
     try {
       // Try the real /generate endpoint (present in dev/preview and any server
-      // deploy). On a static host (e.g., GitHub Pages) there is no endpoint, so
-      // the request yields no usable JSON — fall back to computing the SAME
-      // response in-browser with the same pure pipeline. A server that responds
-      // with a structured error is still authoritative (surfaced below).
-      let data = null
-      try {
-        const res = await fetch('/api/generate', { method: 'POST', body: form })
-        data = await res.json()
-      } catch {
-        data = clientGenerate({
+      // deploy). On a static host (e.g., GitHub Pages) there is no endpoint —
+      // the fetch rejects or the host answers 404/405 — so fall back to
+      // computing the SAME response in-browser with the same pure pipeline.
+      // Any OTHER non-ok status (413 payload too large, 5xx) is a real server
+      // failing and is surfaced as a failure, never silently downgraded to the
+      // basic local narrative. A server that responds with a structured error
+      // is still authoritative (surfaced below).
+      const runClientFallback = () =>
+        clientGenerate({
           baseExtraction,
           supportingExtractions,
           files: clientFiles,
           thresholds: previewThresholds,
           settingsReceived: Boolean(style && variance)
         })
+
+      let res = null
+      try {
+        res = await fetch('/api/generate', { method: 'POST', body: form })
+      } catch {
+        res = null // network error / no server at all
+      }
+
+      let data = null
+      if (shouldClientFallback(res)) {
+        data = runClientFallback()
+      } else if (!res.ok) {
+        // The server answered but failed. Prefer its own structured error
+        // message; a non-JSON body (HTML 500 page, host-level 413) gets an
+        // actionable status-derived message instead.
+        let body = null
+        try {
+          body = await res.json()
+        } catch {
+          body = null
+        }
+        throw new Error((body && body.error) || serverFailureMessage(res.status))
+      } else {
+        try {
+          data = await res.json()
+        } catch {
+          // 200 but not JSON: a static host served the SPA shell for the POST.
+          data = runClientFallback()
+        }
       }
 
       if (!data || data.success !== true || !data.narrative) {
@@ -176,10 +224,18 @@ export function useGenerate({
         // Phase 22.2: snapshot the settings this result was generated with, so the
         // UI can warn when the live settings drift from it (period scope excluded —
         // it is applied live at render/export time, so it never makes a result stale).
+        // The full effective style rides along: every Style-panel field changes the
+        // generated output (abbreviation is baked in just above), so drifting any of
+        // them must trip the same freshness banner.
         settings: {
           amountThreshold: previewThresholds.amount,
           percentThreshold: previewThresholds.percent,
-          commentaryMode: mode
+          commentaryMode: mode,
+          reportStyle: style.reportStyle,
+          tone: style.tone,
+          length: style.length,
+          abbreviateDollars: !!style.abbreviateDollars,
+          dollarReferences: style.dollarReferences
         },
         // Phase 22.3: snapshot the file set too (base + sorted supporting), so the
         // same freshness banner fires when files are added, removed, or replaced.

@@ -28,6 +28,10 @@
     { "source": "/orgen/:path*", "destination": "https://owner-report-generator.vercel.app/:path*" },
     { "source": "/chiefeoinspector", "destination": "https://chiefeo-inspector.vercel.app" },
     { "source": "/chiefeoinspector/:path*", "destination": "https://chiefeo-inspector.vercel.app/:path*" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ]
+    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/generate.js": { "maxDuration": 60 },
+    "api/ocr.js": { "maxDuration": 60 }
+  }
 }

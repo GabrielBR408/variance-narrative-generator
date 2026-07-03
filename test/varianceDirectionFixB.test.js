@@ -76,6 +76,43 @@ test('assignSectionTypes: a detail line takes the side of the subtotal it rolls 
   assert.equal(byRow[4], 'expense') // Repairs rolls into TOTAL OPERATING EXPENSES
 })
 
+test('assignSectionTypes: an intermediate NET/GROSS roll-up never inherits the NEXT section', () => {
+  // A mid-statement NET OPERATING INCOME followed by another expense section:
+  // buffering it like a detail line assigned it the side of the subtotal BELOW
+  // it ('expense'), so a favorable NOI beat read as unfavorable.
+  const rows = [
+    ['Commercial Rent', '95000', '100000'],
+    ['TOTAL REVENUE', '95000', '100000'],
+    ['Repairs Expense', '60000', '40000'],
+    ['TOTAL OPERATING EXPENSES', '60000', '40000'],
+    ['NET OPERATING INCOME', '35000', '60000'],
+    ['Interest Expense', '5000', '4000'],
+    ['TOTAL OTHER EXPENSES', '5000', '4000']
+  ]
+  const byRow = assignSectionTypes(rows, 0)
+  assert.equal(byRow[4], null, 'the intermediate roll-up carries no section side')
+  // The detail lines around it are untouched.
+  assert.equal(byRow[2], 'expense')
+  assert.equal(byRow[5], 'expense')
+})
+
+test('a favorable mid-statement NOI beat never reads unfavorable end-to-end', () => {
+  const rows = [
+    ['Commercial Rent', '120000', '100000', ''],
+    ['TOTAL REVENUE', '120000', '100000', ''],
+    ['Repairs Expense', '40000', '40000', ''],
+    ['TOTAL OPERATING EXPENSES', '40000', '40000', ''],
+    ['NET OPERATING INCOME', '80000', '60000', ''], // +20,000 beat
+    ['Interest Expense', '5000', '4000', ''],
+    ['TOTAL OTHER EXPENSES', '5000', '4000', '']
+  ]
+  const m = comparisonsByAccount(rows)
+  const noi = m['NET OPERATING INCOME']
+  // Null section → name fallback reads the aggregate's own wording (income).
+  assert.equal(noi.accountType, 'revenue')
+  assert.equal(noi.category, 'favorable') // an NOI beat is good news
+})
+
 // --- 3. End-to-end direction by SECTION through computeVariance -------------
 
 const COLS = ['Account', 'Actual', 'Budget', 'Variance']

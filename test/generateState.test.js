@@ -13,7 +13,9 @@ import {
   isBusy,
   GENERATE_LABEL,
   AI_LLM_MODE,
-  generateClickAction
+  generateClickAction,
+  resultFreshness,
+  shouldClearFailure
 } from '../src/lib/generateState.js'
 
 const okExtraction = { fileId: 'f1', fileName: 'base.pdf', status: 'ok', confidence: 90 }
@@ -158,4 +160,76 @@ test('Generate click is a no-op while a request is in flight (either ack state)'
 
 test('generateClickAction defaults to the disclosure when called with no args', () => {
   assert.equal(generateClickAction(), 'disclose')
+})
+
+// --- Result freshness: the full effective style is tracked -----------------
+
+// Snapshot carrying every output-shaping input: thresholds, commentary mode,
+// and the five Style-panel fields (all of them change the generated narrative,
+// abbreviation included — it is baked in at generate time).
+const STYLE_SNAP = {
+  amountThreshold: 1000,
+  percentThreshold: 10,
+  commentaryMode: 'detailed',
+  reportStyle: 'Detailed',
+  tone: 'Neutral',
+  length: 'Standard',
+  abbreviateDollars: false,
+  dollarReferences: 'Detail'
+}
+
+test('identical style snapshot → not stale', () => {
+  const f = resultFreshness({ generated: STYLE_SNAP, current: { ...STYLE_SNAP } })
+  assert.equal(f.stale, false)
+  assert.deepEqual(f.changed, [])
+})
+
+test('each Style field change marks the result stale (style)', () => {
+  const drifts = [
+    { tone: 'Cautious' },
+    { length: 'Verbose' },
+    { abbreviateDollars: true },
+    { dollarReferences: 'Minimum' }
+  ]
+  for (const drift of drifts) {
+    const f = resultFreshness({ generated: STYLE_SNAP, current: { ...STYLE_SNAP, ...drift } })
+    assert.equal(f.stale, true, `expected stale for ${JSON.stringify(drift)}`)
+    assert.deepEqual(f.changed, ['style'])
+  }
+})
+
+test('a Report Style change trips both commentary and style (mode derives from it)', () => {
+  const f = resultFreshness({
+    generated: STYLE_SNAP,
+    current: { ...STYLE_SNAP, reportStyle: 'Concise', commentaryMode: 'conservative' }
+  })
+  assert.equal(f.stale, true)
+  assert.deepEqual(f.changed, ['commentary', 'style'])
+})
+
+test('snapshots without style fields never flag style (back-compat)', () => {
+  const legacy = { amountThreshold: 1000, percentThreshold: 10, commentaryMode: 'detailed' }
+  const f = resultFreshness({
+    generated: legacy,
+    current: { ...legacy, tone: 'Cautious', abbreviateDollars: true }
+  })
+  assert.equal(f.stale, false)
+  assert.deepEqual(f.changed, [])
+})
+
+// --- Failure reset: changing files clears a stale failure alert ------------
+
+test('a lingering failure clears once the file set changes', () => {
+  assert.equal(shouldClearFailure({ status: 'failure', filesChanged: true }), true)
+})
+
+test('a failure stays while the file set that caused it is unchanged', () => {
+  assert.equal(shouldClearFailure({ status: 'failure', filesChanged: false }), false)
+})
+
+test('non-failure statuses are never cleared by a file change', () => {
+  for (const status of ['idle', 'preparing', 'sending', 'success']) {
+    assert.equal(shouldClearFailure({ status, filesChanged: true }), false)
+  }
+  assert.equal(shouldClearFailure(), false)
 })

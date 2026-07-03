@@ -1,8 +1,10 @@
 // --- Scanned-PDF page rendering (browser) ---------------------------------
-// Renders the first pages of a (likely scanned) PDF to PNG data URLs via pdf.js
+// Renders the first pages of a (likely scanned) PDF to JPEG data URLs via pdf.js
 // + a DOM canvas, so the server-side vision OCR has images to read. Browser-only
 // (uses document.createElement('canvas') and the pdf.js worker). Bounded by
 // maxPages and a max edge length to keep payloads and token costs in check.
+// JPEG (not PNG) because a scanned page compresses far better as JPEG, and the
+// request body must stay under the hosting platform's payload limit.
 //
 // Loaded only on demand (dynamic import from ocrClient.js), so pdf.js stays out
 // of the initial bundle — exactly like the text/position PDF parser.
@@ -29,7 +31,8 @@ export async function renderPdfToImages(file, { maxPages = 12, maxEdge = 1600 } 
       canvas.height = Math.max(1, Math.ceil(viewport.height))
       const ctx = canvas.getContext('2d')
       await page.render({ canvasContext: ctx, viewport }).promise
-      images.push(canvas.toDataURL('image/png'))
+      // pdf.js paints a white page background, so JPEG's lack of alpha is safe.
+      images.push(canvas.toDataURL('image/jpeg', 0.85))
       page.cleanup()
     }
   } finally {

@@ -60,12 +60,27 @@ const BALANCE_COL_RE = /balance/i
 // A leading numeric token used as an account code: "5100", "5100-10", "51.00".
 const CODE_RE = /^\s*([0-9][0-9.\-]*[0-9]|[0-9])/
 
+// A leading number only counts as an account CODE when it carries at least this
+// many digits. Real chart-of-accounts codes are 4+ digits ("5100", "6250",
+// "51300", "5100-10"); shorter leading numbers are part of the label — a benefit
+// plan ("401(k) Match") or a street address ("350 Rhode Island CAM") — and
+// treating them as codes produced false 1.0 exact-code matches.
+const CODE_MIN_DIGITS = 4
+
 // Cells that are purely numeric/symbolic are values, not account labels.
 const NUMERIC_ONLY_RE = /^[\s0-9.,$()%\-]+$/
 
 export function accountCode(label = '') {
-  const m = String(label).match(CODE_RE)
-  return m ? m[1].replace(/[.\-]+$/, '') : ''
+  const s = String(label)
+  const m = s.match(CODE_RE)
+  if (!m) return ''
+  // The token must be separated from the label text: digits running straight
+  // into "(" ("401(k) Match") or a letter are a name fragment, never a code.
+  const rest = s.slice(m[0].length)
+  if (/^[A-Za-z(]/.test(rest)) return ''
+  const digits = (m[1].match(/[0-9]/g) || []).length
+  if (digits < CODE_MIN_DIGITS) return ''
+  return m[1].replace(/[.\-]+$/, '')
 }
 
 // Lowercase, strip a leading code token, drop punctuation, collapse whitespace.
@@ -394,6 +409,11 @@ export function scoreMatchDetailed(baseAccount, entry) {
 
   // 1) Exact account code.
   if (baseCode && entry.code && baseCode === entry.code) return { score: 1.0, method: 'exact_code' }
+  // Contradicting explicit codes: when BOTH sides carry a code and they differ,
+  // they are different chart accounts no matter how similar the names read
+  // ("6010 Repairs & Maintenance" vs "7010 Repairs & Maintenance" — normalizeName
+  // strips the codes), so no name-based tier may fire.
+  if (baseCode && entry.code && baseCode !== entry.code) return { score: 0, method: null }
   // 2) Exact normalized name.
   if (baseNorm === entry.normName) return { score: 0.9, method: 'exact_name' }
   // 3) Conservative substring containment, guarded so short/single-word labels
@@ -425,35 +445,46 @@ export function scoreMatchDetailed(baseAccount, entry) {
 // Match one flagged account to supporting evidence. Returns a deterministic,
 // deduped, capped list of citations:
 //   [{ fileName, classificationType, confidence, sourceRows, thick, detail }]
-// One citation per file (best score, all matching rows collected), ordered by
-// file name then first source row. `thick` is true when ANY matched row in the
-// file carried usable amount/description detail. `detail` is the Phase 17
-// GL-detail summary over that file's matched rows.
+// One citation per file, holding ONLY the rows of that file's best-scoring
+// account entry (see below), ordered by confidence then evidence richness, with
+// file name as the deterministic tiebreaker. `thick` is true when ANY matched
+// row in the citation carried usable amount/description detail. `detail` is the
+// Phase 17 GL-detail summary over the citation's matched rows.
 export function matchAccount(account, index = [], options = {}) {
   const floor = Number.isFinite(options.floor) ? options.floor : CONFIDENCE_FLOOR
   const cap = Number.isFinite(options.cap) ? options.cap : MAX_CITATIONS_PER_NOTE
   if (!account || !Array.isArray(index) || index.length === 0) return []
 
-  const byFile = new Map()
+  // Group matched entries per file AND per account identity — the entry's code
+  // when it has one, else its normalized name. Merging EVERY above-floor entry
+  // of a file into one rows map summed transactions from DIFFERENT GL accounts
+  // (and "Total …" roll-up rows admitted by the substring tier) into a single
+  // citation total, double-counting owner-visible dollars.
+  const byGroup = new Map()
   for (const entry of index) {
     const { score, method } = scoreMatchDetailed(account, entry)
     if (score < floor) continue
-    let existing = byFile.get(entry.fileName)
+    const identity = entry.code ? `code:${entry.code}` : `name:${entry.normName}`
+    const key = `${entry.fileName}\u0000${identity}`
+    let existing = byGroup.get(key)
     if (!existing) {
       existing = {
         fileName: entry.fileName,
         classificationType: entry.classificationType,
         confidence: score,
-        // NQ-4C.1: the tier that produced this file's best (highest) score.
+        // NQ-4C.1: the tier that produced this account entry's best (highest) score.
         matchMethod: method,
         thick: false,
+        // First source row of the group — the deterministic tiebreaker when two
+        // same-file account entries score identically.
+        firstRow: entry.sourceRow,
         // Dedupe matched rows by source-row index, so a repeated identical row
         // can never inflate the count or total.
         rows: new Map()
       }
-      byFile.set(entry.fileName, existing)
+      byGroup.set(key, existing)
     }
-    // Track the method of the highest-scoring matched row for this file; ties
+    // Track the method of the highest-scoring matched row for this account; ties
     // keep the first-seen method (deterministic).
     if (score > existing.confidence) {
       existing.confidence = score
@@ -471,6 +502,23 @@ export function matchAccount(account, index = [], options = {}) {
         credit: entry.credit,
         balance: entry.balance
       })
+    }
+  }
+
+  // One citation per file: keep only the BEST-scoring account group (ties prefer
+  // thick evidence, then the earliest source row — deterministic), so a
+  // citation's rows always belong to one genuine account and a roll-up row is
+  // never summed together with the detail rows it rolls up.
+  const byFile = new Map()
+  for (const group of byGroup.values()) {
+    const best = byFile.get(group.fileName)
+    if (
+      !best ||
+      group.confidence > best.confidence ||
+      (group.confidence === best.confidence && group.thick && !best.thick) ||
+      (group.confidence === best.confidence && group.thick === best.thick && group.firstRow < best.firstRow)
+    ) {
+      byFile.set(group.fileName, group)
     }
   }
 
@@ -493,6 +541,11 @@ export function matchAccount(account, index = [], options = {}) {
       }
     })
     .sort((a, b) => {
+      // Best evidence first — confidence, then richness (thick amount/description
+      // detail beats a name-only match) — so the cap never drops an exact-code GL
+      // citation in favor of weaker matches that merely sort earlier by file name.
+      if (b.confidence !== a.confidence) return b.confidence - a.confidence
+      if (a.thick !== b.thick) return a.thick ? -1 : 1
       const byName = a.fileName.localeCompare(b.fileName)
       if (byName !== 0) return byName
       return (a.sourceRows[0] ?? 0) - (b.sourceRows[0] ?? 0)

@@ -79,8 +79,15 @@ export async function extractSpreadsheet(file, maxRows) {
   }
 }
 
-function cellToText(v) {
+export function cellToText(v) {
   if (v === null || v === undefined) return ''
-  if (v instanceof Date) return v.toISOString().slice(0, 10)
+  // Format a date cell from its LOCAL components: SheetJS parses calendar dates
+  // to local time, so toISOString() would shift them a day for UTC+ timezones.
+  if (v instanceof Date) {
+    const y = v.getFullYear()
+    const m = String(v.getMonth() + 1).padStart(2, '0')
+    const d = String(v.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
   return String(v)
 }

@@ -18,6 +18,7 @@ import { scopeNarrative } from '../src/lib/narrative/periodScope.js'
 import {
   buildExcelModel,
   buildOwnerRows,
+  buildEvidenceRows,
   narrativeToExcelBuffer,
   OWNER_SHEET,
   EVIDENCE_SHEET,
@@ -86,7 +87,10 @@ const FLAGGED = [
   rec({ account: 'Utility Expense Recovery', actual: 12700, budget: 5334, accountType: 'expense', category: 'unfavorable', sourceRows: [4] })
 ]
 
-const FIXED_DATE = new Date('2026-06-15T00:00:00Z')
+// LOCAL midnight, not UTC: the export stamps the user's local click-time date
+// (a UTC read would date evening US exports tomorrow), so the fixture pins the
+// local calendar date to stay timezone-independent.
+const FIXED_DATE = new Date(2026, 5, 15)
 
 // --- pure model ------------------------------------------------------------
 
@@ -263,6 +267,94 @@ test('base-only narrative exports with no evidence sheet and no supporting detai
   await wb.xlsx.load(buf)
   assert.ok(wb.getWorksheet(OWNER_SHEET))
   assert.equal(wb.getWorksheet(EVIDENCE_SHEET), undefined, 'no evidence sheet when nothing is enriched')
+})
+
+// --- all narrated sections reach the owner + evidence sheets ----------------
+// The engine caps High Variances at 3 headline drivers and defers the remaining
+// triggered rows to Revenue/Expense/Context Notes. The Excel export must read
+// ALL of those sections: the deferred rows' Explanation/Supporting Detail and
+// their GL evidence used to be silently dropped (blank cells + a wrong
+// "High Variance" status), so the .xlsx disagreed with the DOCX/Markdown.
+
+// Three big headline drivers, one deferred expense note, one deferred revenue
+// note, and a deferred timing line that re-homes to Context Notes.
+const SPREAD = [
+  rec({ account: 'Exp Big', actual: 60000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [1] }),
+  rec({ account: 'Exp Mid', actual: 50000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [2] }),
+  rec({ account: 'Rev Big', actual: 40000, budget: 10000, accountType: 'revenue', category: 'favorable', sourceRows: [3] }),
+  rec({ account: 'Exp Small', actual: 30000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [4] }),
+  rec({ account: 'Rev Small', actual: 25000, budget: 10000, accountType: 'revenue', category: 'favorable', sourceRows: [5] }),
+  rec({ account: 'Prepaid Insurance', actual: 18000, budget: 10000, accountType: 'expense', category: 'unfavorable', sourceRows: [6] })
+]
+
+test('deferred Revenue/Expense/Context notes carry their explanation and section status', () => {
+  const narrative = baseNarrative(SPREAD)
+  // Sanity: the fixture really defers rows out of the headline.
+  const p = narrative.periods[0]
+  assert.equal(p.highVariances.length, 3)
+  assert.equal(p.revenueNotes.length, 1)
+  assert.equal(p.expenseNotes.length, 1)
+  assert.equal(p.contextNotes.length, 1)
+
+  const rows = buildOwnerRows(narrative)
+  const byAccount = Object.fromEntries(rows.map((r) => [r.account, r]))
+  // Headline drivers keep the High Variance status.
+  assert.equal(byAccount['Exp Big'].currentSection, 'High Variance')
+  assert.match(byAccount['Exp Big'].currentNarrative, /Exp Big/)
+  // Deferred notes name the section they actually live in — never a blank
+  // Explanation under a false "High Variance" label.
+  assert.equal(byAccount['Rev Small'].currentSection, 'Revenue Note')
+  assert.match(byAccount['Rev Small'].currentNarrative, /Rev Small/)
+  assert.equal(byAccount['Exp Small'].currentSection, 'Expense Note')
+  assert.match(byAccount['Exp Small'].currentNarrative, /Exp Small/)
+  assert.equal(byAccount['Prepaid Insurance'].currentSection, 'Context Note')
+  assert.match(byAccount['Prepaid Insurance'].currentNarrative, /Prepaid Insurance/)
+})
+
+test('GL evidence on a deferred note reaches the Supporting Evidence sheet', () => {
+  const gl = supporting({
+    fileName: 'General Ledger.pdf',
+    type: 'General Ledger (GL)',
+    columns: ['Account', 'Vendor', 'Amount'],
+    rows: [
+      ['Exp Small', 'Acme Services', '10000'],
+      ['Exp Small', 'Acme Services', '10000']
+    ]
+  })
+  const enriched = enrichNarrative(baseNarrative(SPREAD), { supporting: [gl] })
+  const evidence = buildEvidenceRows(enriched)
+  const row = evidence.find((r) => r.account === 'Exp Small')
+  assert.ok(row, 'evidence on an Expense Note row appears on the evidence sheet')
+  assert.equal(row.fileName, 'General Ledger.pdf')
+  // The owner row's Supporting Detail is populated too.
+  const owner = buildOwnerRows(enriched).find((r) => r.account === 'Exp Small')
+  assert.match(owner.currentSupporting, /^GL:/)
+})
+
+// --- comparison headers name the actual comparison basis --------------------
+
+test('prior-basis narrative heads the comparison columns "Prior Period", not "Budget"', () => {
+  const priorRows = [
+    rec({ account: 'Rental Income', actual: 12000, prior: 10000, accountType: 'revenue', category: 'favorable', sourceRows: [1] })
+  ]
+  const model = buildExcelModel(baseNarrative(priorRows), { generatedDate: FIXED_DATE })
+  const headers = model.ownerColumns.map((c) => c.header)
+  assert.ok(headers.includes('Current Prior Period'), `expected prior header, got ${headers}`)
+  assert.ok(!headers.includes('Current Budget'), 'prior-year figures must not be labeled Budget')
+
+  // Budget-basis narratives keep the default Budget headers.
+  const budgetModel = buildExcelModel(baseNarrative(FLAGGED), { generatedDate: FIXED_DATE })
+  assert.ok(budgetModel.ownerColumns.some((c) => c.header === 'Current Budget'))
+})
+
+// --- generated date is the LOCAL calendar date -------------------------------
+
+test('the Generated meta entry stamps the local click-time date', () => {
+  // 11:30 pm local on Dec 31 — a UTC read would roll this into next year for
+  // any user west of Greenwich.
+  const model = buildExcelModel(baseNarrative(FLAGGED), { generatedDate: new Date(2026, 11, 31, 23, 30) })
+  const byLabel = Object.fromEntries(model.meta.map((m) => [m.label, m.value]))
+  assert.equal(byLabel['Generated'], '2026-12-31')
 })
 
 test('an empty narrative still produces a valid workbook', async () => {

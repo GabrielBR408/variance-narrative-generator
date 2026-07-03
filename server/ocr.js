@@ -172,7 +172,9 @@ export async function runOcr({ images = [], ip = 'unknown', mode = 'gl' } = {}) 
   if (!Array.isArray(images) || images.length === 0) return empty
   if (!checkIpLimit(ip) || !checkGlobalLimit()) return empty
   try {
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    // Bounded timeout: fail into the silent empty-result fallback rather than
+    // riding the SDK's 10-minute default into a platform function timeout.
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 55000, maxRetries: 1 })
     const resp = await client.messages.create({
       model: OCR_MODEL,
       max_tokens: mode === 'incomeStatement' ? 10000 : OCR_MAX_TOKENS,
@@ -198,17 +200,24 @@ function clientIp(req) {
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0
-    const chunks = []
+    let overflow = false
+    let chunks = []
     req.on('data', (c) => {
+      if (overflow) return // keep draining so the response can still be delivered
       size += c.length
       if (size > MAX_BODY_BYTES) {
+        // Do NOT destroy the socket: tearing it down here made the graceful
+        // JSON fallback unsendable (client saw a connection reset). Reject,
+        // drop the buffer, and discard the rest of the stream instead.
+        overflow = true
+        chunks = []
         reject(new Error('payload too large'))
-        req.destroy()
         return
       }
       chunks.push(c)
     })
     req.on('end', () => {
+      if (overflow) return
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')))
       } catch (e) {
@@ -231,14 +240,16 @@ export async function handleOcr(req, res) {
     res.setHeader('Allow', 'POST')
     return json({ success: false, error: 'Method not allowed.' }, 405)
   }
-  // Disabled → silent no-op (don't even read the body).
-  if (!OCR_ENABLED) return json({ success: true, accounts: [] })
+  // Disabled → silent no-op (don't even read the body). The mode is unknown on
+  // these early exits, so include BOTH empty shapes — an incomeStatement caller
+  // reading `rows` must get [] here, not undefined.
+  if (!OCR_ENABLED) return json({ success: true, accounts: [], rows: [] })
 
   let body
   try {
     body = await readJsonBody(req)
   } catch {
-    return json({ success: true, accounts: [] })
+    return json({ success: true, accounts: [], rows: [] })
   }
   const images = Array.isArray(body && body.images) ? body.images : []
   const mode = body && body.mode === 'incomeStatement' ? 'incomeStatement' : 'gl'

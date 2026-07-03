@@ -18,17 +18,30 @@ function trimDecimal(x) {
   return String(Math.round(x * 10) / 10).replace(/\.0$/, '')
 }
 
+// Abbreviation tiers, smallest first: thousands, millions, billions.
+const DOLLAR_UNITS = [
+  { value: 1_000, suffix: 'K' },
+  { value: 1_000_000, suffix: 'M' },
+  { value: 1_000_000_000, suffix: 'B' }
+]
+
 // Abbreviate a single numeric dollar amount: 5000 → "$5K", 1200000 → "$1.2M",
-// -3400000 → "-$3.4M". Magnitudes under $1,000 are returned as a plain "$N"
-// (abbreviation is meaningless below a thousand). Non-finite input → null.
+// -3400000 → "-$3.4M", 1500000000 → "$1.5B". Magnitudes under $1,000 are
+// returned as a plain "$N" (abbreviation is meaningless below a thousand). A
+// value that ROUNDS UP across a unit boundary is promoted to the next tier
+// ($999,999 → "$1M", never "$1000K"). Non-finite input → null.
 export function abbreviateDollarAmount(value) {
   const n = Number(value)
   if (!Number.isFinite(n)) return null
   const sign = n < 0 ? '-' : ''
   const abs = Math.abs(n)
-  if (abs >= 1_000_000) return `${sign}$${trimDecimal(abs / 1_000_000)}M`
-  if (abs >= 1_000) return `${sign}$${trimDecimal(abs / 1_000)}K`
-  return `${sign}$${trimDecimal(abs)}`
+  if (abs < 1_000) return `${sign}$${trimDecimal(abs)}`
+  let i = DOLLAR_UNITS.length - 1
+  while (i > 0 && abs < DOLLAR_UNITS[i].value) i--
+  // Rounding promotion: 999,950+ scales to "1000K" at the thousands tier — the
+  // next tier up says it better ("$1M").
+  if (i < DOLLAR_UNITS.length - 1 && Math.round((abs / DOLLAR_UNITS[i].value) * 10) / 10 >= 1000) i++
+  return `${sign}$${trimDecimal(abs / DOLLAR_UNITS[i].value)}${DOLLAR_UNITS[i].suffix}`
 }
 
 // Rewrite every dollar token in a string to its abbreviated form. Figures below
@@ -43,8 +56,11 @@ export function abbreviateDollarsInText(text) {
   })
 }
 
-// Sections whose notes carry owner-facing sentences with dollar figures.
-const TEXT_SECTIONS = ['highVariances', 'revenueNotes', 'expenseNotes']
+// Sections whose notes carry owner-facing sentences with dollar figures. The
+// engine emits the executive summary as an ARRAY of note objects (like every
+// other section), and Context Notes carries re-homed variance sentences — both
+// must abbreviate alongside the High/Revenue/Expense notes.
+const TEXT_SECTIONS = ['executiveSummary', 'highVariances', 'revenueNotes', 'expenseNotes', 'contextNotes']
 
 // Apply dollar abbreviation across a finished narrative when `enabled`. When
 // disabled (the default) the narrative is returned unchanged by reference. Only
@@ -56,6 +72,7 @@ export function applyDollarAbbreviation(narrative, enabled) {
   const periods = narrative.periods.map((period) => {
     if (!period || typeof period !== 'object') return period
     const next = { ...period }
+    // Defensive: tolerate a legacy/hand-built string executive summary.
     if (typeof period.executiveSummary === 'string') {
       next.executiveSummary = abbreviateDollarsInText(period.executiveSummary)
     }

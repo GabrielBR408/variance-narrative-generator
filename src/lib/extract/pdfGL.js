@@ -425,6 +425,17 @@ function hasGLDateToken(line) {
     .some((t) => GL_DATE_RE.test(t))
 }
 
+// A money token the TEXT fallback may trust: decimal-formatted, as real GL value
+// columns print (cents included). GL_MONEY_RE also matches bare integers, which
+// the position-aware path disambiguates by x-band — but with no positions a bare
+// integer at the end of a memo ("unit 4567") would be absorbed into the value
+// run and become the amount, so the text path requires decimals.
+const GL_TEXT_MONEY_RE = /^\(?-?\$?\d[\d,]*\.\d+\)?$/
+
+// A GL prints at most Debit / Credit / Balance, so the trailing money run is
+// bounded to 3 tokens — a 4th trailing figure belongs to the description.
+const GL_TEXT_MONEY_MAX = 3
+
 // An account-section heading from text: "<code> <Name>", optionally preceded by
 // one or more entity/site codes (a MULTI-ENTITY GL prints "<site> <account-code>
 // <Name>", e.g. "990001 40120 Rental Income") and optionally followed by the
@@ -452,9 +463,9 @@ function glTextHeadingLabel(line) {
 
 // Parse one transaction line of a sectioned GL from its TEXT. Returns
 // { date, reference, description, amount } or null when the line is not a dated
-// transaction. The trailing run of money tokens is the value region: the first
-// is Debit, the second Credit, any third a running Balance (ignored). Per the
-// phase contract, amount = debit when debit > 0, else credit negated.
+// transaction; amount is null when the value columns cannot be read
+// unambiguously. The trailing run of decimal money tokens (at most 3) is the
+// value region — Debit / Credit / [Balance].
 function parseGLTextTransaction(line) {
   const tokens = String(line).split(/\s+/).filter(Boolean)
   // The entry date is the first true date token; a leading entity code and an
@@ -464,13 +475,30 @@ function parseGLTextTransaction(line) {
 
   // Trailing run of money tokens = the Debit / Credit / [Balance] value columns.
   let moneyStart = tokens.length
-  while (moneyStart > dateIdx + 1 && parseGLMoney(tokens[moneyStart - 1]) !== null) moneyStart--
-  const money = tokens.slice(moneyStart)
+  while (
+    moneyStart > dateIdx + 1 &&
+    tokens.length - moneyStart < GL_TEXT_MONEY_MAX &&
+    GL_TEXT_MONEY_RE.test(tokens[moneyStart - 1])
+  ) moneyStart--
+  const money = tokens.slice(moneyStart).map(parseGLMoney)
   if (money.length === 0) return null // a dated line with no value is not a usable transaction
 
-  const debit = parseGLMoney(money[0]) || 0
-  const credit = (money.length > 1 ? parseGLMoney(money[1]) : 0) || 0
-  const amount = debit > 0 ? debit : -credit
+  // Net amount by token count:
+  //   3 — Debit, Credit, Balance: net = debit − credit. Subtraction (not a
+  //       "debit > 0" gate) preserves a parenthesized/negative debit, so a
+  //       reversal row nets negative instead of collapsing to 0.
+  //   2 — either Debit+Credit (no balance column) or Credit+Balance (blank debit
+  //       cell). A zero disambiguates; two non-zero values are genuinely
+  //       ambiguous without x-positions, so no amount is emitted — mirroring how
+  //       the position-aware path suppresses on band ambiguity.
+  //   1 — the printed value, sign preserved.
+  let amount
+  if (money.length === 3) amount = money[0] - money[1]
+  else if (money.length === 2) {
+    if (money[1] === 0) amount = money[0]
+    else if (money[0] === 0) amount = -money[1]
+    else amount = null
+  } else amount = money[0]
 
   // Text between the date and the value region = reference + description. Pull an
   // optional leading document reference (e.g. "CHK1001", "AP 064697"); the rest

@@ -21,11 +21,15 @@ const ROLE_TYPE = {
 }
 
 // Keyword rules checked in order against the lowercased filename stem
-// (extension removed). First match wins; its confidence is reported as-is.
+// (extension removed). First match wins; its confidence is reported as-is. A
+// rule with an `unless` pattern is skipped when that pattern also matches — the
+// Budget rule must not swallow a variance report whose name carries both words
+// ("Budget Variance Report"), or the file is never a base candidate and upload
+// routing promotes the wrong file (e.g. a GL) into the base slot.
 // Patterns are kept readable on purpose so they are easy to audit and tune.
 const RULES = [
   { type: 'General Ledger (GL)',      confidence: 95, re: /general[\s_-]*ledger|(^|[^a-z])gl([^a-z]|$)/ },
-  { type: 'Budget',                   confidence: 95, re: /budget|forecast/ },
+  { type: 'Budget',                   confidence: 95, re: /budget|forecast/, unless: /variance|var[\s_-]*report/ },
   { type: 'Prior Month Report',       confidence: 90, re: /prior|previous|last[\s_-]*month|prev[\s_-]*month/ },
   { type: 'Existing Variance Report', confidence: 90, re: /variance|var[\s_-]*report/ },
   { type: 'Owner Example',            confidence: 90, re: /owner|sample|example|template|exhibit/ }
@@ -50,7 +54,7 @@ export function classifyFile({ name = '', role } = {}) {
   const stem = (ext ? name.slice(0, name.length - ext.length - 1) : name).toLowerCase()
 
   for (const rule of RULES) {
-    if (rule.re.test(stem)) {
+    if (rule.re.test(stem) && !(rule.unless && rule.unless.test(stem))) {
       return { type: rule.type, confidence: rule.confidence, basis: 'filename' }
     }
   }

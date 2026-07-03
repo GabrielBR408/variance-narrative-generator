@@ -131,7 +131,11 @@ export function diagnose({
   const unbudgeted = budgetBasis && (comparison === 0 || comparison === null)
   const hasActivity = !!thick && count > 0
   const zeroActual = actual === 0 || actual === null
-  const credit = (reliableTotal && total < 0) || (actual !== null && actual < 0)
+  // For a REVENUE account a net credit is normal income posting, not a true-up
+  // surprise — mirrors classify.js (category E is expense-only) and
+  // contribution.js (expectedSign treats revenue credits as consistent).
+  const credit =
+    accountType !== 'revenue' && ((reliableTotal && total < 0) || (actual !== null && actual < 0))
   const directionConflict = contributionType === 'direction-conflict'
   const offset = contributionType === 'offset-heavy' || classifyType === 'OH'
   const direction =

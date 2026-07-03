@@ -40,6 +40,13 @@ function resolveSets(input) {
   }
   // Flat/legacy shape: a single current period built from top-level fields.
   if (Array.isArray(input.comparisons)) {
+    // An empty-with-reason variance result (computeVariance's empty() shape,
+    // e.g. 'no-comparable-columns' / 'not-tabular') has nothing to narrate.
+    // Fabricating a "current" period here would render a false "no variances
+    // crossed the thresholds" clean bill of health for an uncomparable base —
+    // zero periods lets the exports' honest "No comparable variance data was
+    // found…" message fire instead, matching the preview's empty state.
+    if (input.comparisons.length === 0 && input.reason) return []
     return [{ period: 'current', comparisons: input.comparisons, summary: input.summary }]
   }
   return []

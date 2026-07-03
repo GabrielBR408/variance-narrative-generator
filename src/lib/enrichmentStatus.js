@@ -27,11 +27,7 @@ const REASON_TEXT = {
   api_error: 'AI temporarily unavailable'
 }
 
-// Same GL surface signal the rest of the app uses (copied so this helper has no
-// dependency on internal enrichment modules).
-const GL_TYPE_RE = /general\s*ledger|\bgl\b/i
-
-// Sections that can carry an LLM-enriched, GL-supported variance note.
+// Sections that can carry an LLM-enriched, citation-supported variance note.
 const FLAGGED_SECTIONS = ['highVariances', 'revenueNotes', 'expenseNotes']
 
 // Coerce any input to a known reason; default to the catch-all 'api_error' when
@@ -40,18 +36,22 @@ export function normalizeReason(reason) {
   return ENRICHMENT_REASONS.includes(reason) ? reason : 'api_error'
 }
 
-// True when a note carries a General Ledger supporting citation — i.e. it is a
-// line the LLM WOULD enrich when the AI is available.
-function noteIsGLEligible(note) {
-  return (
-    !!note &&
-    Array.isArray(note.support) &&
-    note.support.some((s) => GL_TYPE_RE.test(String(s && s.classificationType)))
-  )
+// True when a note carries ANY supporting citation — the population the
+// server-side enrichment actually targets (server/llm.js _buildPackets enriches
+// every note with `support`, including budget/prior-cited lines, not just
+// GL-cited ones). A note the LLM demonstrably enriched counts as eligible by
+// definition, so enrichedCount can never exceed eligibleCount and the
+// "nothing to enrich" fallback is never shown for a report that visibly
+// carries AI-enriched lines.
+function noteIsEligible(note) {
+  if (!note) return false
+  if (note.llmEnriched === true) return true
+  return Array.isArray(note.support) && note.support.length > 0
 }
 
-// Count, across all periods, the GL-eligible notes and the notes the LLM actually
-// enriched (llmEnriched === true).
+// Count, across all periods, the enrichment-eligible notes and the notes the LLM
+// actually enriched (llmEnriched === true) — the numerator and denominator are
+// drawn from the SAME note population.
 function countNotes(narrative) {
   let eligibleCount = 0
   let enrichedCount = 0
@@ -60,7 +60,7 @@ function countNotes(narrative) {
     for (const key of FLAGGED_SECTIONS) {
       const notes = Array.isArray(p && p[key]) ? p[key] : []
       for (const note of notes) {
-        if (noteIsGLEligible(note)) eligibleCount++
+        if (noteIsEligible(note)) eligibleCount++
         if (note && note.llmEnriched === true) enrichedCount++
       }
     }
@@ -137,15 +137,18 @@ export function enrichmentStatus({ narrative, reason } = {}) {
     }
   }
 
-  // No GL-eligible lines at all → there was nothing for the AI to enrich. Not a
-  // failure, and we do NOT claim the style settings were applied.
+  // No eligible lines at all → there was nothing for the AI to enrich (no line
+  // carries a supporting citation, and none was enriched — eligibility includes
+  // every llmEnriched line, so this branch is never reached when enrichment
+  // demonstrably happened). Not a failure, and we do NOT claim the style
+  // settings were applied.
   return {
     reason: 'ok',
     reasonText: '',
     status: 'Basic narrative',
     statusKind: 'none',
     message:
-      'Basic narrative shown — no supporting general-ledger detail to enrich. Add a GL file to enable AI commentary.',
+      'Basic narrative shown — no supporting detail cited on any line to enrich. Add a GL file to enable AI commentary.',
     enrichedCount: 0,
     eligibleCount: 0,
     fallbackCount: 0

@@ -21,8 +21,10 @@ import { normalize } from './normalize.js'
 // load only when a matching file is actually opened.
 
 // Display + processing caps. These bound memory and time; they are NOT storage
-// limits (nothing is ever stored).
-export const MAX_ROWS = 50
+// limits (nothing is ever stored). MAX_ROWS matches the PDF path's bound
+// (pdfShared.js MAX_TABLE_ROWS) so a routine 100+-line base income statement is
+// never silently truncated.
+export const MAX_ROWS = 500
 export const MAX_PAGES = 20
 export const EXTRACTION_TIMEOUT_MS = 20000
 
@@ -80,9 +82,11 @@ export async function extractFile({ file, fileId, classification } = {}) {
   const klass = classification || classifyFile({ name: fileName })
   const base = { fileId: fileId || fileName, fileName, classification: klass }
 
+  // A missing file is reported as empty BEFORE the extension check — a null
+  // upload has no real name, so it must never read as an unsupported file type.
+  if (!file || file.size === 0) return failure(base, 'empty')
   const kind = KIND_BY_EXT[extensionOf(fileName)]
   if (!kind) return failure(base, 'unsupported')
-  if (!file || file.size === 0) return failure(base, 'empty')
 
   try {
     let extracted

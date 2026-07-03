@@ -15,6 +15,14 @@ const COLUMN_PATTERNS = [
   ['actual', [/\bactual\b/, /\bactuals\b/, /\bcurrent\b/, /\bact\b/, /\bcur\b/]]
 ]
 
+// A variance/difference column carries DERIVED data the engine recomputes from
+// Actual − Budget, so it is never claimed as a value column. Checked before the
+// value patterns: a header like "Current Variance" also matches the generic
+// actual pattern (/\bcurrent\b/), and letting it claim the `actual` slot steals
+// the current period from the real unlabeled Actual|Budget block (which then
+// misreports as YTD). The most specific match — variance — types the column.
+const VARIANCE_COLUMN_RE = /\bvariance\b|\bvar\b|\bdiff(erence)?\b/
+
 // Header names that explicitly identify the account/label column.
 const ACCOUNT_RE = /account|acct|description|\bdesc\b|\bgl\b|\bname\b|line\s*item|\bitem\b|category|particulars/i
 
@@ -42,6 +50,7 @@ function explicitPeriod(header) {
 
 function matchType(header) {
   const h = String(header).toLowerCase()
+  if (VARIANCE_COLUMN_RE.test(h)) return null // derived column — never a value slot
   for (const [type, patterns] of COLUMN_PATTERNS) {
     if (patterns.some((re) => re.test(h))) return type
   }

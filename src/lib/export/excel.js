@@ -79,25 +79,30 @@ export const EVIDENCE_COLUMNS = [
   { header: 'Source Rows', key: 'sourceRows', width: 16 }
 ]
 
-const SECTIONS = [
+// Every owner-prose section a variance note can live in (see sectionDefs.js /
+// sections.js). The narrative engine caps High Variances at the top headline
+// drivers and routes the remaining triggered rows to Revenue/Expense/Context
+// Notes, so the Excel export must read ALL of them — reading highVariances
+// alone silently drops the deferred notes' text and evidence. The label is the
+// per-row Status naming the section the note actually lives in.
+const NARRATED_SECTIONS = [
   { key: 'highVariances', label: 'High Variance' },
-  { key: 'missingData', label: 'Missing Data' }
+  { key: 'revenueNotes', label: 'Revenue Note' },
+  { key: 'expenseNotes', label: 'Expense Note' },
+  { key: 'contextNotes', label: 'Context Note' }
 ]
 
-// Every narrative section that carries a VARIANCE note (a toNote() record with
-// figures + prose). Since NQ-3B the High Variances list is a concise top-N
-// headline and the remaining triggered rows are narrated in Revenue Notes /
-// Expense Notes / Context Notes — so the Excel export must read ALL of them, or
-// a flagged line whose sentence lives in a category note would show
-// "High Variance" status with a BLANK Explanation (silent dropped commentary).
-const VARIANCE_NOTE_SECTIONS = ['highVariances', 'revenueNotes', 'expenseNotes', 'contextNotes']
+const SECTIONS = [
+  ...NARRATED_SECTIONS,
+  { key: 'missingData', label: 'Missing Data' }
+]
 
 // All variance notes of one period, across the narrated sections, in section
 // order. The sections are pairwise disjoint by construction (NQ-3C), so this
 // never yields the same row twice.
 function varianceNotesOf(period) {
   const notes = []
-  for (const key of VARIANCE_NOTE_SECTIONS) {
+  for (const { key } of NARRATED_SECTIONS) {
     const sectionNotes = Array.isArray(period?.[key]) ? period[key] : []
     notes.push(...sectionNotes)
   }
@@ -119,9 +124,11 @@ function formatDate(value) {
   if (!value) return ''
   const d = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(d.getTime())) return ''
-  const y = d.getUTCFullYear()
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(d.getUTCDate()).padStart(2, '0')
+  // Local date components: the generated date is the user's click time, so a
+  // UTC read would stamp tomorrow's date for evening users west of Greenwich.
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
 
@@ -242,13 +249,16 @@ function buildPeriodEntries(period) {
     return entries
   }
 
-  // Index the narrated notes so each full-table row can pull its text/support.
-  // Notes are drawn from EVERY variance-note section (High Variances is only the
-  // top-N headline; the other triggered rows are narrated in Revenue / Expense /
-  // Context Notes) so no flagged row exports with a blank Explanation.
+  // Index the narrated notes — across EVERY prose section — so each full-table
+  // row can pull its text/support and the Status column can name the section
+  // the note actually lives in (headline drivers vs deferred category notes).
   const triggered = new Map()
-  for (const note of varianceNotesOf(period)) {
-    triggered.set(rowKey(note.account, note.sourceRows), note)
+  for (const { key, label } of NARRATED_SECTIONS) {
+    const notes = Array.isArray(period[key]) ? period[key] : []
+    for (const note of notes) {
+      const k = rowKey(note.account, note.sourceRows)
+      if (!triggered.has(k)) triggered.set(k, { note, label })
+    }
   }
   const missing = new Map()
   for (const note of Array.isArray(period.missingData) ? period.missingData : []) {
@@ -265,10 +275,10 @@ function buildPeriodEntries(period) {
       const note = missing.get(key)
       narrative = (note && note.text) || ''
     } else if (row.thresholdTriggered) {
-      section = 'High Variance'
-      const note = triggered.get(key)
-      narrative = (note && note.text) || ''
-      supporting = note ? ownerSupportSummary(note) : ''
+      const hit = triggered.get(key)
+      section = hit ? hit.label : 'High Variance'
+      narrative = (hit && hit.note.text) || ''
+      supporting = hit ? ownerSupportSummary(hit.note) : ''
     } else if (row.rollup) {
       section = 'Total'
     }
@@ -367,6 +377,8 @@ export function buildOwnerRows(narrative) {
 
 // Build the PURE supporting-evidence rows: one per matched supporting file per
 // enriched note, for traceability. This is the only place a file name appears.
+// Reads every narrated section — evidence on a note deferred to Revenue/
+// Expense/Context Notes must reach this sheet too, not only headline drivers.
 export function buildEvidenceRows(narrative) {
   const rows = []
   for (const period of periodsOf(narrative)) {
@@ -396,12 +408,45 @@ export function buildEvidenceRows(narrative) {
   return rows
 }
 
+// The comparison basis a period was computed against ('budget' | 'prior').
+// Per calculate.js a row prefers budget and falls back to prior, so the first
+// non-null comparisonType on the period's rows/notes speaks for the period
+// (sections.js carries it through on every note and every allVariances row).
+function periodComparisonType(period) {
+  const pools = [period?.allVariances, ...SECTIONS.map(({ key }) => period?.[key])]
+  for (const pool of pools) {
+    if (!Array.isArray(pool)) continue
+    for (const r of pool) {
+      if (r && (r.comparisonType === 'budget' || r.comparisonType === 'prior')) return r.comparisonType
+    }
+  }
+  return null
+}
+
+// Owner columns for ONE narrative: the comparison headers name the ACTUAL
+// comparison basis — "Current Budget" only when the period compared against a
+// budget, "Current Prior Period" when it compared against the prior period —
+// instead of always claiming Budget. OWNER_COLUMNS stays the budget-basis
+// default shape.
+export function ownerColumnsFor(narrative) {
+  const periods = periodsOf(narrative)
+  const label = (period, prefix) =>
+    `${prefix} ${periodComparisonType(period) === 'prior' ? 'Prior Period' : 'Budget'}`
+  const currentLabel = label(periods.find((p) => p?.period !== 'ytd') || null, 'Current')
+  const ytdLabel = label(periods.find((p) => p?.period === 'ytd') || null, 'YTD')
+  return OWNER_COLUMNS.map((c) => {
+    if (c.key === 'currentComparison') return { ...c, header: currentLabel }
+    if (c.key === 'ytdComparison') return { ...c, header: ytdLabel }
+    return c
+  })
+}
+
 // The full pure model the renderer consumes and tests assert against.
 export function buildExcelModel(narrative, { generatedDate, enrichment, correction } = {}) {
   return {
     title: EXCEL_TITLE,
     meta: buildMeta(narrative, generatedDate, enrichment, correction),
-    ownerColumns: OWNER_COLUMNS,
+    ownerColumns: ownerColumnsFor(narrative),
     ownerRows: buildOwnerRows(narrative),
     evidenceColumns: EVIDENCE_COLUMNS,
     evidenceRows: buildEvidenceRows(narrative)

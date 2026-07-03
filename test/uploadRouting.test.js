@@ -123,3 +123,70 @@ test('routeUpload is pure — it never mutates the arrays it is given', () => {
   routeUpload({ incoming: [f('Budget.xlsx')], currentBase: f('Variance.xlsx'), currentSupporting: support })
   assert.deepEqual(support.map((x) => x.name), ['GL.csv'])
 })
+
+// --- Dedupe by fileKey: re-drops replace, never duplicate -------------------
+
+test('re-dropping the same supporting batch replaces entries instead of duplicating them', () => {
+  const first = routeUpload({
+    incoming: [f('Variance.xlsx'), f('GL.csv'), f('Budget.xlsx')],
+    currentBase: null,
+    currentSupporting: []
+  })
+  const again = routeUpload({
+    incoming: [f('GL.csv'), f('Budget.xlsx')],
+    currentBase: first.base,
+    currentSupporting: first.supporting
+  })
+  assert.deepEqual(again.supporting.map((x) => x.name), ['GL.csv', 'Budget.xlsx'])
+  assert.equal(again.addedSupporting, 0)
+  assert.equal(again.notice, '')
+})
+
+test('a re-dropped supporting file replaces its entry in place (position kept)', () => {
+  const oldGl = f('GL.csv')
+  const newGl = f('GL.csv') // same name+size+mtime ⇒ same fileKey, new object
+  const r = routeUpload({
+    incoming: [newGl],
+    currentBase: f('Variance.xlsx'),
+    currentSupporting: [oldGl, f('Budget.xlsx')]
+  })
+  assert.deepEqual(r.supporting.map((x) => x.name), ['GL.csv', 'Budget.xlsx'])
+  assert.equal(r.supporting[0], newGl)
+  assert.equal(r.addedSupporting, 0)
+})
+
+test('a mixed batch adds only the genuinely new files and counts them honestly', () => {
+  const r = routeUpload({
+    incoming: [f('GL.csv'), f('Payroll Register.xlsx')],
+    currentBase: f('Variance.xlsx'),
+    currentSupporting: [f('GL.csv')]
+  })
+  assert.deepEqual(r.supporting.map((x) => x.name), ['GL.csv', 'Payroll Register.xlsx'])
+  assert.equal(r.addedSupporting, 1)
+  assert.match(r.notice, /Added 1 supporting file\b/)
+})
+
+test('re-dropping the base variance report refreshes the base slot, never duplicates it', () => {
+  const base = f('Variance.xlsx')
+  const redrop = f('Variance.xlsx') // same fileKey as the current base
+  const r = routeUpload({
+    incoming: [redrop],
+    currentBase: base,
+    currentSupporting: [f('GL.csv')]
+  })
+  assert.equal(r.base.name, 'Variance.xlsx')
+  // Same identity re-drop is a refresh, not a replacement — and it never lands
+  // in supporting alongside itself.
+  assert.equal(r.baseReplaced, false)
+  assert.deepEqual(r.supporting.map((x) => x.name), ['GL.csv'])
+})
+
+test('the same file twice in one batch lands once', () => {
+  const r = routeUpload({
+    incoming: [f('Variance.xlsx'), f('GL.csv'), f('GL.csv')],
+    currentBase: null,
+    currentSupporting: []
+  })
+  assert.deepEqual(r.supporting.map((x) => x.name), ['GL.csv'])
+  assert.equal(r.addedSupporting, 1)
+})

@@ -133,7 +133,9 @@ test('handleOcr is a silent no-op when OCR is disabled (no body read, no model c
   const res = mockRes()
   await handleOcr({ method: 'POST', headers: {} }, res)
   assert.equal(res.statusCode, 200)
-  assert.deepEqual(JSON.parse(res.body), { success: true, accounts: [] })
+  // The mode is unknown on the disabled early-exit, so BOTH empty shapes are
+  // returned — an incomeStatement caller reading `rows` must get [], not undefined.
+  assert.deepEqual(JSON.parse(res.body), { success: true, accounts: [], rows: [] })
 })
 
 test('handleOcr rejects a non-POST method', async () => {

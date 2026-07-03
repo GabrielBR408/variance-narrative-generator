@@ -24,14 +24,21 @@ function isGLType(t) {
   return GL_TYPE_RE.test(String(t))
 }
 
-// True when ANY high-variance note in the narrative carries a GL supporting
+// Sections that can carry a GL-supported variance note — the same sections
+// enrichmentStatus.js scans. High Variances is capped at a few headline rows, so
+// GL enrichment often lives only in Revenue/Expense Notes.
+const FLAGGED_SECTIONS = ['highVariances', 'revenueNotes', 'expenseNotes']
+
+// True when ANY flagged variance note in the narrative carries a GL supporting
 // citation — the structured `support` metadata the enrichment layer attaches.
 // This is the deterministic signal that GL enrichment ran for this narrative.
 export function narrativeHasGLEnrichment(narrative) {
   const periods = narrative && Array.isArray(narrative.periods) ? narrative.periods : []
   return periods.some((p) =>
-    (Array.isArray(p.highVariances) ? p.highVariances : []).some(
-      (n) => Array.isArray(n.support) && n.support.some((s) => isGLType(s && s.classificationType))
+    FLAGGED_SECTIONS.some((key) =>
+      (Array.isArray(p[key]) ? p[key] : []).some(
+        (n) => Array.isArray(n.support) && n.support.some((s) => isGLType(s && s.classificationType))
+      )
     )
   )
 }

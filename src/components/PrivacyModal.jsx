@@ -1,12 +1,18 @@
-import React from 'react'
+import React, { useRef } from 'react'
+import { useDialogA11y } from '../hooks/useDialogA11y.js'
 
 // First-visit privacy & AI disclosure. Shown once per browser; the
 // acknowledgement is persisted in localStorage by App. Extracted verbatim from
-// App() — onAccept records the acknowledgement and dismisses.
+// App() — onAccept records the acknowledgement and dismisses. Keyboard access:
+// focus moves to the "I understand" button on open and Escape closes the
+// notice — acknowledging is its only close action, so Escape maps to onAccept.
 export default function PrivacyModal({ onAccept }) {
+  const dialogRef = useRef(null)
+  useDialogA11y({ dialogRef, onEscape: onAccept })
+
   return (
     <div className="llm-disclosure-overlay" role="dialog" aria-modal="true" aria-labelledby="privacy-disclosure-title">
-      <div className="llm-disclosure-dialog">
+      <div className="llm-disclosure-dialog" ref={dialogRef} tabIndex={-1}>
         <h2 id="privacy-disclosure-title" className="llm-disclosure-title">Privacy &amp; AI Disclosure</h2>
         <p className="llm-disclosure-body">
           Your files are processed locally in your browser and are never stored on our servers. File content is only sent to Anthropic (creator of Claude AI) when GL transaction detail is sent to generate cited commentary, or when PDF text scanning is needed to read a file. Anthropic does not use API data for model training by default. See Anthropic&rsquo;s privacy policy at{' '}

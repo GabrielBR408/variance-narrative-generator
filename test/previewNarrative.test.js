@@ -188,6 +188,23 @@ test('period scope narrows a two-period base preview', () => {
   assert.deepEqual(ytd.periods.map((p) => p.period), ['ytd'])
 })
 
+// --- style: dollar abbreviation matches the generated result -----------------
+
+test('the preview abbreviates dollar values when the style toggle is on', () => {
+  const items = [baseExtraction()]
+  // Toggle on: the preview shows the same "$7.4K" the generated result will.
+  const on = buildPreviewNarrative({ items, style: { abbreviateDollars: true } })
+  const onNote = on.periods[0].highVariances.find((n) => n.account === 'Utility Expense Recovery')
+  assert.match(onNote.text, /\$7\.4K/)
+  assert.doesNotMatch(onNote.text, /\$7,366/)
+  // Toggle off / absent: unchanged full figures (backward compatible).
+  for (const style of [undefined, null, { abbreviateDollars: false }]) {
+    const off = buildPreviewNarrative({ items, style })
+    const note = off.periods[0].highVariances.find((n) => n.account === 'Utility Expense Recovery')
+    assert.match(note.text, /\$7,366/)
+  }
+})
+
 // --- determinism ------------------------------------------------------------
 
 test('buildPreviewNarrative is deterministic for the same inputs', () => {

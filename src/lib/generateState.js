@@ -86,17 +86,23 @@ export function generateClickAction({ acknowledged, busy } = {}) {
 // uploaded file set, the on-screen result and its exports no longer match the
 // current inputs until they regenerate. This pure comparator flags that drift.
 //
-// Tracked: dollar threshold, percent threshold, commentary mode, and the file
-// set (base identity + sorted supporting identities, Phase 22.3). Period scope is
+// Tracked: dollar threshold, percent threshold, commentary mode, the full
+// effective STYLE (reportStyle, tone, length, abbreviateDollars,
+// dollarReferences — every one shapes the generated output, abbreviation
+// included since it is baked in at generate time), and the file set (base
+// identity + sorted supporting identities, Phase 22.3). Period scope is
 // deliberately NOT tracked — it is applied live at render/export time, so changing
 // it never makes a result stale.
 //
 //   generated, current :
-//     { amountThreshold, percentThreshold, commentaryMode, baseKey?, supportingKeys? }
+//     { amountThreshold, percentThreshold, commentaryMode,
+//       reportStyle?, tone?, length?, abbreviateDollars?, dollarReferences?,
+//       baseKey?, supportingKeys? }
 // Returns { stale, changed } where `changed` lists which groups drifted
-// ('thresholds', 'commentary', and/or 'files'). Missing inputs → "not stale".
-// File drift is only evaluated when the snapshot actually carried file identities,
-// so results generated before this tracking existed are never falsely flagged.
+// ('thresholds', 'commentary', 'style', and/or 'files'). Missing inputs → "not
+// stale". Style and file drift are only evaluated when the snapshot actually
+// carried those identities, so results generated before this tracking existed
+// are never falsely flagged.
 function sameKeys(a, b) {
   const x = Array.isArray(a) ? a : []
   const y = Array.isArray(b) ? b : []
@@ -104,6 +110,10 @@ function sameKeys(a, b) {
   for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false
   return true
 }
+
+// The Style-panel fields that change generated output (matches
+// uiControls.STYLE_ACTIVE_FIELDS keys).
+const STYLE_SNAPSHOT_FIELDS = ['reportStyle', 'tone', 'length', 'abbreviateDollars', 'dollarReferences']
 
 export function resultFreshness({ generated, current } = {}) {
   if (!generated || !current) return { stale: false, changed: [] }
@@ -113,6 +123,12 @@ export function resultFreshness({ generated, current } = {}) {
     Number(generated.percentThreshold) !== Number(current.percentThreshold)
   if (thresholdsDiffer) changed.push('thresholds')
   if (generated.commentaryMode !== current.commentaryMode) changed.push('commentary')
+
+  const tracksStyle = STYLE_SNAPSHOT_FIELDS.some((k) => k in generated)
+  if (tracksStyle) {
+    const styleDiffers = STYLE_SNAPSHOT_FIELDS.some((k) => generated[k] !== current[k])
+    if (styleDiffers) changed.push('style')
+  }
 
   const tracksFiles = 'baseKey' in generated || 'supportingKeys' in generated
   if (tracksFiles) {
@@ -131,6 +147,15 @@ export function resultFreshness({ generated, current } = {}) {
 // the rule is testable; the App applies it in an effect.
 export function shouldDiscardResult({ hasBase, hasResult } = {}) {
   return !!hasResult && !hasBase
+}
+
+// Should a lingering failure be cleared? A failure message describes the file
+// set it failed ON — once the user changes that file set (swaps in a good file,
+// removes the bad one) the old alert would wrongly imply the NEW files are also
+// bad, so the failure status/message reset to idle. Pure so the rule is
+// testable; the App applies it in an effect keyed on the file-set identity.
+export function shouldClearFailure({ status, filesChanged } = {}) {
+  return status === 'failure' && !!filesChanged
 }
 
 // How many supporting files are still being read. Phase 22.3: used for a

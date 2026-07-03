@@ -77,6 +77,19 @@ export function _buildPackets(flaggedNotes, period) {
   return enrichable.slice(0, MAX_NOTES).map((note, i) => {
     const diagnosis = note.diagnosis || {}
 
+    // diagnose() returns qualifiers as an OBJECT ({recurring, oneTime, credit,
+    // offset, structural, direction}) — the old Array.isArray guard silently sent
+    // [] on every request, dropping the qualifiers from the prompt. Flatten the
+    // true flags (plus the direction string) into the tag array the prompt expects.
+    const q = diagnosis.qualifiers
+    const qualifiers = Array.isArray(q)
+      ? q
+      : q && typeof q === 'object'
+        ? Object.keys(q)
+            .filter((k) => q[k] === true)
+            .concat(typeof q.direction === 'string' && q.direction ? [`direction:${q.direction}`] : [])
+        : []
+
     let glRows = []
     if (note.preparedEvidence && Array.isArray(note.preparedEvidence.glRows)) {
       glRows = note.preparedEvidence.glRows
@@ -116,7 +129,7 @@ export function _buildPackets(flaggedNotes, period) {
       period: period || '',
       diagnosis: {
         nature: diagnosis.nature || null,
-        qualifiers: Array.isArray(diagnosis.qualifiers) ? diagnosis.qualifiers : [],
+        qualifiers,
         confidence: diagnosis.confidence || null,
         basis: diagnosis.basis || null
       },
@@ -237,7 +250,10 @@ export async function enrichWithLLM(flaggedNotes, { period = '', style = null, d
 
   try {
     const { default: Anthropic } = await import('@anthropic-ai/sdk')
-    const client = new Anthropic({ apiKey })
+    // A bounded timeout so a stalled API call fails into the deterministic
+    // fallback instead of riding the SDK's 10-minute default into the platform's
+    // function-duration kill (which surfaces as a raw 504 to the user).
+    const client = new Anthropic({ apiKey, timeout: 45000, maxRetries: 1 })
 
     const userContent =
       JSON.stringify(toApiPayload(packets)) +

@@ -9,6 +9,7 @@ import assert from 'node:assert/strict'
 
 import { computeVariance } from '../src/lib/variance/index.js'
 import { generateNarrative } from '../src/lib/narrative/index.js'
+import { narrativeToMarkdown } from '../src/lib/export/markdown.js'
 import { HIGH_VARIANCE_HEADLINE_LIMIT } from '../src/lib/narrative/sections.js'
 
 // --- helpers ---------------------------------------------------------------
@@ -300,6 +301,32 @@ test('an empty variance result produces a narrative with no periods', () => {
   assert.deepEqual(n.periods, [])
 })
 
+test('an empty-with-reason variance result (flat shape) also produces no periods', () => {
+  // computeVariance's empty() shape carries comparisons: [] plus a reason but no
+  // comparisonSets. Fabricating a "current" period from it rendered a false
+  // "no variances crossed the thresholds" clean bill of health for an
+  // uncomparable base; zero periods lets the exports' honest empty message fire.
+  const extraction = {
+    fileId: 'f1', fileName: 'notes.xlsx', status: 'ok', confidence: 95,
+    classification: { type: 'variance-report' },
+    normalized: { columns: ['Memo', 'Detail'], rows: [['just', 'text']], accounts: [], dates: [], values: [] }
+  }
+  const variance = computeVariance(extraction)
+  assert.equal(variance.reason, 'no-comparable-columns')
+  const n = generateNarrative(variance)
+  assert.deepEqual(n.periods, [])
+  // The export path states the truth instead of "no variances crossed …".
+  const md = narrativeToMarkdown(n)
+  assert.match(md, /No comparable variance data was found/)
+  assert.doesNotMatch(md, /no variances crossed/i)
+})
+
+test('a legacy flat result with zero comparisons and NO reason keeps its single period', () => {
+  const n = generateNarrative({ fileId: 'x', fileName: 'flat.pdf', comparisons: [] })
+  assert.equal(n.periods.length, 1)
+  assert.equal(n.periods[0].period, 'current')
+})
+
 // --- integration: variance → narrative ------------------------------------
 
 const COLUMNS = [
@@ -353,6 +380,40 @@ test('rollup detector flags uncoded TOTAL/NET/GROSS/SUBTOTAL lines only', () => 
   // not rollups: "Internet"/"Network" must not match the \bnet\b / leading rule.
   for (const l of ['Internet Expense', 'Network Services', 'Grossman Catering'])
     assert.equal(isRollupLabel(l), false, `${l} is a real account`)
+})
+
+test('rollup detector tolerates MRI-style leading decoration on subtotals', () => {
+  // Real exports print subtotals like "** TOTAL OTHER INCOME"; treating them as
+  // account lines narrated and double-counted the aggregate.
+  for (const l of ['** TOTAL OTHER INCOME', '  Total Operating Expenses', '* NET OPERATING INCOME', '• Subtotal Utilities'])
+    assert.equal(isRollupLabel(l), true, `${l} should be a rollup`)
+})
+
+test('rollup detector keeps net/gross-prefixed DETAIL lines narratable', () => {
+  // "Gross Potential Rent" / "Gross Scheduled Income" are standard detail income
+  // lines on commercial property statements — suppressing them silently hid a
+  // $25k variance on the biggest revenue line.
+  for (const l of ['Gross Potential Rent', 'Gross Scheduled Income', 'Net Rentable Area Fees'])
+    assert.equal(isRollupLabel(l), false, `${l} is a real detail line`)
+  // Genuine net/gross aggregates still read as roll-ups.
+  for (const l of ['NET CASH FLOW', 'Gross Margin', 'NET INCOME (LOSS)', 'Gross Operating Income'])
+    assert.equal(isRollupLabel(l), true, `${l} is a genuine roll-up`)
+})
+
+test('a decorated subtotal is excluded and a Gross-prefixed detail line is narrated', () => {
+  const r = result([
+    { period: 'current', comparisons: [
+      rec({ account: '** TOTAL OTHER INCOME', actual: 200000, budget: 150000, accountType: 'revenue', category: 'favorable', sourceRows: [0] }),
+      rec({ account: 'Gross Potential Rent', actual: 175000, budget: 200000, accountType: 'revenue', category: 'unfavorable', sourceRows: [1] })
+    ] }
+  ])
+  const p = generateNarrative(r).periods[0]
+  // The decorated aggregate is never narrated and never counted.
+  for (const sec of ['highVariances', 'revenueNotes', 'expenseNotes'])
+    assert.ok(!p[sec].some((n) => /TOTAL OTHER INCOME/.test(n.account)), `rollup leaked into ${sec}`)
+  assert.match(p.executiveSummary[0].text, /1 variance totaling \$25,000/)
+  // The $25k unfavorable movement on the detail income line leaves a trace.
+  assert.ok(p.highVariances.some((n) => n.account === 'Gross Potential Rent'))
 })
 
 test('rollup/subtotal lines are excluded from owner-facing variance notes', () => {

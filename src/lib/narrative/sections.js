@@ -13,6 +13,7 @@
 // back to the exact record without re-parsing the prose.
 
 import { formatMoney } from './formatters.js'
+import { isNetGrossRollup } from '../variance/sectionType.js'
 import {
   varianceSentence,
   missingSentence,
@@ -86,12 +87,20 @@ function toNote(c) {
 // suppresses a coded account, and never suppresses a named account that merely
 // contains one of the words later (e.g. "Internet Expense"). Source rows and
 // variance figures are untouched — this is presentation only.
-const ROLLUP_PREFIX_RE = /^(total|net|gross|subtotal)\b/i
+//
+// Leading spaces / asterisks / bullets are stripped first, aligning with
+// sectionType.js SECTION_TOTAL_RE — real exports (e.g. MRI) print subtotals
+// like "** TOTAL OTHER INCOME". NET/GROSS labels only count as roll-ups for
+// GENUINE aggregate phrases (shared isNetGrossRollup): "Gross Potential Rent"
+// and "Gross Scheduled Income" are standard DETAIL income lines on commercial
+// property statements and must stay narratable.
+const ROLLUP_DECORATION_RE = /^[\s*•·-]+/
+const ROLLUP_PREFIX_RE = /^(total|subtotal)\b/i
 export function isRollupLabel(label = '') {
-  const s = String(label).trim()
+  const s = String(label).trim().replace(ROLLUP_DECORATION_RE, '')
   if (!s) return false
-  if (/^\s*[0-9]/.test(s)) return false // coded account → a real line, never a rollup
-  return ROLLUP_PREFIX_RE.test(s)
+  if (/^[0-9]/.test(s)) return false // coded account → a real line, never a rollup
+  return ROLLUP_PREFIX_RE.test(s) || isNetGrossRollup(s)
 }
 
 // NQ-2C — ZERO_NOISE suppression.

@@ -32,13 +32,20 @@ export function isTriggered(varianceAmount, variancePercent, thresholds = DEFAUL
 // Map the UI's Variance-Detail settings ({ dollarThreshold, percentThreshold },
 // which arrive as strings from the form) to engine thresholds ({ amount, percent }).
 // Only finite, non-negative values are honored; anything else falls back to the
-// central defaults. Pure and deterministic so the live preview and the generate
+// central default FOR THAT FIELD. Number('') === 0, so a blanked threshold input
+// must be treated as unset — not as a 0 threshold that would flag every
+// computable row. Pure and deterministic so the live preview and the generate
 // path can flag rows with the SAME numbers (Phase 22.1 preview fidelity).
+function thresholdField(value, fallback) {
+  if (value === '' || value === null || value === undefined) return fallback
+  if (typeof value === 'string' && value.trim() === '') return fallback
+  const n = Number(value)
+  return Number.isFinite(n) && n >= 0 ? n : fallback
+}
+
 export function thresholdsFromSettings(settings) {
-  const amount = Number(settings?.dollarThreshold)
-  const percent = Number(settings?.percentThreshold)
-  if (Number.isFinite(amount) && amount >= 0 && Number.isFinite(percent) && percent >= 0) {
-    return { amount, percent }
+  return {
+    amount: thresholdField(settings?.dollarThreshold, DEFAULT_THRESHOLDS.amount),
+    percent: thresholdField(settings?.percentThreshold, DEFAULT_THRESHOLDS.percent)
   }
-  return DEFAULT_THRESHOLDS
 }

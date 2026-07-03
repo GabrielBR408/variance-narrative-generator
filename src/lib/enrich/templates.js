@@ -162,7 +162,9 @@ export function commentarySentence({ type, account, detail, period, contribution
   const ALIGNED_QUANTIFIED = new Set(['A', 'B', 'C', 'I', 'F'])
   if (reliableTotal && contribution && ALIGNED_QUANTIFIED.has(type)) {
     if (contribution.vendorRenderable && d.vendor) {
-      return `The movement reflects approximately ${approxMoney(total)} of related ${d.vendor} activity${yp}.`
+      // Like every other vendor render, the raw extracted vendor (often an
+      // ALL-CAPS blob) is polished before it reaches owner text.
+      return `The movement reflects approximately ${approxMoney(total)} of related ${polishVendor(d.vendor)} activity${yp}.`
     }
     if (contribution.descriptionRenderable && d.description) {
       const base = shapeSentence({ type, account, count, total, reliableTotal, maxTxn, yp, accountType })

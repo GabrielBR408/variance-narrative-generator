@@ -166,7 +166,9 @@ async function defaultCallModel(userContent) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return ''
   const { default: Anthropic } = await import('@anthropic-ai/sdk')
-  const client = new Anthropic({ apiKey })
+  // Bounded timeout: a stalled validation call must fail into "no correction"
+  // (silent) rather than ride out the SDK default and hit the platform timeout.
+  const client = new Anthropic({ apiKey, timeout: 30000, maxRetries: 1 })
   const response = await client.messages.create({
     model: VALIDATION_MODEL,
     max_tokens: 512,

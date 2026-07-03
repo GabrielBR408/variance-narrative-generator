@@ -16,6 +16,7 @@ import {
   extractionReadiness,
   resultFreshness,
   shouldDiscardResult,
+  shouldClearFailure,
   pendingSupportingCount,
   generateClickAction
 } from './lib/generateState.js'
@@ -158,7 +159,8 @@ export default function App() {
 
   // Phase 22.2/22.3: is the displayed result (and its exports) still in sync with
   // the current inputs? Compares the snapshot taken at generate time against the
-  // live thresholds, commentary mode, and uploaded file set. Period scope is
+  // live thresholds, commentary mode, full effective style (every Style-panel
+  // field changes the generated output), and uploaded file set. Period scope is
   // deliberately excluded — it is applied live, so changing it never makes a
   // result stale.
   const freshness = useMemo(() => {
@@ -169,6 +171,11 @@ export default function App() {
         amountThreshold: previewThresholds.amount,
         percentThreshold: previewThresholds.percent,
         commentaryMode: commentaryModeFromStyle(style),
+        reportStyle: style.reportStyle,
+        tone: style.tone,
+        length: style.length,
+        abbreviateDollars: !!style.abbreviateDollars,
+        dollarReferences: style.dollarReferences,
         baseKey: baseReport ? fileKey(baseReport) : null,
         supportingKeys: supportingFiles.map(fileKey).sort()
       }
@@ -220,6 +227,20 @@ export default function App() {
     }
   }, [baseReport, result])
 
+  // A failure message describes the file set it failed on. Once the user
+  // changes that set (swaps in a good file, removes the bad one), the old alert
+  // would wrongly imply the new files are also bad — clear it back to idle.
+  const fileSetKey = [baseReport ? fileKey(baseReport) : '', ...supportingFiles.map(fileKey).sort()].join('|')
+  const prevFileSetKeyRef = useRef(fileSetKey)
+  useEffect(() => {
+    const filesChanged = prevFileSetKeyRef.current !== fileSetKey
+    prevFileSetKeyRef.current = fileSetKey
+    if (shouldClearFailure({ status, filesChanged })) {
+      setStatus('idle')
+      setMessage('')
+    }
+  }, [fileSetKey, status])
+
   return (
     <main className="page">
       <header className="masthead">
@@ -261,6 +282,7 @@ export default function App() {
             periodScope={periodScope}
             commentaryMode={commentaryModeFromStyle(style)}
             thresholds={previewThresholds}
+            style={style}
           />
         </SettingsPanel>
 

@@ -294,6 +294,16 @@ function enrichNote(note, index, options, period, budgetIndex = []) {
     }
     if (!clause) clause = explanationClause({ classificationType: primary.classificationType })
     if (clause) text = mergeClause(note.text, clause)
+    // NQ-2B parity: route this branch through the same note-level finalization
+    // the no-citation and GL branches apply (zero-actual statement, credit /
+    // reversal callout, material-review flag). A budget/prior primary means no
+    // GL citation exists on the note (GL always outranks it), so hasCitation is
+    // false — same as the uncited branch — and rule 4 can still flag a material
+    // line for review.
+    if (options.mode === 'detailed') {
+      const factual = finalizeNoteCommentary({ note, glSentence: null, hasCitation: false })
+      if (factual) text = appendSentence(text, factual)
+    }
   }
   const result = { ...note, text, originalText: note.text, support, enriched: true }
   if (budgetCtxUsed) result.budgetContext = budgetCtxUsed

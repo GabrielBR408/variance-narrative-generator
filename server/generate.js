@@ -28,11 +28,17 @@ import { commentaryModeFromStyle } from '../src/lib/enrich/commentaryMode.js'
 import { LLM_ENABLED, checkIpLimit, checkGlobalLimit, enrichWithLLM } from './llm.js'
 import { validateFileRoles } from './validateRoles.js'
 import { evaluateBaseRouting } from '../src/lib/variance/baseGate.js'
+import { thresholdsFromSettings as mapThresholds } from '../src/lib/variance/thresholds.js'
 
 // Reasonable safety limits. Files are never stored, so these only guard memory
 // and request time, not storage.
 const MAX_FILE_BYTES = 25 * 1024 * 1024 // 25 MB per file
 const MAX_FILES = 25
+// The `extractions` form field carries the browser's entire normalized
+// extraction (base + all supporting GLs) as JSON. Busboy's default fieldSize is
+// 1 MB, which silently truncated large GLs mid-string and surfaced as a bogus
+// "base report could not be read" error. Size it like a file.
+const MAX_FIELD_BYTES = 25 * 1024 * 1024
 
 const ALLOWED_EXT = new Set(['pdf', 'xlsx', 'xls', 'csv', 'docx'])
 const ALLOWED_MIME = new Set([
@@ -59,15 +65,13 @@ function sendJson(res, status, payload) {
 }
 
 // Translate the variance settings sent by the UI into engine thresholds. Only
-// finite, non-negative numbers are honored; anything else lets the pipeline fall
-// back to the central defaults. Returns undefined when no override applies.
+// finite, non-negative numbers are honored; anything else falls back to the
+// central default for that field.
 function thresholdsFromSettings(varianceSettings) {
-  const amount = Number(varianceSettings?.dollarThreshold)
-  const percent = Number(varianceSettings?.percentThreshold)
-  if (Number.isFinite(amount) && amount >= 0 && Number.isFinite(percent) && percent >= 0) {
-    return { amount, percent }
-  }
-  return undefined
+  // Delegates to the central mapper so the server flags rows with the SAME
+  // numbers as the live preview — including its per-field fallback (a blanked
+  // input reverts THAT field to its default, never to a 0 threshold).
+  return mapThresholds(varianceSettings)
 }
 
 // Pure response builder — no HTTP, no streams. Validates the upload, then runs
@@ -106,9 +110,26 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
   let supporting = Array.isArray(extractions && extractions.supporting) ? extractions.supporting : []
   let filesOut = files
   let correction = null
+
+  // LLM gate — evaluated ONCE per request. checkIpLimit/checkGlobalLimit consume
+  // a quota slot on every call, so consulting them at both the validator and the
+  // enrichment step burned two slots per generate. One evaluation feeds both.
+  // The key check comes first so a deployment without ANTHROPIC_API_KEY (where
+  // no LLM call can ever happen) never consumes quota at all.
+  let llmAllowed = false
+  let llmBlockReason = 'api_error'
+  if (LLM_ENABLED && llmMode === 'cited' && process.env.ANTHROPIC_API_KEY) {
+    const ipAllowed = checkIpLimit(ip || 'unknown')
+    const globalAllowed = ipAllowed && checkGlobalLimit()
+    llmAllowed = ipAllowed && globalAllowed
+    // checkGlobalLimit is only consulted when the IP limit passed, so
+    // !ipAllowed means the IP limit was the breach.
+    if (!llmAllowed) llmBlockReason = ipAllowed ? 'circuit_breaker' : 'rate_limit'
+  }
+
   const validator = _validateForTest
     ? _validateForTest
-    : LLM_ENABLED && llmMode === 'cited' && checkIpLimit(ip || 'unknown') && checkGlobalLimit()
+    : llmAllowed
       ? validateFileRoles
       : null
   if (validator) {
@@ -169,9 +190,7 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
   let finalNarrative = narrative
   let enrichmentReason = 'api_error'
   if (LLM_ENABLED && llmMode === 'cited') {
-    const ipAllowed = checkIpLimit(ip || 'unknown')
-    const globalAllowed = ipAllowed && checkGlobalLimit()
-    if (ipAllowed && globalAllowed) {
+    if (llmAllowed) {
       // Run deterministic enrichment server-side to populate note.support and
       // note.preparedEvidence on matching notes. The client will skip notes
       // already marked enriched:true, so there is no double-enrichment. Uses the
@@ -195,9 +214,7 @@ export async function buildGenerateResponse({ files = [], extractions = null, st
       finalNarrative = { ...enrichedNarrative, periods: llmPeriods }
       enrichmentReason = llmDiagnostics.reason
     } else {
-      // Short-circuit matches the original: checkGlobalLimit is only consulted
-      // when the IP limit passed, so !ipAllowed means the IP limit was the breach.
-      enrichmentReason = ipAllowed ? 'circuit_breaker' : 'rate_limit'
+      enrichmentReason = llmBlockReason
     }
   }
 
@@ -242,7 +259,7 @@ export function handleGenerate(req, res) {
   try {
     bb = Busboy({
       headers: req.headers,
-      limits: { fileSize: MAX_FILE_BYTES, files: MAX_FILES }
+      limits: { fileSize: MAX_FILE_BYTES, files: MAX_FILES, fieldSize: MAX_FIELD_BYTES }
     })
   } catch {
     // Not multipart / missing boundary / malformed request line.
@@ -293,6 +310,12 @@ export function handleGenerate(req, res) {
     })
   })
 
+  // Busboy silently skips file streams beyond `limits.files` — without this the
+  // 26th file just vanished and filesReceived undercounted with no error.
+  bb.on('filesLimit', () => {
+    flagError(413, `Too many files. The limit is ${MAX_FILES} files per generate.`)
+  })
+
   bb.on('error', () => {
     if (responded) return
     responded = true
@@ -309,7 +332,11 @@ export function handleGenerate(req, res) {
       return
     }
 
-    const clientIp = req.socket?.remoteAddress || req.connection?.remoteAddress || null
+    // Behind Vercel's proxy the socket address is the platform, not the user —
+    // x-forwarded-for's first hop is the real client (same as server/ocr.js).
+    const fwd = req.headers && req.headers['x-forwarded-for']
+    const clientIp = (typeof fwd === 'string' && fwd ? fwd.split(',')[0].trim() : null) ||
+      req.socket?.remoteAddress || req.connection?.remoteAddress || null
     buildGenerateResponse({
       files,
       extractions: parseJsonField(fields.extractions),

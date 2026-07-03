@@ -8,14 +8,20 @@ import { Analytics } from '@vercel/analytics/react'
 
 // --- Lightweight path routing ---------------------------------------------
 // The app has no router dependency; a single pathname switch keeps it that way.
-//   /vng → the existing Variance Narrative Generator app (unchanged)
+//   /vng (and anything under it) → the Variance Narrative Generator app
 //   /    → the hub landing page (and any other in-app path falls back to it)
 // Deep paths still load index.html (the SPA rewrite in vercel.json), so this
-// switch decides what renders. /downdriller and /orgen never reach here —
-// vercel.json proxies them to other Vercel projects.
+// switch decides what renders — a stale or mistyped /vng/... deep link must
+// land in the app, not silently render the hub. /downdriller and /orgen never
+// reach here — vercel.json proxies them to other Vercel projects. The document
+// title is set per route so the hub doesn't carry the VNG title from index.html.
 function pickRoute() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
-  if (path === '/vng') return <App />
+  if (path === '/vng' || path.startsWith('/vng/')) {
+    document.title = 'Variance Narrative Generator'
+    return <App />
+  }
+  document.title = 'ChiefEO Tools'
   return <Hub />
 }
 

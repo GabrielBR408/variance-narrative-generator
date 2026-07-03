@@ -19,6 +19,7 @@ import { DEFAULT_THRESHOLDS, thresholdsFromSettings } from './variance/threshold
 import { generateNarrative } from './narrative/index.js'
 import { enrichNarrative } from './enrich/index.js'
 import { scopeNarrative, DEFAULT_PERIOD_SCOPE } from './narrative/periodScope.js'
+import { applyDollarAbbreviation } from './narrative/dollarAbbrev.js'
 
 // The classification an uploaded file carries when it sits in the base slot
 // (see src/lib/classify.js — role 'baseReport' wins outright). This is the only
@@ -50,11 +51,17 @@ function splitBaseSupporting(items = []) {
 // with the user's CURRENT thresholds — the same numbers the generate path uses —
 // instead of a hardcoded default. Defaults to the central thresholds for
 // backward compatibility.
+//
+// `style` mirrors the generate path's cosmetic pass (useGenerate.js): when the
+// "Abbreviate Dollar Values" toggle is on, the preview shows the same "$5K"
+// figures the generated result will. Absent/off → identity, so the preview is
+// byte-identical to before.
 export function buildPreviewNarrative({
   items = [],
   periodScope = DEFAULT_PERIOD_SCOPE,
   commentaryMode = 'conservative',
-  thresholds = DEFAULT_THRESHOLDS
+  thresholds = DEFAULT_THRESHOLDS,
+  style = null
 } = {}) {
   const { base, supporting } = splitBaseSupporting(items)
   if (!base) return null
@@ -66,7 +73,7 @@ export function buildPreviewNarrative({
 
   // Only surface when the base actually produced at least one comparable period.
   if (!scoped || !Array.isArray(scoped.periods) || scoped.periods.length === 0) return null
-  return scoped
+  return applyDollarAbbreviation(scoped, !!(style && style.abbreviateDollars))
 }
 
 // Resolve what the Narrative Preview should show (Phase 22.3). Distinguishes an
@@ -82,7 +89,8 @@ export function previewNarrativeState({
   items = [],
   periodScope = DEFAULT_PERIOD_SCOPE,
   commentaryMode = 'conservative',
-  thresholds = DEFAULT_THRESHOLDS
+  thresholds = DEFAULT_THRESHOLDS,
+  style = null
 } = {}) {
   const base = findBaseExtraction(items)
   if (!base) return { kind: 'none', narrative: null }
@@ -93,7 +101,7 @@ export function previewNarrativeState({
     (Array.isArray(variance.comparisons) && variance.comparisons.length > 0)
   if (!comparable) return { kind: 'empty', narrative: null }
 
-  const narrative = buildPreviewNarrative({ items, periodScope, commentaryMode, thresholds })
+  const narrative = buildPreviewNarrative({ items, periodScope, commentaryMode, thresholds, style })
   if (!narrative) return { kind: 'empty', narrative: null }
   return { kind: 'narrative', narrative }
 }

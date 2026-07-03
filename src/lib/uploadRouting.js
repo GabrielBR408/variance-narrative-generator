@@ -11,6 +11,7 @@
 // same inputs ⇒ same routing, so it can be read, tested, and audited by hand.
 
 import { classifyFile, FALLBACK_TYPE } from './classify.js'
+import { fileKey } from './fileKey.js'
 
 // The one filename-classification type that names a base variance report.
 const BASE_TYPE = 'Existing Variance Report'
@@ -70,26 +71,49 @@ export function routeUpload({ incoming = [], currentBase = null, currentSupporti
   }
 
   const picked = selectBase(files, !!currentBase)
-  const base = picked || currentBase
-  const baseReplaced = !!picked && !!currentBase && picked !== currentBase
+  let base = picked || currentBase
+  // A replacement means a DIFFERENT file took the base slot; re-dropping the
+  // same base (same fileKey) just refreshes it in place, without a notice.
+  const baseReplaced = !!picked && !!currentBase && fileKey(picked) !== fileKey(currentBase)
   const baseAssignedFresh = !!picked && !currentBase
 
-  // Everything in the batch that did not become the base is supporting.
-  const newSupporting = files.filter((f) => f !== picked)
-  const supporting = [...currentSupporting, ...newSupporting]
+  // Re-dropping the file already in the base slot refreshes that slot — it must
+  // never land in supporting alongside itself.
+  const baseKey = base ? fileKey(base) : null
+  if (!picked && baseKey) {
+    const redropped = files.find((f) => fileKey(f) === baseKey)
+    if (redropped) base = redropped
+  }
+
+  // Everything in the batch that did not become (or refresh) the base is
+  // supporting. Dedupe by fileKey: same name+size+mtime ⇒ same file this
+  // session, so a re-dropped file REPLACES its existing entry (keeping its
+  // position) instead of duplicating it.
+  const incomingSupporting = files.filter((f) => f !== picked && fileKey(f) !== baseKey)
+  const byKey = new Map(currentSupporting.map((f) => [fileKey(f), f]))
+  let added = 0
+  for (const f of incomingSupporting) {
+    const k = fileKey(f)
+    if (!byKey.has(k)) added++
+    byKey.set(k, f)
+  }
+  // A newly promoted base never lingers in supporting (e.g. a variance-named
+  // re-drop of a file that previously landed there).
+  if (baseKey) byKey.delete(baseKey)
+  const supporting = [...byKey.values()]
 
   const parts = []
   if (baseReplaced) parts.push(`Replaced the base variance report — now using "${picked.name}".`)
   else if (baseAssignedFresh) parts.push(`Identified "${picked.name}" as the base variance report.`)
-  if (newSupporting.length) {
-    parts.push(`Added ${newSupporting.length} supporting file${newSupporting.length === 1 ? '' : 's'}.`)
+  if (added) {
+    parts.push(`Added ${added} supporting file${added === 1 ? '' : 's'}.`)
   }
 
   return {
     base,
     supporting,
     baseReplaced,
-    addedSupporting: newSupporting.length,
+    addedSupporting: added,
     notice: parts.join(' ')
   }
 }

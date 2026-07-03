@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+﻿name: Deploy to GitHub Pages
 
 # Publishes a static, fully client-side build for UI testing. The app's
 # /generate round-trip falls back to an in-browser pipeline on a static host
@@ -33,7 +33,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Configure Pages
         id: pages
@@ -55,16 +55,16 @@ jobs:
           <html lang="en">
           <head>
             <meta charset="utf-8" />
-            <meta http-equiv="refresh" content="0; url=https://variance-narrative-generator.vercel.app" />
-            <link rel="canonical" href="https://variance-narrative-generator.vercel.app" />
+            <meta http-equiv="refresh" content="0; url=https://chiefeotool.com/vng" />
+            <link rel="canonical" href="https://chiefeotool.com/vng" />
             <title>Variance Narrative Generator</title>
           </head>
           <body>
             <p>This app has moved to
-              <a href="https://variance-narrative-generator.vercel.app">variance-narrative-generator.vercel.app</a>.
+              <a href="https://chiefeotool.com/vng">variance-narrative-generator.vercel.app</a>.
               Redirecting&hellip;
             </p>
-            <script>window.location.replace("https://variance-narrative-generator.vercel.app")</script>
+            <script>window.location.replace("https://chiefeotool.com/vng")</script>
           </body>
           </html>
           EOF

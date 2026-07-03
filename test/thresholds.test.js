@@ -15,7 +15,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { isTriggered, DEFAULT_THRESHOLDS } from '../src/lib/variance/thresholds.js'
+import { isTriggered, thresholdsFromSettings, DEFAULT_THRESHOLDS } from '../src/lib/variance/thresholds.js'
 import { calculate } from '../src/lib/variance/calculate.js'
 import { computeVariance } from '../src/lib/variance/index.js'
 import { generateNarrative } from '../src/lib/narrative/index.js'
@@ -71,6 +71,34 @@ test('missing / non-finite inputs never trigger', () => {
   assert.equal(isTriggered(5000, null, THR), true) // amount alone still counts
   assert.equal(isTriggered(NaN, NaN, THR), false)
   assert.equal(isTriggered(undefined, undefined, THR), false)
+})
+
+// --- settings → thresholds: blank fields fall back per-field ----------------
+
+test('a blanked threshold input is unset, never a 0 threshold', () => {
+  // Number('') === 0 used to slip through the finite/non-negative check, so
+  // clearing ONE input flagged EVERY computable row as a high variance.
+  assert.deepEqual(
+    thresholdsFromSettings({ dollarThreshold: '', percentThreshold: '10' }),
+    { amount: DEFAULT_THRESHOLDS.amount, percent: 10 }
+  )
+  assert.deepEqual(
+    thresholdsFromSettings({ dollarThreshold: '500', percentThreshold: '' }),
+    { amount: 500, percent: DEFAULT_THRESHOLDS.percent }
+  )
+  assert.deepEqual(
+    thresholdsFromSettings({ dollarThreshold: '  ', percentThreshold: null }),
+    DEFAULT_THRESHOLDS
+  )
+})
+
+test('valid, invalid, and missing settings resolve per-field', () => {
+  assert.deepEqual(thresholdsFromSettings({ dollarThreshold: '2000', percentThreshold: '25' }), { amount: 2000, percent: 25 })
+  // An EXPLICIT zero is honored — only blank/invalid falls back.
+  assert.deepEqual(thresholdsFromSettings({ dollarThreshold: '0', percentThreshold: '0' }), { amount: 0, percent: 0 })
+  assert.deepEqual(thresholdsFromSettings({ dollarThreshold: '-5', percentThreshold: 'abc' }), DEFAULT_THRESHOLDS)
+  assert.deepEqual(thresholdsFromSettings({}), DEFAULT_THRESHOLDS)
+  assert.deepEqual(thresholdsFromSettings(undefined), DEFAULT_THRESHOLDS)
 })
 
 // --- direction is classified independently of triggering -------------------

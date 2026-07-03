@@ -61,10 +61,11 @@ const PERCENT_CELLS = new Set(
 )
 
 // A single numeric cell as it appears in a report: optional currency sign,
-// optional leading minus, digits with optional thousands separators, optional
-// decimals, and a percent sign / accounting-style parentheses for negatives —
-// in either order, e.g. 29,522.70  (7,874.80)  -21.06%  $1,000  (21.06)%  (4.19)%.
-const NUM = String.raw`\(?-?\$?\d[\d,]*(?:\.\d+)?%?\)?%?`
+// optional leading minus (ASCII or the typographic U+2212 some PDF fonts emit),
+// digits with optional thousands separators, optional decimals, and a percent
+// sign / accounting-style parentheses for negatives — in either order, e.g.
+// 29,522.70  (7,874.80)  -21.06%  $1,000  (21.06)%  (4.19)%.
+const NUM = String.raw`\(?[-−]?\$?\d[\d,]*(?:\.\d+)?%?\)?%?`
 
 // A data row: an account label followed by exactly eight numeric cells. Matched
 // globally (not anchored) and lazily, so a single line carrying several
@@ -72,10 +73,17 @@ const NUM = String.raw`\(?-?\$?\d[\d,]*(?:\.\d+)?%?\)?%?`
 // row with a clean, nearest label rather than one giant row. On the normal
 // (one-row-per-line) path it simply matches once. The label must contain a
 // letter so a run of figures alone (a totals line) can't masquerade as a row.
+// The trailing lookahead forbids a 9th numeric token after the run, so the
+// values are exactly the LAST eight numeric cells before the row's end (or the
+// next row's label): a label ending in a numeric token ("Salaries 5100") keeps
+// that token in the label instead of donating it as the first value cell and
+// shifting every cell right.
 const ROW_RE = new RegExp(
   String.raw`(\S(?:.*?\S)?)\s+(` +
     Array(VALUE_COUNT).fill(NUM).join(String.raw`)\s+(`) +
-    String.raw`)(?=\s|$)`,
+    String.raw`)(?=\s|$)(?!\s+(?:` +
+    NUM +
+    String.raw`)(?=\s|$))`,
   'g'
 )
 
@@ -94,8 +102,8 @@ function looksLikeNumber(token) {
 function cleanCell(token, isPercent) {
   const s = String(token).trim()
   // Accounting negatives use parentheses (in either order vs. a trailing %),
-  // and some reports use a leading minus instead.
-  const negative = s.includes('(') || s.includes('-')
+  // and some reports use a leading minus — ASCII or U+2212 — instead.
+  const negative = s.includes('(') || s.includes('-') || s.includes('−')
 
   // Keep digits and decimal points only.
   const digits = s.replace(/[^0-9.]/g, '')

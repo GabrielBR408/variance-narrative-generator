@@ -193,6 +193,19 @@ test('a single-period (no-YTD) table yields one set and stays backward compatibl
   near(result.comparisons[0].varianceAmount, 200)
 })
 
+// A variance-labeled header must never be claimed as a VALUE column. "Current
+// Variance" also matches the generic actual pattern (/\bcurrent\b/); letting it
+// claim the `actual` slot split off a bogus labeled "current" block, pushing
+// the real unlabeled Actual|Budget block into the 'ytd' fallback slot.
+test('a "Current Variance" header never steals the current period from an unlabeled block', () => {
+  const columns = ['Account', 'Actual', 'Budget', 'Current Variance', 'Current Variance %']
+  const rows = [['Rental Income', '130000', '100000', '30000', '30']]
+  const { account, sets } = detectComparisonSets(columns, rows)
+  assert.equal(account, 0)
+  assert.deepEqual(sets.map((s) => s.period), ['current'])
+  assert.deepEqual(sets[0].columns, { actual: 1, budget: 2, prior: null })
+})
+
 test('non-tabular extraction reports honestly, no comparisonSets', () => {
   const ex = extraction({ normalized: { columns: [], rows: [['just text']], accounts: [], dates: [], values: [] } })
   const result = computeVariance(ex)

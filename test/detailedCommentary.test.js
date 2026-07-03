@@ -162,10 +162,13 @@ test('a generic / low-confidence note falls back to the conservative sentence', 
   assert.doesNotMatch(detailed.text, /from Service/)
 })
 
-test('a dropped Description (leading line number) never renders the literal "null"', () => {
-  // The matcher's detail summarizer treats a Description that starts with a
-  // numeric token as numeric and drops it (detail.description → null). Detailed
-  // mode must coerce that to a clean fallback, never "Detail includes null".
+test('a Description with a leading line number never renders the literal "null"', () => {
+  // A Description leading with a numeric token used to be read as a NUMBER by
+  // toNumber (its separators were stripped and the digits concatenated) and
+  // dropped, so detailed mode had to coerce detail.description → null to a
+  // fallback. toNumber now rejects mostly-letters cells, so the Description
+  // survives as text and renders a clean specific sentence — and "null" must
+  // still never appear.
   const comparisons = [rec({ account: '54110 Real Estate Taxes', actual: 9000, budget: 4000 })]
   const narrative = generateNarrative({
     fileId: 'base', fileName: 'Comparative Income Statement.xlsx', baseClassification: 'Base Variance Report',
@@ -176,12 +179,12 @@ test('a dropped Description (leading line number) never renders the literal "nul
     normalized: { columns: GL_COLUMNS, rows: [['54110 Real Estate Taxes', '01/07/2026', '0134', '', '1304 2nd Installment SAN FRANCISCO TAX COLLECTOR', '5000']] }
   }
   const detailed = enrichNarrative(narrative, { supporting: [gl], mode: 'detailed' })
-  const conservative = enrichNarrative(narrative, { supporting: [gl] })
   const dNote = findNote(detailed, '54110 Real Estate Taxes')
   assert.doesNotMatch(dNote.text, /\bnull\b/)
-  // No render-safe subject survives the dropped Description, so the explanation
-  // falls back to the same clean conservative evidence sentence.
-  assert.equal(dNote.text, findNote(conservative, '54110 Real Estate Taxes').text)
+  // The Description now reads as text, so the detailed sentence cites it
+  // (sanitized — no leading line number, no reference, no date).
+  assert.match(dNote.text, /2nd Installment from San Francisco Tax Collector/)
+  assert.doesNotMatch(dNote.text, /1304|0134|01\/07\/2026/)
 })
 
 // --- 4. no unsafe tokens / causal language in detailed output --------------

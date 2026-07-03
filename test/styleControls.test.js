@@ -11,6 +11,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { buildStyleInstructions, buildSystemPrompt } from '../server/llm.js'
+import { generateNarrative } from '../src/lib/narrative/index.js'
 import {
   abbreviateDollarAmount,
   abbreviateDollarsInText,
@@ -131,8 +132,24 @@ test('abbreviateDollarsInText leaves figures under $1,000 unchanged', () => {
   assert.equal(abbreviateDollarsInText('A small $614.87 swing.'), 'A small $614.87 swing.')
 })
 
+test('a value that rounds up across a unit boundary is promoted to the next tier', () => {
+  assert.equal(abbreviateDollarAmount(999999), '$1M') // never "$1000K"
+  assert.equal(abbreviateDollarAmount(999950), '$1M')
+  assert.equal(abbreviateDollarAmount(999940), '$999.9K') // below the boundary, stays K
+  assert.equal(abbreviateDollarAmount(999999999), '$1B') // never "$1000M"
+})
+
+test('billions get their own tier', () => {
+  assert.equal(abbreviateDollarAmount(1_500_000_000), '$1.5B') // never "$1500M"
+  assert.equal(abbreviateDollarAmount(-2_000_000_000), '-$2B')
+  assert.equal(abbreviateDollarsInText('Portfolio value of $1,500,000,000.'), 'Portfolio value of $1.5B.')
+})
+
 // --- 3. applyDollarAbbreviation: on vs off ---------------------------------
 
+// The REAL engine shape: executiveSummary is an ARRAY of note objects (see
+// buildExecutiveSummary in sections.js), never a bare string — the old string
+// fixture masked a bug where the summary was left unabbreviated.
 function sampleNarrative() {
   return {
     fileId: 'f1',
@@ -143,7 +160,7 @@ function sampleNarrative() {
       {
         period: 'current',
         periodLabel: 'Current',
-        executiveSummary: 'Total variance of $1,200,000 for the period.',
+        executiveSummary: [{ text: 'Total variance of $1,200,000 for the period.', sourceRows: [] }],
         highVariances: [{ account: 'Taxes', varianceAmount: 5000, text: 'Real Estate Taxes exceeded budget by $5,000.' }],
         revenueNotes: [],
         expenseNotes: [],
@@ -169,8 +186,39 @@ test('applyDollarAbbreviation rewrites narrative text when toggled on', () => {
   assert.notEqual(result, narrative)
   assert.equal(narrative.periods[0].highVariances[0].text, 'Real Estate Taxes exceeded budget by $5,000.')
   // Dollar figures are abbreviated in both the summary and the note text.
-  assert.equal(result.periods[0].executiveSummary, 'Total variance of $1.2M for the period.')
+  assert.equal(result.periods[0].executiveSummary[0].text, 'Total variance of $1.2M for the period.')
   assert.equal(result.periods[0].highVariances[0].text, 'Real Estate Taxes exceeded budget by $5K.')
   // Structured fields (varianceAmount) are never reformatted.
   assert.equal(result.periods[0].highVariances[0].varianceAmount, 5000)
+})
+
+test('the ENGINE-emitted executive summary (an array of notes) is abbreviated', () => {
+  // The engine emits executiveSummary as an array of note objects; the string
+  // branch alone left "$105,000" beside "$40K" bullets.
+  const narrative = generateNarrative({
+    fileId: 'f1', fileName: 'f.pdf', baseClassification: 'Base',
+    thresholds: { amount: 1000, percent: 10 },
+    comparisonSets: [{
+      period: 'current',
+      comparisons: [{
+        account: 'Repairs Expense', actual: 145000, budget: 40000, prior: null,
+        varianceAmount: 105000, variancePercent: 262.5, comparisonType: 'budget',
+        thresholdTriggered: true, category: 'unfavorable', accountType: 'expense',
+        missingData: false, confidence: 90, sourceRows: [1]
+      }]
+    }]
+  })
+  assert.ok(Array.isArray(narrative.periods[0].executiveSummary), 'engine emits an array')
+  const result = applyDollarAbbreviation(narrative, true)
+  assert.match(result.periods[0].executiveSummary[0].text, /\$105K/)
+  assert.doesNotMatch(result.periods[0].executiveSummary[0].text, /\$105,000/)
+})
+
+test('context notes are abbreviated alongside the other sections', () => {
+  const narrative = sampleNarrative()
+  narrative.periods[0].contextNotes = [
+    { account: 'Prepaid Insurance', text: 'Prepaid Insurance exceeded budget by $40,000 (30.0%).' }
+  ]
+  const result = applyDollarAbbreviation(narrative, true)
+  assert.equal(result.periods[0].contextNotes[0].text, 'Prepaid Insurance exceeded budget by $40K (30.0%).')
 })

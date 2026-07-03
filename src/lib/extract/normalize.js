@@ -38,12 +38,27 @@ export function looksLikeDate(value) {
   return DATE_RE.test(String(value).trim())
 }
 
+// Typographic minus variants (U+2212 minus sign, en/em dash) some exports print
+// where ASCII '-' is meant. Mapped before parsing so the sign survives instead
+// of being stripped (which flipped "−1,234" to +1234).
+const MINUS_VARIANTS_RE = /[−–—]/g
+
 // Parse a cell into a number if it generically reads as one. Handles currency
 // symbols, thousands separators, percents, and accounting-style negatives
 // "(1,200)". Returns null when it isn't numeric. No currency/units are inferred.
 export function toNumber(value) {
-  const raw = String(value).trim()
+  const raw = String(value).trim().replace(MINUS_VARIANTS_RE, '-')
   if (!raw) return null
+  // A date-like cell is a date, not a value: stripping its separators would
+  // concatenate the parts into a bogus figure ("1/2/2024" → 122024) that gets
+  // summed downstream. Bare "digits/digits" ("01/26" period stamps) too.
+  if (looksLikeDate(raw) || /\d\/\d/.test(raw)) return null
+  // A cell that is mostly letters is a label ("Actual 2026"), not a figure —
+  // a real money cell carries at most a short currency/CR-DR affix ("1,234.56
+  // CR"), never more letters than digits.
+  const letters = (raw.match(/[A-Za-z]/g) || []).length
+  const digits = (raw.match(/[0-9]/g) || []).length
+  if (letters > digits) return null
   const negative = /^\(.*\)$/.test(raw)
   const cleaned = raw.replace(/[(),$%\s]/g, '').replace(/[^0-9.\-]/g, '')
   if (cleaned === '' || cleaned === '-' || cleaned === '.') return null

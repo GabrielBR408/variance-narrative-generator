@@ -13,8 +13,16 @@ import { handleGenerate } from './server/generate.js'
 // response. No parsing, AI, storage, calculations, persistence, or export.
 function generateEndpoint() {
   const mount = (server) => {
-    server.middlewares.use('/api/generate', (req, res, next) => {
-      if (req.method !== 'POST') return next()
+    server.middlewares.use('/api/generate', (req, res) => {
+      if (req.method !== 'POST') {
+        // Match production (api/generate.js): non-POST gets a clean 405 with an
+        // Allow header instead of falling through to the SPA shell.
+        res.statusCode = 405
+        res.setHeader('Allow', 'POST')
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ success: false, error: 'Method not allowed.' }))
+        return
+      }
       handleGenerate(req, res)
     })
   }
@@ -62,9 +70,11 @@ export default defineConfig({
         theme_color: '#1c2a3a',
         background_color: '#f4f5f7',
         display: 'standalone',
-        // Keep start_url within the (base-derived) scope so the manifest stays
-        // installable under a project sub-path on GitHub Pages.
-        start_url: base,
+        // Hub restructure: the VNG app itself lives at /vng (the root is the
+        // hub), so an installed PWA must launch into the app, not the hub. The
+        // scope stays at the base — it must contain start_url. Under a GitHub
+        // Pages sub-path deploy the base IS the app, so start_url stays there.
+        start_url: base === '/' ? '/vng' : base,
         scope: base,
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },

@@ -1,7 +1,9 @@
 name: CI
 
+# push is limited to main so PR commits run once (via pull_request), not twice.
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -15,9 +17,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
 
+      # npm ci installs the exact lockfile tree, so CI can't green-light a
+      # dependency set that drifts from package-lock.json.
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Run tests
         run: node --test

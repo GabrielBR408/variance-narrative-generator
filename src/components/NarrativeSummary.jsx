@@ -90,11 +90,12 @@ export default function NarrativeSummary({
   items,
   periodScope = DEFAULT_PERIOD_SCOPE,
   commentaryMode = 'detailed',
-  thresholds = DEFAULT_THRESHOLDS
+  thresholds = DEFAULT_THRESHOLDS,
+  style = null
 }) {
   const state = useMemo(
-    () => previewNarrativeState({ items, periodScope, commentaryMode, thresholds }),
-    [items, periodScope, commentaryMode, thresholds]
+    () => previewNarrativeState({ items, periodScope, commentaryMode, thresholds, style }),
+    [items, periodScope, commentaryMode, thresholds, style]
   )
 
   // No base report yet — other surfaces (PreviewBasis / Variance Preview) guide
