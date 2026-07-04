@@ -27,6 +27,18 @@ body {
   padding: 2rem 1.25rem 4rem;
 }
 
+/* Small, unobtrusive link back to the chiefeotool.com hub. Absolute URL so it
+   returns to the hub whether this app is opened via the chiefeotool.com/vng
+   path or its standalone Vercel URL. */
+.back-to-hub {
+  display: inline-block;
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted, #5b6675);
+  text-decoration: none;
+}
+.back-to-hub:hover { color: var(--accent-ink); text-decoration: underline; }
+
 /* ChiefEO brand logo — the lockup (icon + wordmark) in the top-left of the
    header. The asset carries its own dark-navy background, so it reads as a
    compact badge above the app title below it. */

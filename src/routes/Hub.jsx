@@ -27,7 +27,7 @@ export default function Hub() {
   return (
     <main className="page hub">
       <img className="brand-logo" src={chiefeoLogo} alt="ChiefEO" />
-      <h1 className="hub-title">ChiefEO Tools</h1>
+      <h1 className="hub-title">ChiefEO Tool</h1>
       <p className="hub-tagline">Pick a tool.</p>
 
       <div className="hub-tools">

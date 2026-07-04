@@ -243,6 +243,7 @@ export default function App() {
 
   return (
     <main className="page">
+      <a className="back-to-hub" href="https://chiefeotool.com/">← All Tools</a>
       <header className="masthead">
         <img className="brand-logo" src={chiefeoLogo} alt="ChiefEO" />
         <h1>Variance Narrative Generator</h1>
