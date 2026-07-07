@@ -16,13 +16,22 @@ function getSessionId() {
   }
 }
 
+function isInternal() {
+  try {
+    if (/[#?&]internal\b/.test(location.hash + location.search)) {
+      localStorage.setItem("chiefeo_internal", "1");
+    }
+    return localStorage.getItem("chiefeo_internal") === "1";
+  } catch (e) { return false; }
+}
+
 export function track(app, event, properties = {}) {
   try {
     const body = JSON.stringify({
       app,
       event,
       session_id: getSessionId(),
-      properties,
+      properties: Object.assign({}, properties || {}, isInternal() ? { internal: true } : {}),
       path: window.location.pathname,
       user_agent: navigator.userAgent,
     });
