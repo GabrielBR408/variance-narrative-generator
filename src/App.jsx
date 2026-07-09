@@ -12,6 +12,7 @@ import PreviewBasis from './components/PreviewBasis.jsx'
 import ExtractionPreview from './components/ExtractionPreview.jsx'
 import VariancePreview from './components/VariancePreview.jsx'
 import NarrativeSummary from './components/NarrativeSummary.jsx'
+import FeedbackWidget from './components/FeedbackWidget.jsx'
 import {
   extractionReadiness,
   resultFreshness,
@@ -301,6 +302,9 @@ export default function App() {
       </div>
 
       {showPrivacyDisclosure && <PrivacyModal onAccept={handlePrivacyDisclosureAccept} />}
+
+      {/* Floating "Send feedback" affordance — VNG app only (never the hub). */}
+      <FeedbackWidget />
 
       <footer className="site-footer">
         <p className="site-footer-line">

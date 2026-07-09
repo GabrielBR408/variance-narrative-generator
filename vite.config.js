@@ -1,7 +1,14 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { handleGenerate } from './server/generate.js'
+
+// Build stamp: read the app version from package.json and the deploy commit from
+// Vercel's build env, then expose both as compile-time constants (see
+// src/lib/buildInfo.js). 'dev' is the local/unknown fallback.
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'))
+const commitSha = process.env.VERCEL_GIT_COMMIT_SHA || 'dev'
 
 // --- Local /generate endpoint (dev + preview middleware) -------------------
 // The real request handler now lives in server/generate.js so it can graduate
@@ -40,6 +47,10 @@ const base = process.env.VITE_BASE || '/'
 
 export default defineConfig({
   base,
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __COMMIT_SHA__: JSON.stringify(commitSha)
+  },
   plugins: [
     react(),
     generateEndpoint(),
