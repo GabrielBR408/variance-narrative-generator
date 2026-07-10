@@ -1,8 +1,9 @@
 # Variance Narrative Generator
 
 A browser-first tool that turns variance reports and their supporting files into
-plain-language variance narratives — deterministically, with no AI, no export,
-and no data ever leaving the session.
+plain-language variance narratives — a deterministic core, with optional AI
+enrichment the user is told about in-app, exports (Copy / Markdown / DOCX /
+Excel), and no uploaded-file persistence.
 
 ## Source of truth
 
@@ -17,13 +18,18 @@ Claude Code.
 - **Browser-first** — the workflow runs in the browser; the Node backend only
   receives uploads and returns results.
 - **PWA** — installable, with a generated service worker (via `vite-plugin-pwa`).
-- **Deterministic narratives** — narratives are produced by rule-based
+- **Deterministic core** — the baseline narratives are produced by rule-based
   templates and logic, so the same inputs always yield the same output.
-- **No AI** — no model calls; nothing is sent to any LLM or external service.
-- **No export** — results are shown in-app only; there is no download or
-  document export yet.
-- **No persistence** — uploaded files and all derived data live in memory for
-  the session only; nothing is saved, logged, or uploaded.
+- **Optional AI enrichment** — cited commentary and OCR for scanned PDFs use
+  the Anthropic API (`server/llm.js`, `server/ocr.js`); the user is told
+  before any data is sent via the in-app disclosure modals, and the app falls
+  back to the deterministic narrative when the AI is unavailable.
+- **Export** — a successful generation offers Copy Narrative plus Markdown,
+  DOCX, and Excel downloads, all rendered in the browser.
+- **No uploaded-file persistence** — uploaded files and all derived data live
+  in memory for the session only; nothing the user uploads is saved. Anonymous
+  usage analytics and user-submitted feedback ARE stored (Supabase, via
+  `src/lib/track.js`).
 - **No auth** — there is no login or user accounts.
 - **CI enabled** — every push and pull request runs tests and the build.
 
@@ -118,6 +124,6 @@ npm test         # run the test suite (node --test)
 
 ## Not yet implemented
 
-Persistence, authentication, and any AI/model integration are deliberately out
-of scope at this stage. Export is browser-only (Copy / Markdown / DOCX) with no
+Uploaded-file persistence and authentication are deliberately out of scope at
+this stage. Export is browser-only (Copy / Markdown / DOCX / Excel) with no
 server-side document generation or storage.

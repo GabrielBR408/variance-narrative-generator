@@ -68,7 +68,9 @@ const LEADING_FILLER = new Set([
   'represents', 'for', 'the', 'of', 'a', 'an', 'this', 'and', 'is', 'are'
 ])
 // Dangling prepositions to drop if left at the very end after stripping figures.
-const TRAILING_PREP_RE = /\b(of|for|to|at|by|in|with|from|on|per)$/i
+// "due" included: stripping a date from "roof repairs due 3/15/2026" must not
+// leave "…provides for roof repairs due".
+const TRAILING_PREP_RE = /\b(of|for|to|at|by|in|with|from|on|per|due)$/i
 
 const MAX_EXPLANATION_LEN = 140
 const MIN_EXPLANATION_WORDS = 2

@@ -36,8 +36,11 @@ const RULES = [
 ]
 
 export function extensionOf(name = '') {
-  const dot = name.lastIndexOf('.')
-  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : ''
+  // Guard explicit null/undefined too: a default parameter only covers
+  // `undefined`, and a File-like object can carry `name: null`.
+  const s = String(name ?? '')
+  const dot = s.lastIndexOf('.')
+  return dot >= 0 ? s.slice(dot + 1).toLowerCase() : ''
 }
 
 // Returns { type, confidence, basis }. `basis` records which signal decided
@@ -49,9 +52,11 @@ export function classifyFile({ name = '', role } = {}) {
   }
 
   // 2) Filename keyword rules. Strip the extension first so "gl.csv" and
-  //    "budget.xlsx" still match on their stems.
-  const ext = extensionOf(name)
-  const stem = (ext ? name.slice(0, name.length - ext.length - 1) : name).toLowerCase()
+  //    "budget.xlsx" still match on their stems. Coerce first: a File-like
+  //    object can carry `name: null`, which a default parameter doesn't cover.
+  const safeName = String(name ?? '')
+  const ext = extensionOf(safeName)
+  const stem = (ext ? safeName.slice(0, safeName.length - ext.length - 1) : safeName).toLowerCase()
 
   for (const rule of RULES) {
     if (rule.re.test(stem) && !(rule.unless && rule.unless.test(stem))) {

@@ -125,12 +125,20 @@ export function enrichmentStatus({ narrative, reason } = {}) {
   if (enrichedCount === 0 && totalCount > 0) {
     const effReason = r === 'ok' ? 'api_error' : r
     const reasonText = REASON_TEXT[effReason] || REASON_TEXT.api_error
+    // The parenthetical exists to ADD information ("daily limit reached"). When
+    // the reason text itself already says the AI was unavailable (the api_error
+    // catch-all, "AI temporarily unavailable"), parenthesizing it produced the
+    // redundant "AI was unavailable (AI temporarily unavailable)" — so any
+    // reason that restates unavailability becomes the lead instead.
+    const lead = /unavailable/i.test(reasonText)
+      ? `Basic narrative shown — ${reasonText}.`
+      : `Basic narrative shown — AI was unavailable (${reasonText}).`
     return {
       reason: effReason,
       reasonText,
       status: 'Basic narrative (AI unavailable)',
       statusKind: 'fallback',
-      message: `Basic narrative shown — AI was unavailable (${reasonText}). Style settings other than dollar formatting may not apply.`,
+      message: `${lead} Style settings other than dollar formatting may not apply.`,
       enrichedCount: 0,
       eligibleCount: totalCount,
       fallbackCount: totalCount
@@ -165,5 +173,11 @@ export function enrichmentStatusLine(enrichment) {
     return `Partial AI enrichment — ${enrichment.enrichedCount} of ${enrichment.eligibleCount} lines AI-enriched`
   }
   const base = enrichment.status || ''
+  // Same dedupe as the on-screen message: the reason is appended to ADD
+  // information, so a reason that only restates the status's "unavailable"
+  // (the api_error catch-all) is dropped rather than repeated.
+  if (enrichment.reasonText && /unavailable/i.test(enrichment.reasonText) && /unavailable/i.test(base)) {
+    return base
+  }
   return enrichment.reasonText ? `${base} — ${enrichment.reasonText}` : base
 }

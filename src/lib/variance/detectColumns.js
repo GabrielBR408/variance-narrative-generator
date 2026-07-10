@@ -57,6 +57,30 @@ function matchType(header) {
   return null
 }
 
+// The bare period words ("Current", "Cur") claim the actual slot only as a
+// GENERIC match — a header like "Current Notes" also matches. A column claimed
+// generically must actually carry numbers; a mostly-text column is annotation,
+// and letting it take the Actual slot reports "actual figure unavailable" on
+// every row (or worse, computes variances from stray numerics in prose).
+const SPECIFIC_ACTUAL_RE = /\bactual\b|\bactuals\b|\bact\b/
+
+// Fraction of a column's sampled non-empty cells that read as numeric. Mirrors
+// detectAccountColumn's textScore (same cell test, inverted); bounded sample
+// keeps detection O(columns).
+function numericShare(rows, i) {
+  const sample = rows.slice(0, 50)
+  let numeric = 0
+  let seen = 0
+  for (const row of sample) {
+    const cell = Array.isArray(row) ? row[i] : undefined
+    if (cell === undefined || cell === null || String(cell).trim() === '') continue
+    seen++
+    if (/^[\s$()%-]*\d/.test(String(cell).trim())) numeric++
+  }
+  // No data to judge (headers-only extraction) → don't overrule the header.
+  return seen === 0 ? null : numeric / seen
+}
+
 // Locate the account label column. Prefer an explicitly named header; otherwise
 // fall back to the first column that reads as mostly text across the data rows
 // (account names are non-numeric), and finally to column 0.
@@ -221,6 +245,12 @@ export function detectComparisonSets(columns = [], rows = []) {
   columns.forEach((header, i) => {
     const type = matchType(header)
     if (!type) return
+    // Generic "Current …" headers ("Current Notes") must carry numeric data to
+    // claim the Actual slot; see SPECIFIC_ACTUAL_RE above.
+    if (type === 'actual' && !SPECIFIC_ACTUAL_RE.test(String(header).toLowerCase())) {
+      const share = numericShare(rows, i)
+      if (share !== null && share < 0.5) return
+    }
     if (block === null || block.set[type] !== null) {
       block = { set: { actual: null, budget: null, prior: null } }
       blocks.push(block)
@@ -259,9 +289,21 @@ export function detectComparisonSets(columns = [], rows = []) {
   blocks.forEach((b, bi) => {
     let period = labels[bi]
     if (!period) {
-      while (fi < fallback.length && used.has(fallback[fi])) fi++
-      period = fi < fallback.length ? fallback[fi++] : `period${bi + 1}`
-      used.add(period)
+      // Positional fallback slots ("first unlabeled block → current, second →
+      // ytd") go only to COMPARABLE blocks. A stray non-comparable block (a
+      // duplicated bare "Actual" header opens a second block, orphaning the
+      // first with actual-only) previously consumed the "current" slot and was
+      // then dropped by computeVariance — leaving the one real comparison
+      // mislabeled "ytd" on a statement that never says YTD.
+      const comparable = b.set.actual !== null && (b.set.budget !== null || b.set.prior !== null)
+      if (!comparable) {
+        period = `period${bi + 1}`
+        used.add(period)
+      } else {
+        while (fi < fallback.length && used.has(fallback[fi])) fi++
+        period = fi < fallback.length ? fallback[fi++] : `period${bi + 1}`
+        used.add(period)
+      }
     }
     if (!byPeriod.has(period)) {
       byPeriod.set(period, b.set)

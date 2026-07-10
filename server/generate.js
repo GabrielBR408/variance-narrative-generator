@@ -37,7 +37,10 @@ const MAX_FILES = 25
 // The `extractions` form field carries the browser's entire normalized
 // extraction (base + all supporting GLs) as JSON. Busboy's default fieldSize is
 // 1 MB, which silently truncated large GLs mid-string and surfaced as a bogus
-// "base report could not be read" error. Size it like a file.
+// "base report could not be read" error. Size it like a file. Truncation at
+// THIS limit is still possible (huge GL sets) and is detected in the field
+// handler below (info.valueTruncated → honest 413) instead of surfacing as a
+// broken-JSON 422.
 const MAX_FIELD_BYTES = 25 * 1024 * 1024
 
 const ALLOWED_EXT = new Set(['pdf', 'xlsx', 'xls', 'csv', 'docx'])
@@ -276,7 +279,19 @@ export function handleGenerate(req, res) {
     if (!firstError) firstError = { status, error }
   }
 
-  bb.on('field', (name, value) => {
+  bb.on('field', (name, value, info) => {
+    // Busboy silently TRUNCATES a field at limits.fieldSize instead of erroring
+    // (info.valueTruncated is the only signal). A truncated `extractions` field
+    // is cut mid-JSON, so parseJsonField returned null and the user saw a
+    // misleading 422 "The base report could not be read" — report the real
+    // problem honestly instead. Same first-problem-wins error shape as the
+    // file-level checks above.
+    if (info && info.valueTruncated) {
+      flagError(413, name === 'extractions'
+        ? 'The extracted file data is too large to send for analysis. Remove or shrink a large supporting file and try again.'
+        : `The "${name}" settings sent with this request are too large to process.`)
+      return
+    }
     fields[name] = value
   })
 

@@ -1,4 +1,12 @@
-import { AI_LLM_MODE } from '../lib/generateState.js'
+import { useEffect, useRef } from 'react'
+import {
+  AI_LLM_MODE,
+  fileSetSignature,
+  shouldApplyGenerateResponse,
+  localFallbackNotice,
+  sourceExtractionFingerprints,
+  extractionFingerprintsDrifted
+} from '../lib/generateState.js'
 import { enrichNarrative } from '../lib/enrich/index.js'
 import { clientGenerate } from '../lib/clientGenerate.js'
 import { commentaryModeFromStyle } from '../lib/enrich/commentaryMode.js'
@@ -28,6 +36,14 @@ export function serverFailureMessage(status) {
   }
   return `The server could not complete the generation (HTTP ${status}). Try again in a moment.`
 }
+
+// Abort a stalled /api/generate call after this long, mirroring the OCR
+// client's guard (src/lib/ocr/ocrClient.js OCR_FETCH_TIMEOUT_MS), so a hung
+// endpoint can never leave the Generate spinner running forever. The abort is
+// routed into the same friendly failure-message path as any other failure.
+export const GENERATE_FETCH_TIMEOUT_MS = 90000
+export const GENERATE_TIMEOUT_MESSAGE =
+  'The server took too long to respond. Check your connection and try again in a moment.'
 
 // Compact, faithful view of a browser extraction to ship to /generate. We send
 // only the normalized shape the variance engine reads — never the raw text or
@@ -61,56 +77,115 @@ export function useGenerate({
   setResult,
   setMessage
 }) {
+  // QA fix (double-activation): `busy` is render-scoped state, so two
+  // activations delivered in one task (key auto-repeat, assistive tech) both
+  // see busy === false and would fire two POSTs. This ref is set synchronously
+  // at the top of generate() and cleared in `finally`, so the second activation
+  // is a guaranteed no-op regardless of render timing.
+  const inFlightRef = useRef(false)
+
+  // QA fix (mid-generation supersession): each generate() call takes the next
+  // id from this monotonic counter and remembers the file-set signature it was
+  // built from. The latest-file-set ref is refreshed on every render, so an
+  // in-flight request can ask at resolve/reject time whether the files it
+  // describes are still the ones on screen (see shouldApplyGenerateResponse).
+  const requestSeqRef = useRef(0)
+  const currentFileSetRef = useRef('')
+  currentFileSetRef.current = fileSetSignature({
+    baseKey: baseReport ? fileKey(baseReport) : '',
+    supportingKeys: supportingFiles.map(fileKey)
+  })
+
+  // QA fix (pending-extraction staleness): a result generated while a source
+  // file was still extracting consumed that file's EMPTY normalized data. Its
+  // snapshot carries per-file extraction fingerprints (status + row count);
+  // when the live extraction map drifts from them — e.g. a supporting file
+  // finishes seconds after generation — the snapshot is marked stale so the
+  // freshness banner fires even though the file KEYS never changed. Functional
+  // setResult keeps this reading the latest result without owning any state.
+  useEffect(() => {
+    setResult((prev) => {
+      if (!prev || !prev.source || !prev.source.extractionFingerprints) return prev
+      const current = sourceExtractionFingerprints({
+        baseKey: prev.source.baseKey,
+        supportingKeys: prev.source.supportingKeys,
+        extractions
+      })
+      if (!extractionFingerprintsDrifted(prev.source.extractionFingerprints, current)) return prev
+      return {
+        ...prev,
+        source: { ...prev.source, extractionFingerprints: current, extractionStale: true }
+      }
+    })
+  }, [extractions, setResult])
+
   async function generate() {
-    if (busy) return // prevent duplicate submits
+    if (busy || inFlightRef.current) return // prevent duplicate submits
 
-    // Readiness gate (Phase 9C): no base, still extracting, or extraction failed.
-    // The button is already disabled in these states; this guards programmatic
-    // or race-y calls and surfaces the same friendly explanation.
-    if (!readiness.ready) {
-      setStatus('failure')
-      setResult(null)
-      setMessage(readiness.message)
-      return
-    }
+    // Taken synchronously — a second activation in the SAME task sees it set.
+    inFlightRef.current = true
 
-    // Preparing: assemble one multipart request carrying the actual file
-    // bytes. No interpretation, no extraction, no validation beyond the
-    // required base file above.
-    setStatus('preparing')
-    setMessage('')
-    setResult(null)
+    // Identity of THIS request: its sequence number and the file set it will be
+    // assembled from. A resolved/rejected response is applied only while both
+    // still match the latest state (no newer request, same files on screen).
+    const requestId = ++requestSeqRef.current
+    const requestFileSet = currentFileSetRef.current
+    const superseded = () =>
+      !shouldApplyGenerateResponse({
+        requestId,
+        latestRequestId: requestSeqRef.current,
+        requestFileSetKey: requestFileSet,
+        currentFileSetKey: currentFileSetRef.current
+      })
 
-    const form = new FormData()
-    form.append('baseReport', baseReport) // real File object
-    supportingFiles.forEach((f) => form.append('supportingFiles', f)) // real File objects
-    form.append('style', JSON.stringify(style))
-    form.append('variance', JSON.stringify(variance))
-    form.append('llmMode', AI_LLM_MODE)
-
-    // Phase 9B: extraction is browser-first, so the normalized result the
-    // browser already computed travels with the request. The server runs the
-    // deterministic variance + narrative engines on it — no re-parsing.
-    const baseExtraction = slimExtraction(extractions[fileKey(baseReport)])
-    const supportingExtractions = supportingFiles
-      .map((f) => slimExtraction(extractions[fileKey(f)]))
-      .filter(Boolean)
-    form.append(
-      'extractions',
-      JSON.stringify({ base: baseExtraction, supporting: supportingExtractions })
-    )
-
-    // Compact file metadata for the static fallback's response (mirrors what the
-    // server reports back as `files`).
-    const clientFiles = [
-      { name: baseReport.name, size: baseReport.size, type: baseReport.type || '', role: 'baseReport' },
-      ...supportingFiles.map((f) => ({ name: f.name, size: f.size, type: f.type || '', role: 'supportingFile' }))
-    ]
-
-    // Sending. Do not set Content-Type — the browser adds the multipart
-    // boundary automatically.
-    setStatus('sending')
     try {
+      // Readiness gate (Phase 9C): no base, still extracting, or extraction failed.
+      // The button is already disabled in these states; this guards programmatic
+      // or race-y calls and surfaces the same friendly explanation.
+      if (!readiness.ready) {
+        setStatus('failure')
+        setResult(null)
+        setMessage(readiness.message)
+        return
+      }
+
+      // Preparing: assemble one multipart request carrying the actual file
+      // bytes. No interpretation, no extraction, no validation beyond the
+      // required base file above.
+      setStatus('preparing')
+      setMessage('')
+      setResult(null)
+
+      const form = new FormData()
+      form.append('baseReport', baseReport) // real File object
+      supportingFiles.forEach((f) => form.append('supportingFiles', f)) // real File objects
+      form.append('style', JSON.stringify(style))
+      form.append('variance', JSON.stringify(variance))
+      form.append('llmMode', AI_LLM_MODE)
+
+      // Phase 9B: extraction is browser-first, so the normalized result the
+      // browser already computed travels with the request. The server runs the
+      // deterministic variance + narrative engines on it — no re-parsing.
+      const baseExtraction = slimExtraction(extractions[fileKey(baseReport)])
+      const supportingExtractions = supportingFiles
+        .map((f) => slimExtraction(extractions[fileKey(f)]))
+        .filter(Boolean)
+      form.append(
+        'extractions',
+        JSON.stringify({ base: baseExtraction, supporting: supportingExtractions })
+      )
+
+      // Compact file metadata for the static fallback's response (mirrors what the
+      // server reports back as `files`).
+      const clientFiles = [
+        { name: baseReport.name, size: baseReport.size, type: baseReport.type || '', role: 'baseReport' },
+        ...supportingFiles.map((f) => ({ name: f.name, size: f.size, type: f.type || '', role: 'supportingFile' }))
+      ]
+
+      // Sending. Do not set Content-Type — the browser adds the multipart
+      // boundary automatically.
+      setStatus('sending')
+
       // Try the real /generate endpoint (present in dev/preview and any server
       // deploy). On a static host (e.g., GitHub Pages) there is no endpoint —
       // the fetch rejects or the host answers 404/405 — so fall back to
@@ -128,16 +203,29 @@ export function useGenerate({
           settingsReceived: Boolean(style && variance)
         })
 
+      // QA fix (no timeout): abort a stalled request after the same 90 s the
+      // OCR client uses, so a hung endpoint surfaces as a friendly failure
+      // instead of an eternal spinner. An abort is a REAL failure (the server
+      // exists but stalled) — it must never downgrade to the local fallback.
       let res = null
+      let fetchRejected = false
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), GENERATE_FETCH_TIMEOUT_MS)
       try {
-        res = await fetch('/api/generate', { method: 'POST', body: form })
-      } catch {
+        res = await fetch('/api/generate', { method: 'POST', body: form, signal: controller.signal })
+      } catch (err) {
+        if (err && err.name === 'AbortError') throw new Error(GENERATE_TIMEOUT_MESSAGE)
         res = null // network error / no server at all
+        fetchRejected = true // remembered so the local fallback is labeled honestly
+      } finally {
+        clearTimeout(timer)
       }
 
       let data = null
+      let usedFallback = false
       if (shouldClientFallback(res)) {
         data = runClientFallback()
+        usedFallback = true
       } else if (!res.ok) {
         // The server answered but failed. Prefer its own structured error
         // message; a non-JSON body (HTML 500 page, host-level 413) gets an
@@ -155,6 +243,7 @@ export function useGenerate({
         } catch {
           // 200 but not JSON: a static host served the SPA shell for the POST.
           data = runClientFallback()
+          usedFallback = true
         }
       }
 
@@ -207,6 +296,24 @@ export function useGenerate({
       const files = Array.isArray(data.files) ? data.files : []
       const backup = backupNotice({ narrative, variance: data.variance, files })
 
+      // QA fix (silent local fallback): when the in-browser fallback ran
+      // because the fetch REJECTED (server unreachable) rather than because
+      // the endpoint is genuinely absent (static-host 404/405 or SPA shell),
+      // the completion carries a plain notice saying so. null otherwise.
+      const notice = localFallbackNotice({ usedFallback, fetchRejected })
+
+      // QA fix (mid-generation supersession): if the user replaced the file
+      // set while this request was in flight — or a newer request started —
+      // this response describes files that are no longer on screen. Discard it
+      // silently (back to idle) instead of rendering the OLD files' narrative
+      // as "Generation complete" for the NEW list. (Removing the base entirely
+      // is separately handled by shouldDiscardResult in App.)
+      if (superseded()) {
+        setStatus('idle')
+        setMessage('')
+        return
+      }
+
       setResult({
         jobId: data.jobId,
         filesReceived: data.filesReceived,
@@ -221,6 +328,9 @@ export function useGenerate({
         // Generate-time role correction notice (Option A). null when nothing was
         // re-routed; ResultPanel and the Excel export render it when present.
         correction: correction ? { notice: correction.notice } : null,
+        // Honest-fallback notice (QA fix). null on every server / static-host
+        // path; ResultPanel renders it alongside the enrichment status line.
+        notice,
         // Phase 22.2: snapshot the settings this result was generated with, so the
         // UI can warn when the live settings drift from it (period scope excluded —
         // it is applied live at render/export time, so it never makes a result stale).
@@ -240,11 +350,22 @@ export function useGenerate({
         // Phase 22.3: snapshot the file set too (base + sorted supporting), so the
         // same freshness banner fires when files are added, removed, or replaced.
         // On a role correction, snapshot the CORRECTED routing so freshness stays
-        // consistent with what was actually generated.
-        source: {
-          baseKey: correction ? correction.baseFileId : fileKey(baseReport),
-          supportingKeys: (correction ? [...correction.supportingFileIds] : supportingFiles.map(fileKey)).sort()
-        }
+        // consistent with what was actually generated. QA fix: each file's
+        // extraction fingerprint (status + row count, read from the SAME
+        // click-time extraction map this request shipped) rides along, so a
+        // file that finishes extracting after generation marks the result
+        // stale even though its key never changed (see the drift effect above).
+        source: (() => {
+          const baseKey = correction ? correction.baseFileId : fileKey(baseReport)
+          const supportingKeys = (
+            correction ? [...correction.supportingFileIds] : supportingFiles.map(fileKey)
+          ).sort()
+          return {
+            baseKey,
+            supportingKeys,
+            extractionFingerprints: sourceExtractionFingerprints({ baseKey, supportingKeys, extractions })
+          }
+        })()
       })
       setStatus('success')
 
@@ -259,10 +380,22 @@ export function useGenerate({
         flagged: (summary && summary.highVarianceCount) || 0
       })
     } catch (err) {
+      // QA fix (mid-generation supersession): a rejection for a request whose
+      // file set was replaced mid-flight describes files no longer on screen —
+      // discard it silently too, rather than alarming about the wrong files.
+      if (superseded()) {
+        setStatus('idle')
+        setMessage('')
+        return
+      }
       setStatus('failure')
       const failMessage = err.message || 'Something went wrong. Try again.'
       setMessage(failMessage)
       track('vng', 'generate_failed', { reason: failMessage.slice(0, 200) })
+    } finally {
+      // QA fix (double-activation): always release the synchronous in-flight
+      // lock, whatever path this call took.
+      inFlightRef.current = false
     }
   }
 

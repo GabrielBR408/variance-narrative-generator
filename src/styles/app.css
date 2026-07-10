@@ -6,6 +6,11 @@
   --line: #e3e7ec;
   --accent: #4a9fc0;
   --accent-ink: #2e7da6;
+  /* Deliberate contrast fix: white text on --accent (#4a9fc0) is 3.0:1 and
+     fails WCAG AA for normal text, so solid primary buttons rest on
+     --accent-ink (4.56:1 with #fff) and darken to this on hover. --accent
+     itself remains for borders, focus rings, and non-text accents. */
+  --accent-ink-hover: #26688a;
   --danger: #b4452f;
   --radius: 10px;
   --maxw: 760px;
@@ -187,6 +192,9 @@ body {
 .chip-class--high .chip-class-conf { color: var(--accent-ink); border-color: #bcd9ea; background: #e8f3f9; }
 .chip-class--low .chip-class-type { color: var(--muted); }
 .chip-class--low .chip-class-conf { color: #8a6d3b; border-color: #e6d6b8; background: #fbf6ea; }
+/* Extraction refused the file (e.g. a dragged .txt) — honest badge, no
+   role/confidence claim. Mirrors the extract-status--unavailable palette. */
+.chip-class--unsupported .chip-class-type { color: var(--danger); }
 
 /* Helper */
 .helper { margin-top: 1rem; border-top: 1px solid var(--line); padding-top: 0.7rem; }
@@ -260,13 +268,25 @@ body {
 .checkgroup { border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem 0.9rem; margin: 0.9rem 0 0; }
 .checkgroup legend { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 0.4rem; }
 
+/* Property profile row (Variance Detail): save/apply/delete named threshold sets. */
+.profile-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.6rem 0 0.4rem; }
+.profile-btn {
+  padding: 0.4rem 0.8rem; border: 1px solid var(--accent-ink); border-radius: 7px;
+  background: #fff; color: var(--accent-ink); font-size: 0.82rem; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+}
+.profile-btn:hover:not(:disabled) { background: #e8f3f9; }
+.profile-btn:disabled { opacity: 0.6; cursor: default; }
+.profile-btn--danger { border-color: var(--danger); color: var(--danger); }
+.profile-btn--danger:hover:not(:disabled) { background: #fdf0f0; }
+
 /* Generate */
 .generate-btn {
   width: 100%; padding: 0.85rem 1rem; border: none; border-radius: 8px;
-  background: var(--accent); color: #fff; font-size: 0.95rem; font-weight: 600;
+  background: var(--accent-ink); color: #fff; font-size: 0.95rem; font-weight: 600;
   font-family: inherit; cursor: pointer;
 }
-.generate-btn:hover:not(:disabled) { background: var(--accent-ink); }
+.generate-btn:hover:not(:disabled) { background: var(--accent-ink-hover); }
 .generate-btn:disabled { opacity: 0.6; cursor: default; }
 
 .generate-msg { font-size: 0.86rem; margin-top: 0.8rem; }
@@ -314,7 +334,10 @@ body {
 
 .received-files { list-style: none; margin: 0.7rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .received-file { border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.8rem; }
-.received-file-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+/* flex-wrap: at 320px-wide viewports the flex:none role pill used to squeeze
+   the filename to one syllable per line; wrapping drops the pill below long
+   names instead. */
+.received-file-head { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem 0.6rem; flex-wrap: wrap; }
 .received-file-name { font-weight: 600; font-size: 0.88rem; word-break: break-word; }
 .received-file-role {
   flex: none; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
@@ -347,11 +370,11 @@ body {
 .export-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 .export-btn {
   flex: 1 1 auto; min-width: 10rem; padding: 0.7rem 1rem;
-  border: 1px solid var(--accent); border-radius: 8px;
-  background: var(--accent); color: #fff; font-size: 0.9rem; font-weight: 600;
+  border: 1px solid var(--accent-ink); border-radius: 8px;
+  background: var(--accent-ink); color: #fff; font-size: 0.9rem; font-weight: 600;
   font-family: inherit; cursor: pointer;
 }
-.export-btn:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+.export-btn:hover { background: var(--accent-ink-hover); border-color: var(--accent-ink-hover); }
 .export-btn--secondary { background: #fff; color: var(--accent-ink); }
 .export-btn--secondary:hover { background: #e8f3f9; border-color: var(--accent-ink); }
 .export-btn:disabled { opacity: 0.6; cursor: progress; }
@@ -610,11 +633,12 @@ body {
   max-width: 480px; width: 100%; box-shadow: 0 8px 40px rgba(0,0,0,0.18);
 }
 .llm-disclosure-title { font-size: 1.05rem; font-weight: 700; margin: 0 0 0.85rem; }
-.llm-disclosure-body { font-size: 0.88rem; line-height: 1.55; color: var(--text); margin: 0 0 1.25rem; }
+.llm-disclosure-body { font-size: 0.88rem; line-height: 1.55; color: var(--ink); margin: 0 0 1.25rem; }
 .llm-disclosure-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
 .llm-disclosure-btn { padding: 0.5rem 1.1rem; border-radius: 7px; font-size: 0.87rem; font-weight: 600; cursor: pointer; border: none; }
-.llm-disclosure-btn--primary { background: var(--accent); color: #fff; }
-.llm-disclosure-btn--secondary { background: var(--surface); color: var(--text); }
+.llm-disclosure-btn--primary { background: var(--accent-ink); color: #fff; }
+.llm-disclosure-btn--primary:hover { background: var(--accent-ink-hover); }
+.llm-disclosure-btn--secondary { background: var(--surface); color: var(--ink); }
 .llm-disclosure-body a { color: var(--accent-ink); }
 
 /* Persistent site footer: error/verification notice + copyright */
@@ -653,13 +677,13 @@ body {
   border: none;
   border-radius: 6px;
   padding: 0.35rem 0.85rem;
-  background: var(--accent);
+  background: var(--accent-ink);
   color: #fff;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
 }
-.update-banner-btn:hover { background: var(--accent-ink); }
+.update-banner-btn:hover { background: var(--accent-ink-hover); }
 .update-banner-dismiss {
   border: none;
   background: none;
@@ -706,7 +730,7 @@ body {
   border: none;
   border-radius: 999px;
   padding: 0.55rem 1.15rem;
-  background: var(--accent);
+  background: var(--accent-ink);
   color: #fff;
   font: inherit;
   font-size: 0.87rem;
@@ -715,7 +739,7 @@ body {
   box-shadow: 0 3px 14px rgba(0, 0, 0, 0.22);
   transition: background 0.12s ease;
 }
-.feedback-pill:hover { background: var(--accent-ink); }
+.feedback-pill:hover { background: var(--accent-ink-hover); }
 
 /* Bottom sheet: overlay anchors the dialog to the bottom edge on small
    screens and floats it in from the bottom-right on wider ones. */
@@ -789,14 +813,23 @@ body {
   border: none;
   border-radius: 7px;
   padding: 0.5rem 1.1rem;
-  background: var(--accent);
+  background: var(--accent-ink);
   color: #fff;
   font: inherit;
   font-size: 0.87rem;
   font-weight: 600;
   cursor: pointer;
 }
+.feedback-send:hover:not(:disabled) { background: var(--accent-ink-hover); }
 .feedback-send:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Inline honest-failure state: the draft is kept and the user can retry. */
+.feedback-error {
+  margin: 0 0 0.75rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--danger);
+}
 .feedback-cancel {
   border: none;
   border-radius: 7px;

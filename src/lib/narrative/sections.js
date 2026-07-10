@@ -13,7 +13,8 @@
 // back to the exact record without re-parsing the prose.
 
 import { formatMoney } from './formatters.js'
-import { isNetGrossRollup } from '../variance/sectionType.js'
+import { isRollupLabel } from '../variance/sectionType.js'
+import { isZeroNoiseVariance } from '../variance/thresholds.js'
 import {
   varianceSentence,
   missingSentence,
@@ -94,30 +95,24 @@ function toNote(c) {
 // GENUINE aggregate phrases (shared isNetGrossRollup): "Gross Potential Rent"
 // and "Gross Scheduled Income" are standard DETAIL income lines on commercial
 // property statements and must stay narratable.
-const ROLLUP_DECORATION_RE = /^[\s*•·-]+/
-const ROLLUP_PREFIX_RE = /^(total|subtotal)\b/i
-export function isRollupLabel(label = '') {
-  const s = String(label).trim().replace(ROLLUP_DECORATION_RE, '')
-  if (!s) return false
-  if (/^[0-9]/.test(s)) return false // coded account → a real line, never a rollup
-  return ROLLUP_PREFIX_RE.test(s) || isNetGrossRollup(s)
-}
+// QA fix: this now DELEGATES to the variance engine's isRollupLabel so both
+// layers share one definition. The local copy lacked the NET_TOTAL cases —
+// bare "NOI" and "GRAND TOTAL" rows were treated as rollups by the engine but
+// as real lines here, so the Excel status column labeled them "Within
+// Threshold" (factually wrong for a $4,000 movement) instead of "Total".
+export { isRollupLabel }
 
 // NQ-2C — ZERO_NOISE suppression.
 // A variance whose absolute dollar movement is below this floor is "effectively
-// zero" — it renders as "$0" / "$0.09" noise (e.g. "came in under budget by $0",
-// "exceeded budget by $0.09") that crowds the owner narrative without telling
-// them anything. Such a row may still have crossed the PERCENT threshold (a tiny
-// base can produce a large percent on a sub-dollar move), so the threshold gate
-// alone does not remove it. We suppress it from every owner-facing section here,
-// at the narrative layer only — the variance math, the source rows, and the full
-// Excel variance table (buildAllVariances) are all untouched, preserving numeric
-// integrity. The floor is a hard $1: anything at/above $1 still renders.
-export const ZERO_NOISE_DOLLAR = 1
-export function isZeroNoiseVariance(c) {
-  const v = c && c.varianceAmount
-  return typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < ZERO_NOISE_DOLLAR
-}
+// zero" — it renders as "$0" / "$0.09" noise that tells an owner nothing. Such
+// a row may still have crossed the PERCENT threshold (a tiny base yields a huge
+// percent on a sub-dollar move). The canonical floor now lives in the variance
+// layer (thresholds.js) and the ENGINE clears the trigger for these rows, so
+// the flagged count, the executive sentence, and this narrative filter all
+// agree; the re-export (and the belt-and-suspenders filter in triggeredRows)
+// keep every existing consumer working unchanged.
+export { isZeroNoiseVariance }
+export { ZERO_NOISE_DOLLAR } from '../variance/thresholds.js'
 
 // Rows that crossed a threshold, by definition the only ones we narrate. Phase
 // 20A.1: statement rollups/subtotals are excluded from every owner-facing

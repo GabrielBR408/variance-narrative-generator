@@ -35,9 +35,11 @@ export const BASE_GATE_MULTIPLE_CANDIDATES = 'multiple-candidates' // base faile
 // --- Messages (named, actionable; replace the generic single-message gate) ---
 
 export function messageNoCandidate(baseName = '') {
-  const named = baseName ? `"${baseName}"` : 'The uploaded base file'
+  // "The file" is folded into the fallback so an empty name never doubles the
+  // subject ("The file The uploaded base file doesn't…").
+  const named = baseName ? `The file "${baseName}"` : 'The uploaded base file'
   return (
-    `The file ${named} doesn't look like a comparative variance report ` +
+    `${named} doesn't look like a comparative variance report ` +
     `(no Actual vs Budget columns found). Please upload a comparative income ` +
     `statement as the base file — it should have columns for both actual and ` +
     `budget figures.`
@@ -45,12 +47,13 @@ export function messageNoCandidate(baseName = '') {
 }
 
 export function messageMultipleCandidates(baseName = '', candidateNames = []) {
-  const named = baseName ? `"${baseName}"` : 'The uploaded base file'
+  // Same fallback fold as messageNoCandidate — never double the subject.
+  const named = baseName ? `The file "${baseName}"` : 'The uploaded base file'
   const list = Array.isArray(candidateNames) && candidateNames.length
     ? ` Candidates: ${candidateNames.map((n) => `"${n}"`).join(', ')}.`
     : ''
   return (
-    `The file ${named} doesn't look like a comparative variance report. ` +
+    `${named} doesn't look like a comparative variance report. ` +
     `Multiple files could be the base — please re-upload with the correct ` +
     `income statement as the first file.${list}`
   )

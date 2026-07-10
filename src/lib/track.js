@@ -25,17 +25,21 @@ function isInternal() {
   } catch (e) { return false; }
 }
 
-export function track(app, event, properties = {}) {
-  try {
-    const body = JSON.stringify({
-      app,
-      event,
-      session_id: getSessionId(),
-      properties: Object.assign({}, properties || {}, isInternal() ? { internal: true } : {}),
-      path: window.location.pathname,
-      user_agent: navigator.userAgent,
-    });
-    fetch(`${SUPABASE_URL}/rest/v1/app_events`, {
+// Shared request builder so the fire-and-forget and awaitable paths post the
+// exact same event shape to the same endpoint. May throw (e.g. no `window` in
+// a non-browser context) — callers wrap it.
+function buildRequest(app, event, properties) {
+  const body = JSON.stringify({
+    app,
+    event,
+    session_id: getSessionId(),
+    properties: Object.assign({}, properties || {}, isInternal() ? { internal: true } : {}),
+    path: window.location.pathname,
+    user_agent: navigator.userAgent,
+  });
+  return {
+    url: `${SUPABASE_URL}/rest/v1/app_events`,
+    options: {
       method: 'POST',
       headers: {
         apikey: SUPABASE_KEY,
@@ -45,8 +49,42 @@ export function track(app, event, properties = {}) {
       },
       body,
       keepalive: true,
-    }).catch(() => {});
+    },
+  };
+}
+
+// Fire-and-forget page/usage event. Deliberately silent: analytics must never
+// block the UI or throw, so errors are swallowed. Do NOT use this for anything
+// the user is told succeeded — use trackSend for that.
+export function track(app, event, properties = {}) {
+  try {
+    const { url, options } = buildRequest(app, event, properties);
+    fetch(url, options).catch(() => {});
   } catch {
     // never throw — analytics must never break the app
+  }
+}
+
+// Awaitable variant for user-initiated sends (the feedback widget) where the
+// UI reports the outcome. Resolves `true` only when the endpoint accepted the
+// row (response.ok); resolves `false` on an HTTP error status, a network
+// failure, or once `timeoutMs` elapses (the request is aborted). It NEVER
+// rejects and never throws, so callers can `await` it bare.
+export function trackSend(app, event, properties = {}, { timeoutMs = 10000 } = {}) {
+  try {
+    const { url, options } = buildRequest(app, event, properties);
+    let controller = null;
+    let timer = null;
+    if (typeof AbortController !== 'undefined') {
+      controller = new AbortController();
+      options.signal = controller.signal;
+      timer = setTimeout(() => controller.abort(), timeoutMs);
+    }
+    return fetch(url, options)
+      .then((res) => Boolean(res && res.ok))
+      .catch(() => false)
+      .finally(() => { if (timer) clearTimeout(timer); });
+  } catch {
+    return Promise.resolve(false);
   }
 }

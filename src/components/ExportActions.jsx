@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { narrativeToMarkdown, narrativeToClipboardText } from '../lib/export/markdown.js'
 import { narrativeToDocxBlob } from '../lib/export/docx.js'
 import { exportFileName, docxFileName, excelFileName } from '../lib/export/exportState.js'
@@ -99,22 +99,62 @@ const EXCEL_LABEL = {
   error: 'Excel failed — try again'
 }
 
+// QA fix (export double-fire): how long a handler's re-entrancy lock stays
+// held after it finishes. The disabled/"working" state is render-scoped, so two
+// activations delivered in one task (key auto-repeat, assistive tech) both see
+// the idle render and fire twice — two downloads. Each handler takes a
+// synchronous ref lock before doing anything and releases it on this short
+// timer, so a burst of duplicate activations produces exactly ONE export while
+// a deliberate later click (retry, re-download) still works. The existing
+// disabled-state UX is unchanged.
+const EXPORT_REARM_MS = 400
+
 export default function ExportActions({ narrative, enrichment = null, correction = null }) {
   const [copyState, setCopyState] = useState('idle') // idle | copied | error
   const [docxState, setDocxState] = useState('idle') // idle | working | done | error
   const [excelState, setExcelState] = useState('idle') // idle | working | done | error
 
+  // One synchronous lock per export kind (see EXPORT_REARM_MS above). Refs, not
+  // state: they must flip the instant the handler starts, not on the next render.
+  const exportLocksRef = useRef({})
+  function acquireLock(kind) {
+    if (exportLocksRef.current[kind]) return false
+    exportLocksRef.current[kind] = true
+    return true
+  }
+  function releaseLockSoon(kind) {
+    setTimeout(() => {
+      exportLocksRef.current[kind] = false
+    }, EXPORT_REARM_MS)
+  }
+
   async function handleCopy() {
+    if (!acquireLock('copy')) return
     try {
       await writeClipboard(narrativeToClipboardText(narrative))
       setCopyState('copied')
       track('vng', 'export', { type: 'copy' })
     } catch {
       setCopyState('error')
+    } finally {
+      releaseLockSoon('copy')
+    }
+  }
+
+  // Markdown is synchronous, so without the timed lock a double activation
+  // would download it twice back-to-back (it previously had NO guard at all).
+  function handleMarkdown() {
+    if (!acquireLock('markdown')) return
+    try {
+      downloadMarkdown(narrative)
+      track('vng', 'export', { type: 'markdown' })
+    } finally {
+      releaseLockSoon('markdown')
     }
   }
 
   async function handleDocx() {
+    if (!acquireLock('docx')) return
     setDocxState('working')
     try {
       await downloadDocx(narrative)
@@ -122,10 +162,13 @@ export default function ExportActions({ narrative, enrichment = null, correction
       track('vng', 'export', { type: 'docx' })
     } catch {
       setDocxState('error')
+    } finally {
+      releaseLockSoon('docx')
     }
   }
 
   async function handleExcel() {
+    if (!acquireLock('excel')) return
     setExcelState('working')
     try {
       await downloadExcel(narrative, enrichment, correction)
@@ -133,6 +176,8 @@ export default function ExportActions({ narrative, enrichment = null, correction
       track('vng', 'export', { type: 'excel' })
     } catch {
       setExcelState('error')
+    } finally {
+      releaseLockSoon('excel')
     }
   }
 
@@ -151,10 +196,7 @@ export default function ExportActions({ narrative, enrichment = null, correction
         <button
           type="button"
           className="export-btn export-btn--secondary"
-          onClick={() => {
-            downloadMarkdown(narrative)
-            track('vng', 'export', { type: 'markdown' })
-          }}
+          onClick={handleMarkdown}
         >
           Download Markdown
         </button>

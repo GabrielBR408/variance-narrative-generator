@@ -25,9 +25,12 @@ import { SUPPRESS_RATIO } from './contribution.js'
 // A readable account label: strip a leading numeric code so
 // "5100 Utility Expense Recovery" reads as "Utility Expense Recovery". Falls
 // back to the original label if stripping would leave nothing.
+// The code must be a STANDALONE token followed by a separator (whitespace, "·",
+// or ":") — digits glued to letters are part of the name ("401k Match" must
+// never lose its "401"). Mirrors displayAccountLabel in narrative/formatters.js.
 export function displayAccount(account = '') {
   const stripped = String(account)
-    .replace(/^\s*[0-9][0-9.\-]*\s*[·:.\-]?\s*/, '')
+    .replace(/^\s*\d(?:[\d.\-]*[\d.])?(?:\s+[-·:]?\s*|[·:]\s*)/, '')
     .trim()
   return stripped || String(account).trim()
 }
@@ -85,6 +88,11 @@ export function descriptorFor(account = '') {
 // the Excel export so the narrative and the workbook present totals identically.
 export function approxMoney(total) {
   const abs = Math.abs(total)
+  // A nonzero total must never round DOWN to "$0" ("approximately $0" reads as
+  // a contradiction): totals under $10 render as whole dollars with a $1 floor.
+  if (abs > 0 && abs < 10) {
+    return `$${Math.max(1, Math.round(abs))}`
+  }
   const step = abs >= 1000 ? 100 : 10
   const rounded = Math.round(abs / step) * step
   return `$${rounded.toLocaleString('en-US')}`
@@ -224,6 +232,11 @@ function caseVendorPart(p) {
   const lc = bare.toLowerCase()
   if (VENDOR_SUFFIX_CASE[lc]) return VENDOR_SUFFIX_CASE[lc]
   if (bare.includes('&')) return up // e.g. AT&T, PG&E
+  // A token that already carries deliberate MIXED case ("CleanCo", "iSupply",
+  // "McDonald's") keeps it — the source knew its own brand casing, and
+  // flattening it ("Cleanco") misspells the vendor in owner-facing prose.
+  // ALL-CAPS tokens (GL exports often shout "CLEANCO") still title-case below.
+  if (bare !== up && bare !== lc) return bare + (trailingDot ? '.' : '')
   return bare.charAt(0).toUpperCase() + bare.slice(1).toLowerCase() + (trailingDot ? '.' : '')
 }
 

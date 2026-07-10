@@ -15,7 +15,7 @@ export default function DisclosureModal({ onAccept, onDismiss }) {
       <div className="llm-disclosure-dialog" ref={dialogRef} tabIndex={-1}>
         <h2 id="llm-disclosure-title" className="llm-disclosure-title">AI Commentary — Data Notice</h2>
         <p className="llm-disclosure-body">
-          Generating AI commentary sends your GL transaction detail to Anthropic's API to produce vendor-cited narratives. No data is stored on our servers. See Anthropic's privacy policy for API data handling.
+          Generating AI commentary sends your GL transaction detail to Anthropic's API to produce vendor-cited narratives. Your files and figures are not stored on our servers — processing is in-memory for the session; anonymous usage analytics and any feedback you submit are stored. See Anthropic's privacy policy for API data handling.
         </p>
         <div className="llm-disclosure-actions">
           <button type="button" className="llm-disclosure-btn llm-disclosure-btn--primary" onClick={onAccept}>

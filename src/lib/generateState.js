@@ -116,6 +116,8 @@ function sameKeys(a, b) {
 const STYLE_SNAPSHOT_FIELDS = ['reportStyle', 'tone', 'length', 'abbreviateDollars', 'dollarReferences']
 
 export function resultFreshness({ generated, current } = {}) {
+  // Missing inputs → "not stale" (no signature: there were no values to compare,
+  // and the banner is never visible without a result anyway).
   if (!generated || !current) return { stale: false, changed: [] }
   const changed = []
   const thresholdsDiffer =
@@ -138,7 +140,37 @@ export function resultFreshness({ generated, current } = {}) {
     if (filesDiffer) changed.push('files')
   }
 
-  return { stale: changed.length > 0, changed }
+  // QA fix (pending-extraction staleness): useGenerate's drift effect marks the
+  // snapshot when a source file's extraction fingerprint changed AFTER the
+  // result was generated (e.g. a supporting file finished extracting). The file
+  // KEYS are unchanged in that case, so it surfaces through the same 'files'
+  // group — the result no longer reflects the files' actual content.
+  if (generated.extractionStale === true && !changed.includes('files')) changed.push('files')
+
+  // QA fix (banner re-arm): a stable serialization of the VALUES this compare
+  // ran over — not just the changed GROUP names. ResultPanel keys its dismissal
+  // reset on this, so threshold 1000 → 2000 (dismiss) → 3000 re-arms the banner
+  // even though the group list ('thresholds') is identical both times. The
+  // generate-time fingerprints ride along so each post-dismissal extraction
+  // drift also re-arms.
+  const signature = JSON.stringify({
+    changed,
+    current: {
+      amountThreshold: current.amountThreshold,
+      percentThreshold: current.percentThreshold,
+      commentaryMode: current.commentaryMode,
+      reportStyle: current.reportStyle,
+      tone: current.tone,
+      length: current.length,
+      abbreviateDollars: current.abbreviateDollars,
+      dollarReferences: current.dollarReferences,
+      baseKey: current.baseKey,
+      supportingKeys: current.supportingKeys
+    },
+    extractionFingerprints: generated.extractionFingerprints || null
+  })
+
+  return { stale: changed.length > 0, changed, signature }
 }
 
 // Should a previously generated result be discarded? Phase 22.3: a result that
@@ -156,6 +188,88 @@ export function shouldDiscardResult({ hasBase, hasResult } = {}) {
 // testable; the App applies it in an effect keyed on the file-set identity.
 export function shouldClearFailure({ status, filesChanged } = {}) {
   return status === 'failure' && !!filesChanged
+}
+
+// --- Request identity (QA fix: mid-generation supersession) ----------------
+// A /generate response must only render if it still describes what is on
+// screen. Two things can invalidate an in-flight request: a NEWER request
+// started (its response should win), or the uploaded file set changed while
+// the request was in flight (the response would render the OLD file's
+// narrative as "Generation complete" for the NEW list). Both checks are pure
+// so the discard rule is testable; useGenerate stamps each request with a
+// monotonic id + the file-set signature it was built from and asks this at
+// every resolve/reject path.
+
+// Canonical identity of a file set (base + sorted supporting keys) — the same
+// shape App keys its stale-failure reset on. Order-insensitive for supporting
+// files, so a mere reorder never reads as a different set.
+export function fileSetSignature({ baseKey, supportingKeys } = {}) {
+  const supporting = Array.isArray(supportingKeys) ? [...supportingKeys].sort() : []
+  return [baseKey || '', ...supporting].join('|')
+}
+
+// True when a resolved response may still be applied to the UI: no newer
+// request has started AND the on-screen file set still matches the one the
+// request was assembled from.
+export function shouldApplyGenerateResponse({
+  requestId,
+  latestRequestId,
+  requestFileSetKey,
+  currentFileSetKey
+} = {}) {
+  return requestId === latestRequestId && requestFileSetKey === currentFileSetKey
+}
+
+// --- Honest local fallback (QA fix: silent client fallback) ----------------
+// The in-browser fallback is legitimate on a static host (the endpoint is
+// genuinely absent — 404/405, or a 200 that served the SPA shell). But when it
+// ran because the fetch itself REJECTED (network failure, server unreachable),
+// presenting the local narrative as an unqualified "Generation complete" hides
+// that the AI path never ran. This pure policy yields the plain-language
+// notice for exactly that case, and null for every legitimate-fallback or
+// server path, so the message and its trigger are testable without a browser.
+export const LOCAL_FALLBACK_NOTICE =
+  'Narratives were generated locally without AI commentary because the server could not be reached. ' +
+  'Style settings beyond dollar formatting may not apply.'
+
+export function localFallbackNotice({ usedFallback, fetchRejected } = {}) {
+  return usedFallback && fetchRejected ? LOCAL_FALLBACK_NOTICE : null
+}
+
+// --- Extraction fingerprints (QA fix: pending-extraction staleness) --------
+// A result generated while a supporting file was still extracting shipped with
+// that file's EMPTY normalized data. When the extraction completes seconds
+// later, the file KEYS have not changed — so a key-only freshness compare sees
+// nothing. These fingerprints capture what the generation actually consumed
+// (extraction status + normalized row count), so a file finishing (or
+// re-extracting differently) after generation marks the result stale.
+
+// Cheap, deterministic fingerprint of one extraction record. 'missing' when the
+// record does not exist (file not yet registered / removed).
+export function extractionFingerprint(ex) {
+  if (!ex) return 'missing'
+  const rows =
+    ex.normalized && Array.isArray(ex.normalized.rows) ? ex.normalized.rows.length : 0
+  return `${ex.status || 'unknown'}::${rows}`
+}
+
+// Fingerprint map for a result's source file set (base + supporting keys),
+// read from the extraction map keyed by fileKey (fileId === fileKey).
+export function sourceExtractionFingerprints({ baseKey, supportingKeys, extractions } = {}) {
+  const map = {}
+  const keys = [baseKey, ...(Array.isArray(supportingKeys) ? supportingKeys : [])].filter(Boolean)
+  for (const key of keys) map[key] = extractionFingerprint(extractions ? extractions[key] : null)
+  return map
+}
+
+// True when any file's fingerprint differs between the generate-time snapshot
+// and the current extraction state (including keys present on only one side).
+export function extractionFingerprintsDrifted(generated, current) {
+  const g = generated || {}
+  const c = current || {}
+  const keys = new Set([...Object.keys(g), ...Object.keys(c)])
+  for (const key of keys) if (g[key] !== c[key]) return true
+  return false
 }
 
 // How many supporting files are still being read. Phase 22.3: used for a

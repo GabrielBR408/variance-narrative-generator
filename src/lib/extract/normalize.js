@@ -59,7 +59,24 @@ export function toNumber(value) {
   const letters = (raw.match(/[A-Za-z]/g) || []).length
   const digits = (raw.match(/[0-9]/g) || []).length
   if (letters > digits) return null
-  const negative = /^\(.*\)$/.test(raw)
+  // Accounting negatives. The parens test runs with currency/percent symbols
+  // stripped first: real exports print the dollar sign OUTSIDE the parens just
+  // as often as inside ("$(1,234)" vs "($1,234)"), and requiring the raw string
+  // to START with "(" silently flipped the former to +1,234 — a lost credit.
+  // A trailing CR affix ("1,234.56 CR") is a credit too: the letters-vs-digits
+  // guard above already admits it, so honor its sign instead of dropping it.
+  // (A DR affix is a debit — positive — which is the default reading.)
+  const symbolFree = raw.replace(/[$%\s]/g, '')
+  const negative = /^\(.*\)$/.test(symbolFree) || /(^|\s)cr\.?$/i.test(raw)
+  // Scientific notation ("1e12", "2.5E+11") must be handed to Number() whole:
+  // the symbol strip below deletes the "e" and CONCATENATES mantissa and
+  // exponent digits ("1e12" → 112), silently corrupting the figure.
+  const sciCandidate = symbolFree.replace(/[(),]/g, '')
+  if (/^[+-]?(\d+\.?\d*|\.\d+)[eE][+-]?\d+$/.test(sciCandidate)) {
+    const sci = Number(sciCandidate)
+    if (!Number.isFinite(sci)) return null
+    return negative ? -Math.abs(sci) : sci
+  }
   const cleaned = raw.replace(/[(),$%\s]/g, '').replace(/[^0-9.\-]/g, '')
   if (cleaned === '' || cleaned === '-' || cleaned === '.') return null
   const n = Number(cleaned)

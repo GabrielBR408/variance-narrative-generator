@@ -191,7 +191,9 @@ function ownerSupportSummary(note) {
       // Display only: present the rounded "approximately" style the narrative
       // uses, so the two surfaces match. The raw total is preserved internally
       // (and printed exactly in the evidence sheet's GL Total column).
-      parts.push(`~${approxMoney(d.total)}`)
+      // approxMoney() renders magnitude only — restore the sign so net CREDITS
+      // (−$1,500) never read as positive activity in the owner sheet.
+      parts.push(`~${d.total < 0 ? '-' : ''}${approxMoney(d.total)}`)
     }
     return parts.length ? `GL: ${parts.join(' · ')}` : 'GL match'
   }
