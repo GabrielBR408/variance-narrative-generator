@@ -27,12 +27,12 @@ const TOOLS = [
     desc: 'Drop a rent roll → instant stacking plan. Recolor, edit suites, export PNG/PDF/PPTX/Excel.'
   },
   {
-    label: 'Variance Narrative Generator',
+    label: 'Variance Narrative Generator (Prototype)',
     href: '/vng',
     desc: 'Turns a budget-vs-actual statement into owner-ready variance narratives.'
   },
   {
-    label: 'Owner Report Generator',
+    label: 'Owner Report Generator (Prototype)',
     href: '/orgen',
     desc: 'Compiles monthly owner reports.'
   }
