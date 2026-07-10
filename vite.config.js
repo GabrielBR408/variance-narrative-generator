@@ -1,7 +1,24 @@
+import { readFileSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { handleGenerate } from './server/generate.js'
+
+// --- Build stamp (version + commit SHA) -------------------------------------
+// Surfaced in the /vng footer and attached to feedback events so a report can
+// be tied to the exact deploy it came from. Vercel provides the SHA via env;
+// local builds fall back to git; 'unknown' only if neither is available.
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
+function buildCommitSha() {
+  const fromEnv = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA
+  if (fromEnv) return fromEnv.slice(0, 7)
+  try {
+    return execSync('git rev-parse --short=7 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+  } catch {
+    return 'unknown'
+  }
+}
 
 // --- Local /generate endpoint (dev + preview middleware) -------------------
 // The real request handler now lives in server/generate.js so it can graduate
@@ -40,6 +57,10 @@ const base = process.env.VITE_BASE || '/'
 
 export default defineConfig({
   base,
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __COMMIT_SHA__: JSON.stringify(buildCommitSha())
+  },
   plugins: [
     react(),
     generateEndpoint(),

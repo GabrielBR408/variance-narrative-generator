@@ -30,6 +30,8 @@ import { useExtraction } from './hooks/useExtraction.js'
 import { useGenerate } from './hooks/useGenerate.js'
 import chiefeoLogo from './assets/chiefeo-logo.png'
 import { track } from './lib/track.js'
+import FeedbackWidget from './components/FeedbackWidget.jsx'
+import { APP_VERSION, COMMIT_SHA } from './lib/buildInfo.js'
 
 // Phase 23: all five Style controls are active and shape the generated
 // narrative. Report Style / Tone / Length / Dollar Value References become
@@ -241,6 +243,10 @@ export default function App() {
     }
   }, [fileSetKey, status])
 
+  // Coarse screen label attached to feedback reports — enough to tell whether
+  // the user was still uploading, mid-generation, or looking at a result.
+  const feedbackScreen = result && status === 'success' ? 'result' : busy ? 'generating' : 'upload'
+
   return (
     <main className="page">
       <a className="back-to-hub" href="https://chiefeotool.com/">← All Tools</a>
@@ -309,7 +315,12 @@ export default function App() {
         <p className="site-footer-line site-footer-line--muted">
           &copy; 2026 GREVE, operating as ChiefEO. All rights reserved.
         </p>
+        <p className="site-footer-line site-footer-line--muted">
+          v{APP_VERSION} · build {COMMIT_SHA}
+        </p>
       </footer>
+
+      <FeedbackWidget screen={feedbackScreen} />
     </main>
   )
 }

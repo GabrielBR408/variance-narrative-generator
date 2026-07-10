@@ -693,3 +693,120 @@ body {
 }
 .hub-tool-label { display: block; font-weight: 600; color: var(--accent-ink); }
 .hub-tool-desc { display: block; color: var(--muted); font-size: 0.86rem; margin-top: 0.2rem; }
+
+/* --- Feedback widget (VNG only) -------------------------------------------- */
+/* Floating pill bottom-right, below the modal overlays (9999) and the update
+   banner is top-anchored so they never collide. The global reduced-motion
+   rule above already disables the transitions. */
+.feedback-pill {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 900;
+  border: none;
+  border-radius: 999px;
+  padding: 0.55rem 1.15rem;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 0.87rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.22);
+  transition: background 0.12s ease;
+}
+.feedback-pill:hover { background: var(--accent-ink); }
+
+/* Bottom sheet: overlay anchors the dialog to the bottom edge on small
+   screens and floats it in from the bottom-right on wider ones. */
+.feedback-overlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 9999;
+  display: flex; align-items: flex-end; justify-content: center; padding: 0;
+}
+.feedback-sheet {
+  background: var(--bg);
+  border-radius: 12px 12px 0 0;
+  padding: 1.5rem 1.75rem 1.75rem;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 -6px 40px rgba(0, 0, 0, 0.18);
+}
+@media (min-width: 560px) {
+  .feedback-overlay { align-items: flex-end; justify-content: flex-end; padding: 0 1.25rem 1.25rem; }
+  .feedback-sheet { border-radius: 12px; }
+}
+
+.feedback-title { font-size: 1.05rem; font-weight: 700; margin: 0 0 0.85rem; }
+
+.feedback-types { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0 0 0.75rem; }
+.feedback-type-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.feedback-type-chip--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.feedback-message {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+  margin: 0 0 0.75rem;
+}
+
+/* "Attached automatically" receipt — dashed so it reads as metadata, not input */
+.feedback-receipt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0 1rem;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.feedback-receipt-label { font-weight: 600; }
+
+.feedback-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.feedback-send {
+  border: none;
+  border-radius: 7px;
+  padding: 0.5rem 1.1rem;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 0.87rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.feedback-send:disabled { opacity: 0.45; cursor: not-allowed; }
+.feedback-cancel {
+  border: none;
+  border-radius: 7px;
+  padding: 0.5rem 1.1rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.87rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.feedback-success-body { font-size: 0.88rem; line-height: 1.55; color: var(--ink); margin: 0 0 1.25rem; }
