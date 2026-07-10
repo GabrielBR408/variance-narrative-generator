@@ -33,6 +33,10 @@
       "destination": "/analytics.html"
     },
     {
+      "source": "/stacking",
+      "destination": "/stacking.html"
+    },
+    {
       "source": "/downdriller",
       "destination": "https://chiefeo-gl-down-driller.vercel.app"
     },
