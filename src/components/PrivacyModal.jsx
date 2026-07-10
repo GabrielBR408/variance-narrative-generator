@@ -4,11 +4,14 @@ import { useDialogA11y } from '../hooks/useDialogA11y.js'
 // First-visit privacy & AI disclosure. Shown once per browser; the
 // acknowledgement is persisted in localStorage by App. Extracted verbatim from
 // App() — onAccept records the acknowledgement and dismisses. Keyboard access:
-// focus moves to the "I understand" button on open and Escape closes the
-// notice — acknowledging is its only close action, so Escape maps to onAccept.
+// focus moves to the "I understand" button on open and Tab is trapped inside.
+// Escape is deliberately a NO-OP (onEscape: null): accepting this notice
+// permanently persists an acknowledgement of the privacy/AI terms, and consent
+// must be explicit — a reflexive Escape (or one aimed at a dialog stacked on
+// top) must never silently record it. The only way out is the button.
 export default function PrivacyModal({ onAccept }) {
   const dialogRef = useRef(null)
-  useDialogA11y({ dialogRef, onEscape: onAccept })
+  useDialogA11y({ dialogRef, onEscape: null })
 
   return (
     <div className="llm-disclosure-overlay" role="dialog" aria-modal="true" aria-labelledby="privacy-disclosure-title">

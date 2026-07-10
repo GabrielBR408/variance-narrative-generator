@@ -38,8 +38,11 @@ const KIND_BY_EXT = {
 }
 
 export function extensionOf(name = '') {
-  const dot = name.lastIndexOf('.')
-  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : ''
+  // Guard explicit null/undefined too: a default parameter only covers
+  // `undefined`, and a File-like object can carry `name: null`.
+  const s = String(name ?? '')
+  const dot = s.lastIndexOf('.')
+  return dot >= 0 ? s.slice(dot + 1).toLowerCase() : ''
 }
 
 // Friendly, content-free messages. We never surface raw parser errors.

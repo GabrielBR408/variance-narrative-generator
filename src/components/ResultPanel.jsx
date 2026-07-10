@@ -4,7 +4,7 @@ import { canExport } from '../lib/export/exportState.js'
 import { freshnessBannerVisible } from '../lib/generateState.js'
 import { scopeNarrative, DEFAULT_PERIOD_SCOPE } from '../lib/narrative/periodScope.js'
 import { OWNER_SECTIONS, CONTEXT_SECTION } from '../lib/narrative/sectionDefs.js'
-import { prettySize } from './uiFormat.js'
+import { prettySize, friendlyFileType } from './uiFormat.js'
 import ExportActions from './ExportActions.jsx'
 import EnrichmentDiagnostic from './EnrichmentDiagnostic.jsx'
 import EnrichmentStatus from './EnrichmentStatus.jsx'
@@ -20,9 +20,15 @@ const NO_FRESHNESS = { stale: false, changed: [] }
 // regenerate. Pure visibility rule lives in generateState.freshnessBannerVisible;
 // dismissal is local and re-arms whenever a NEW change occurs.
 function ResultFreshnessBanner({ status, hasResult, freshness }) {
-  const changedKey = (freshness.changed || []).join(',')
+  // QA fix: the re-arm key is the serialized snapshot of the compared VALUES
+  // (resultFreshness's `signature`), not just the changed group names — so
+  // threshold 1000 → 2000 (dismiss) → 3000 re-shows the banner even though the
+  // group list ('thresholds') is identical both times. Older freshness objects
+  // without a signature fall back to the group key.
+  const changedKey =
+    freshness.signature != null ? freshness.signature : (freshness.changed || []).join(',')
   const [dismissed, setDismissed] = useState(false)
-  // Re-show the banner whenever the set of changed settings changes.
+  // Re-show the banner whenever the compared settings/files drift again.
   useEffect(() => setDismissed(false), [changedKey])
 
   if (!freshnessBannerVisible({ status, hasResult, stale: freshness.stale, dismissed })) return null
@@ -113,7 +119,9 @@ export default function ResultPanel({ status, result, periodScope = DEFAULT_PERI
                     </div>
                     <div className="received-file-meta">
                       <span>{prettySize(f.size)}</span>
-                      <span>{f.type || 'unknown type'}</span>
+                      {/* Friendly type, never the raw MIME string ("application/
+                          vnd.openxmlformats-…") that means nothing to an owner. */}
+                      <span>{friendlyFileType(f.type, f.name)}</span>
                     </div>
                   </li>
                 )
@@ -127,6 +135,18 @@ export default function ResultPanel({ status, result, periodScope = DEFAULT_PERI
               output and download buttons), so the user knows when a basic
               narrative is shown and why. */}
           <EnrichmentStatus enrichment={result.enrichment} />
+
+          {/* QA fix (honest local fallback): when the narrative was computed
+              in-browser because the server could not be reached (the fetch
+              rejected — not a static host's missing endpoint), say so plainly.
+              Reuses the enrichment-status surface; presentation only, the
+              string is set by useGenerate via generateState.localFallbackNotice. */}
+          {result.notice && (
+            <div className="enrich-status enrich-status--fallback" role="status">
+              <span className="enrich-status-dot" aria-hidden="true" />
+              <span className="enrich-status-message">{result.notice}</span>
+            </div>
+          )}
 
           {/* Generate-time role correction (Option A): explains an automatic
               base/supporting swap. Renders nothing when no correction occurred. */}

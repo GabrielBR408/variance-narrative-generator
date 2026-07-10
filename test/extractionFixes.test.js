@@ -132,7 +132,10 @@ test('toNumber: mostly-letters cells are labels; real money cells still parse', 
   assert.equal(toNumber('Actual 2026'), null)
   assert.equal(toNumber('$1,234.56'), 1234.56)
   assert.equal(toNumber('(500.00)'), -500)
-  assert.equal(toNumber('1,234.56 CR'), 1234.56)
+  // QA fix: a trailing CR affix marks a CREDIT — the sign is honored now
+  // (this test previously asserted the affix-ignored +1,234.56 bug).
+  assert.equal(toNumber('1,234.56 CR'), -1234.56)
+  assert.equal(toNumber('1,234.56 DR'), 1234.56)
 })
 
 test('a year-suffixed value header ("Actual 2026") is detected past metadata rows', () => {

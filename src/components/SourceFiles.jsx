@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react'
 import { classifyFile, confidenceTier } from '../lib/classify.js'
 import { routeUpload } from '../lib/uploadRouting.js'
 import { fileKey } from '../lib/fileKey.js'
-import { prettySize } from './uiFormat.js'
+import { prettySize, friendlyFileType } from './uiFormat.js'
 import { track } from '../lib/track.js'
 
 const ACCEPT = '.pdf,.xlsx,.xls,.csv,.docx'
@@ -17,19 +17,32 @@ function Chip({ file, role, extraction, onRemove }) {
   const refined = extraction && extraction.classification
   const { type, confidence } =
     refined && refined.basis === 'content' ? refined : filename
+  // A file the extractor refused ('unsupported' reason — e.g. a dragged .txt,
+  // which bypasses the picker's accept filter) must not wear a confident role
+  // badge ("Base Variance Report 100%") while extraction says it can't be read.
+  // Show an honest "Unsupported file" badge instead.
+  const unsupported = Boolean(
+    extraction && (extraction.reason === 'unsupported' || extraction.status === 'unsupported')
+  )
   return (
     <span className="chip">
       <span className="chip-top">
         <span className="chip-name">{file.name}</span>
-        <span className="chip-size">{prettySize(file.size)}</span>
+        <span className="chip-size">{prettySize(file.size)} · {friendlyFileType(file.type, file.name)}</span>
         <button type="button" className="chip-x" aria-label={`Remove ${file.name}`} onClick={onRemove}>
           ×
         </button>
       </span>
-      <span className={`chip-class chip-class--${confidenceTier(confidence)}`}>
-        <span className="chip-class-type">{type}</span>
-        <span className="chip-class-conf">{confidence}%</span>
-      </span>
+      {unsupported ? (
+        <span className="chip-class chip-class--unsupported">
+          <span className="chip-class-type">Unsupported file</span>
+        </span>
+      ) : (
+        <span className={`chip-class chip-class--${confidenceTier(confidence)}`}>
+          <span className="chip-class-type">{type}</span>
+          <span className="chip-class-conf">{confidence}%</span>
+        </span>
+      )}
     </span>
   )
 }

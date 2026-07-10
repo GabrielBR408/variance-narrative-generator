@@ -15,6 +15,20 @@ import { Analytics } from '@vercel/analytics/react'
 // land in the app, not silently render the hub. /downdriller and /orgen never
 // reach here — vercel.json proxies them to other Vercel projects. The document
 // title is set per route so the hub doesn't carry the VNG title from index.html.
+// Vercel Web Analytics only works where Vercel serves the /_vercel/insights
+// script — the production domains and *.vercel.app preview deploys. Everywhere
+// else (local `vite preview`, GitHub Pages, any static mirror) the <Analytics />
+// script request 404s on every page view, spamming the console for nothing.
+// Gate it to the hosts that can actually serve it.
+function analyticsEnabled() {
+  const host = window.location.hostname
+  return (
+    host === 'chiefeotool.com' ||
+    host === 'www.chiefeotool.com' ||
+    host.endsWith('.vercel.app')
+  )
+}
+
 function pickRoute() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
   if (path === '/vng' || path.startsWith('/vng/')) {
@@ -30,8 +44,9 @@ createRoot(document.getElementById('root')).render(
     {pickRoute()}
     {/* App-wide Vercel Web Analytics (page views/traffic) for this single
         deployment — covers the hub and every route/proxied view. Unrelated to
-        the /vng-only `app_opened` custom event, which is fired inside App.jsx. */}
-    <Analytics />
+        the /vng-only `app_opened` custom event, which is fired inside App.jsx.
+        Rendered only on hosts Vercel actually serves (see analyticsEnabled). */}
+    {analyticsEnabled() && <Analytics />}
   </React.StrictMode>
 )
 

@@ -64,9 +64,13 @@ export function capitalize(s) {
 // applied solely where the label is rendered into a sentence. Falls back to the
 // original label if stripping would leave nothing. Deterministic, mirrors the
 // enrich-layer `displayAccount` so both surfaces strip codes identically.
+// The code must be a STANDALONE token: a separator (whitespace, "·", or ":")
+// has to follow it. Digits glued to letters are part of the name, not a code —
+// "401k Match" must render as "401k Match", never "k Match", and "24-Hour
+// Security" keeps its "24-" (the old pattern ate digits out of such words).
 export function displayAccountLabel(account = '') {
   const stripped = String(account)
-    .replace(/^\s*[0-9][0-9.\-]*\s*[·:.\-]?\s*/, '')
+    .replace(/^\s*\d(?:[\d.\-]*[\d.])?(?:\s+[-·:]?\s*|[·:]\s*)/, '')
     .trim()
   return stripped || String(account).trim()
 }

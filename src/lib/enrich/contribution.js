@@ -74,10 +74,21 @@ function isReliableTotal(total) {
 // expense transaction already matches the +1/-1 convention above in the
 // overwhelming majority of real exports, so this function's expense mapping
 // is unchanged and always trusted.
+// QA fix (expense-favorable): an UNDER-budget expense does not imply the GL
+// net should be NEGATIVE. Ordinary under-spend is smaller-but-positive charge
+// activity — the most common favorable-expense shape there is — and expecting
+// −1 branded every such line "ran opposite to the reported movement,
+// consistent with credits or reversals" (asserting credits that don't exist).
+// Even with genuinely signed Debit/Credit data a positive net under budget is
+// normal, so NO conflict is assertable for a favorable expense from the net
+// sign alone: return 0 (mirrors how unsigned revenue is handled). A favorable
+// expense that really was driven by credits still reads correctly — a negative
+// net is simply "aligned", and the separate offset detection (maxTxn > |total|)
+// continues to surface big single reversals.
 function expectedSign(accountType, category) {
   if (accountType === 'expense') {
     if (category === 'unfavorable') return 1
-    if (category === 'favorable') return -1
+    if (category === 'favorable') return 0
   }
   if (accountType === 'revenue') {
     if (category === 'favorable') return -1
@@ -127,7 +138,8 @@ export function rankContribution({
   // source gave genuine typed Debit/Credit evidence (`detail.signed`) — a
   // single unsigned "Amount" column cannot be trusted to carry that meaning
   // (see expectedSign() above), so no conflict is asserted in that case.
-  // Expense accounts trust the convention either way (unchanged).
+  // Expense conflicts are only assertable for the UNFAVORABLE side; a
+  // favorable expense yields exp === 0 (see expectedSign's QA note).
   const exp = expectedSign(accountType, category)
   const trustSign = accountType !== 'revenue' || !!detail.signed
   const directionAligned = !amountReliable || exp === 0 || !trustSign ? true : Math.sign(total) === exp

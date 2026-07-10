@@ -31,11 +31,19 @@ const DOLLAR_UNITS = [
 // value that ROUNDS UP across a unit boundary is promoted to the next tier
 // ($999,999 → "$1M", never "$1000K"). Non-finite input → null.
 export function abbreviateDollarAmount(value) {
+  // null/undefined/'' are "no value", not $0 — Number(null) is 0, which would
+  // silently render a missing figure as "$0" against the documented contract.
+  if (value === null || value === undefined || value === '') return null
   const n = Number(value)
   if (!Number.isFinite(n)) return null
   const sign = n < 0 ? '-' : ''
   const abs = Math.abs(n)
-  if (abs < 1_000) return `${sign}$${trimDecimal(abs)}`
+  // Sub-$1,000 magnitudes that ROUND UP to 1000 promote to the K tier —
+  // trimDecimal(999.95) would otherwise print "$1000" (no comma, no unit).
+  if (abs < 1_000) {
+    if (Math.round(abs * 10) / 10 >= 1_000) return `${sign}$1K`
+    return `${sign}$${trimDecimal(abs)}`
+  }
   let i = DOLLAR_UNITS.length - 1
   while (i > 0 && abs < DOLLAR_UNITS[i].value) i--
   // Rounding promotion: 999,950+ scales to "1000K" at the thousands tier — the

@@ -29,6 +29,19 @@ export function isTriggered(varianceAmount, variancePercent, thresholds = DEFAUL
   return byAmount || byPercent
 }
 
+// NQ-2C — the "effectively zero" floor (canonical home; the narrative layer
+// re-exports it). A variance whose absolute dollar movement is below this floor
+// may still cross the PERCENT threshold (a tiny base yields a huge percent on a
+// sub-dollar move) but tells an owner nothing. The engine clears its trigger
+// (see index.js) so the preview's flagged count, the executive summary, and the
+// Excel status column all agree — previously the narrative suppressed these
+// rows while summarize() still counted them, and the two surfaces disagreed.
+export const ZERO_NOISE_DOLLAR = 1
+export function isZeroNoiseVariance(c) {
+  const v = c && c.varianceAmount
+  return typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < ZERO_NOISE_DOLLAR
+}
+
 // Map the UI's Variance-Detail settings ({ dollarThreshold, percentThreshold },
 // which arrive as strings from the form) to engine thresholds ({ amount, percent }).
 // Only finite, non-negative values are honored; anything else falls back to the
