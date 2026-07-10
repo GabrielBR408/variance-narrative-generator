@@ -26,6 +26,16 @@ import { DEFAULT_THRESHOLDS, thresholdsFromSettings } from './lib/variance/thres
 import { generateNarrative } from './lib/narrative/index.js'
 import { periodScopeAvailable, DEFAULT_PERIOD_SCOPE } from './lib/narrative/periodScope.js'
 import { fileKey } from './lib/fileKey.js'
+import {
+  loadProfiles,
+  saveProfiles,
+  upsertProfile,
+  removeProfile,
+  matchProfile,
+  rowsForMatch,
+  cleanProfileName,
+  appliedProfileNotice
+} from './lib/profiles.js'
 import { useExtraction } from './hooks/useExtraction.js'
 import { useGenerate } from './hooks/useGenerate.js'
 import chiefeoLogo from './assets/chiefeo-logo.png'
@@ -110,6 +120,80 @@ export default function App() {
     setShowPrivacyDisclosure(false)
   }, [])
 
+  // Per-property threshold profiles. All the logic (shape, persistence,
+  // upsert/remove rules, the auto-match) lives in src/lib/profiles.js; App only
+  // holds the list, the dropdown's selection, and the one-line notice shown
+  // when a profile is auto-applied for an uploaded base report.
+  const [profiles, setProfiles] = useState(() => loadProfiles())
+  const [selectedProfileName, setSelectedProfileName] = useState('')
+  const [profileNotice, setProfileNotice] = useState('')
+  // Has the user hand-edited the Variance-Detail settings since the current
+  // base was uploaded? Auto-apply must never clobber a manual edit, so the
+  // wrapped setter below flips this and the base-change effect resets it.
+  const varianceEditedRef = useRef(false)
+  // The base fileKey we already ran (or deliberately skipped) auto-match for —
+  // each base gets exactly one attempt, at extraction-complete time.
+  const autoMatchedBaseRef = useRef(null)
+
+  // Every MANUAL Variance-Detail change funnels through here (VarianceDetail
+  // receives this as its setter): it marks the settings as user-edited for the
+  // current base and drops the dropdown selection, since the thresholds no
+  // longer necessarily mirror the selected profile. Applying a profile bypasses
+  // this wrapper on purpose — it calls setVariance directly.
+  const handleVarianceChange = useCallback((updater) => {
+    varianceEditedRef.current = true
+    setSelectedProfileName('')
+    setProfileNotice('')
+    setVariance(updater)
+  }, [])
+
+  // Apply a saved profile from the dropdown. Writes through setVariance — the
+  // exact settings-change path typing uses — so previews and result freshness
+  // react identically. An explicit choice also counts as a manual edit: a later
+  // auto-match must not override it.
+  const handleApplyProfile = useCallback(
+    (name) => {
+      varianceEditedRef.current = true
+      setProfileNotice('')
+      const key = cleanProfileName(name).toLowerCase()
+      const profile = profiles.find((p) => p.name.toLowerCase() === key)
+      if (!profile) {
+        setSelectedProfileName('')
+        return
+      }
+      setSelectedProfileName(profile.name)
+      setVariance((prev) => ({ ...prev, ...profile.settings }))
+    },
+    [profiles]
+  )
+
+  // Save the CURRENT thresholds under a property name (add or overwrite).
+  // Returns whether the save was accepted so the form knows to clear its input.
+  const handleSaveProfile = useCallback(
+    (name) => {
+      const next = upsertProfile(profiles, name, variance)
+      if (next === profiles) return false // rejected: blank name or profile cap
+      setProfiles(next)
+      saveProfiles(next)
+      setSelectedProfileName(cleanProfileName(name))
+      return true
+    },
+    [profiles, variance]
+  )
+
+  const handleDeleteProfile = useCallback(
+    (name) => {
+      const next = removeProfile(profiles, name)
+      if (next === profiles) return
+      setProfiles(next)
+      saveProfiles(next)
+      setSelectedProfileName((sel) =>
+        sel.toLowerCase() === cleanProfileName(name).toLowerCase() ? '' : sel
+      )
+    },
+    [profiles]
+  )
+
   // Extraction pipeline (Phase 7): classify → extract → normalize → preview.
   // Owns the in-memory extraction map and re-runs as the uploaded files change.
   const extractions = useExtraction({ baseReport, supportingFiles })
@@ -121,6 +205,41 @@ export default function App() {
   // base file is still being read, Generate stays disabled with a clear note.
   const baseExtraction = baseReport ? extractions[fileKey(baseReport)] : null
   const readiness = extractionReadiness({ hasBase: !!baseReport, baseExtraction })
+
+  // A new base means a clean slate for auto-apply: the "user edited settings"
+  // flag is scoped to the base it was edited under, and a stale "Applied
+  // profile" notice must not describe a property that is no longer uploaded.
+  // (Declared before the auto-apply effect so the reset wins within a commit.)
+  const baseKey = baseReport ? fileKey(baseReport) : null
+  const prevBaseKeyRef = useRef(baseKey)
+  useEffect(() => {
+    if (prevBaseKeyRef.current === baseKey) return
+    prevBaseKeyRef.current = baseKey
+    varianceEditedRef.current = false
+    setProfileNotice('')
+    if (!baseKey) autoMatchedBaseRef.current = null
+  }, [baseKey])
+
+  // Auto-select the right profile when a BASE file's extraction completes:
+  // match its filename + leading rows (metadata rows carry the property name)
+  // against the saved profiles — src/lib/profiles.js owns the whole rule. One
+  // attempt per base, taken the moment extraction succeeds; skipped (not
+  // deferred) mid-generation or once the user has hand-edited settings since
+  // this base was uploaded, so auto-apply never clobbers deliberate input.
+  useEffect(() => {
+    if (!baseKey || !baseExtraction || baseExtraction.status !== 'ok') return
+    if (autoMatchedBaseRef.current === baseKey) return
+    autoMatchedBaseRef.current = baseKey
+    if (busy || varianceEditedRef.current) return
+    const hit = matchProfile(profiles, {
+      fileName: baseExtraction.fileName,
+      rows: rowsForMatch(baseExtraction)
+    })
+    if (!hit) return
+    setSelectedProfileName(hit.name)
+    setVariance((prev) => ({ ...prev, ...hit.settings }))
+    setProfileNotice(appliedProfileNotice(hit.name))
+  }, [baseKey, baseExtraction, busy, profiles])
 
   // Period-scope availability (Phase 15.1): the selector is offered only when the
   // base report actually produces both a Current and a YTD period. Derived from
@@ -267,6 +386,12 @@ export default function App() {
           extractions={extractions}
         />
 
+        {/* Auto-applied property profile confirmation — same unobtrusive notice
+            styling as the upload-routing line inside SourceFiles. */}
+        {profileNotice && (
+          <p className="upload-notice" role="status">{profileNotice}</p>
+        )}
+
         {/* Everything else lives in one collapsible panel, closed on first load.
             Controls first (they drive generation), then the upload guidance and
             the live previews. All state stays lifted in App, so these work
@@ -275,10 +400,15 @@ export default function App() {
           <StylePanel style={style} setStyle={setStyle} />
           <VarianceDetail
             variance={variance}
-            setVariance={setVariance}
+            setVariance={handleVarianceChange}
             periodScope={periodScope}
             setPeriodScope={setPeriodScope}
             periodScopeOffered={periodScopeOffered}
+            profiles={profiles}
+            selectedProfileName={selectedProfileName}
+            onApplyProfile={handleApplyProfile}
+            onSaveProfile={handleSaveProfile}
+            onDeleteProfile={handleDeleteProfile}
           />
           <UploadGuidance />
           <PreviewBasis items={previewItems} />

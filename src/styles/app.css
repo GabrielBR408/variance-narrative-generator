@@ -268,6 +268,18 @@ body {
 .checkgroup { border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem 0.9rem; margin: 0.9rem 0 0; }
 .checkgroup legend { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 0.4rem; }
 
+/* Property profile row (Variance Detail): save/apply/delete named threshold sets. */
+.profile-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.6rem 0 0.4rem; }
+.profile-btn {
+  padding: 0.4rem 0.8rem; border: 1px solid var(--accent-ink); border-radius: 7px;
+  background: #fff; color: var(--accent-ink); font-size: 0.82rem; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+}
+.profile-btn:hover:not(:disabled) { background: #e8f3f9; }
+.profile-btn:disabled { opacity: 0.6; cursor: default; }
+.profile-btn--danger { border-color: var(--danger); color: var(--danger); }
+.profile-btn--danger:hover:not(:disabled) { background: #fdf0f0; }
+
 /* Generate */
 .generate-btn {
   width: 100%; padding: 0.85rem 1rem; border: none; border-radius: 8px;
