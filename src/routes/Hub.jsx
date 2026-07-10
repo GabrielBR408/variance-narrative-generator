@@ -20,6 +20,11 @@ const TOOLS = [
     label: 'ChiefEO Inspector',
     href: '/chiefeoinspector',
     desc: 'Talk through a property inspection → auto-drafted, editable report → PDF/Word.'
+  },
+  {
+    label: 'Stacking Plan',
+    href: '/stacking',
+    desc: 'Drop a rent roll → instant stacking plan. Recolor, edit suites, export PNG/PDF/PPTX/Excel.'
   }
 ]
 
