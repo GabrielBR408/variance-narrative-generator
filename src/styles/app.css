@@ -607,6 +607,17 @@ body {
 .backup-notice-list { margin: 0.3rem 0 0; padding-left: 1.1rem; }
 .backup-notice-list li { margin-bottom: 0.2rem; }
 
+/* Truncation warning — prominent alert when a file exceeded the row cap and
+   some rows (and any variance in them) were not processed. */
+.truncation-notice {
+  margin: 0.6rem 0 0.9rem; padding: 0.6rem 0.85rem;
+  border: 1px solid #e0b48a; border-left: 4px solid #c8791f; border-radius: 8px;
+  background: #fcf1e4; color: #7a4a12; font-size: 0.85rem;
+}
+.truncation-notice-title { font-weight: 700; display: block; margin-bottom: 0.2rem; }
+.truncation-notice-list { margin: 0.15rem 0 0; padding-left: 1.1rem; }
+.truncation-notice-list li { margin-bottom: 0.2rem; }
+
 /* Generate-time role-correction notice — non-alarming, beside the AI status */
 .correction-notice {
   display: flex; align-items: center; gap: 0.5rem;
