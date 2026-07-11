@@ -85,9 +85,12 @@ export default defineConfig({
       },
       includeAssets: ['favicon.svg', 'icons/icon-180.png'],
       manifest: {
-        name: 'Variance Narrative Generator',
-        short_name: 'Variance',
-        description: 'Generate variance comments on income statements.',
+        // Canonical site identity is now the hub (ChiefEO Tool), so the installed
+        // PWA and its apple-mobile-web-app-title carry the hub brand — even though
+        // start_url launches into the /vng app.
+        name: 'ChiefEO Tool',
+        short_name: 'ChiefEO',
+        description: 'Practical tools for commercial property management.',
         theme_color: '#1c2a3a',
         background_color: '#f4f5f7',
         display: 'standalone',
