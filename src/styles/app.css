@@ -718,6 +718,34 @@ body {
 .hub-tool-label { display: block; font-weight: 600; color: var(--accent-ink); }
 .hub-tool-desc { display: block; color: var(--muted); font-size: 0.86rem; margin-top: 0.2rem; }
 
+/* Share button — sits below the tool grid. Reuses the same accent-ink solid
+   fill as the primary buttons elsewhere so it reads as an action, not a tool. */
+.hub-share-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+.hub-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: none;
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+  background: var(--accent-ink);
+  color: #fff;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.hub-share:hover { background: var(--accent-ink-hover); }
+.hub-share:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hub-share-icon { font-size: 1rem; line-height: 1; }
+.hub-share-toast { color: var(--muted); font-size: 0.85rem; }
+
 /* --- Feedback widget (VNG only) -------------------------------------------- */
 /* Floating pill bottom-right, below the modal overlays (9999) and the update
    banner is top-anchored so they never collide. The global reduced-motion

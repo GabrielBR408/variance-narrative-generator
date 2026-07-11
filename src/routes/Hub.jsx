@@ -6,6 +6,7 @@
 
 import React from 'react'
 import chiefeoLogo from '../assets/chiefeo-logo.png'
+import { shareHub } from '../lib/share.js'
 
 // One entry per tool button. `href` may be a rewritten external path
 // (/downdriller, /orgen) or an in-app route (/vng). Add more here as tools come
@@ -39,6 +40,28 @@ const TOOLS = [
 ]
 
 export default function Hub() {
+  // Brief confirmation after a clipboard-fallback copy (or a copy failure).
+  // Null hides the toast; a string shows it, auto-dismissing after a moment.
+  const [toast, setToast] = React.useState(null)
+  const toastTimer = React.useRef(null)
+
+  React.useEffect(() => () => clearTimeout(toastTimer.current), [])
+
+  const flashToast = (msg) => {
+    clearTimeout(toastTimer.current)
+    setToast(msg)
+    toastTimer.current = setTimeout(() => setToast(null), 2400)
+  }
+
+  const onShare = async () => {
+    // shareHub never throws: native share sheet where available, else copy the
+    // link to the clipboard, else no-op. Only the copy paths need a toast — the
+    // native sheet and a user-cancel are their own feedback.
+    const result = await shareHub()
+    if (result === 'copied') flashToast('Link copied')
+    else if (result === 'unavailable') flashToast('Copy the link from your browser')
+  }
+
   return (
     <main className="page hub">
       <img className="brand-logo" src={chiefeoLogo} alt="ChiefEO" />
@@ -52,6 +75,16 @@ export default function Hub() {
             <span className="hub-tool-desc">{t.desc}</span>
           </a>
         ))}
+      </div>
+
+      <div className="hub-share-row">
+        <button type="button" className="hub-share" onClick={onShare}>
+          <span aria-hidden="true" className="hub-share-icon">⤴</span>
+          Share
+        </button>
+        {toast && (
+          <span className="hub-share-toast" role="status">{toast}</span>
+        )}
       </div>
     </main>
   )
