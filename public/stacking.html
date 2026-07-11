@@ -151,6 +151,10 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   #mapbar select{border:1px solid var(--hairline); border-radius:6px; padding:2px 4px; font-size:12px; background:#fff;}
   #mapbar .apply{margin-left:auto; background:var(--accent); border:none; color:#fff; border-radius:7px;
                  padding:5px 12px; font-size:12.5px; cursor:pointer;}
+  #warnbar{display:none; flex-direction:column; gap:6px; margin-bottom:12px;}
+  #warnbar .warn{display:flex; align-items:flex-start; gap:8px; background:#fff8e6; border:1px solid #f0d68a;
+                 color:#7a5b00; border-radius:10px; padding:8px 12px; font-size:12.5px; line-height:1.4;}
+  #warnbar .warn svg{flex:none; margin-top:1px;}
   #svgWrap{background:var(--surface); border:1px solid var(--hairline); border-radius:14px; padding:10px;
            overflow:auto; box-shadow:0 1px 3px rgba(0,0,0,.05);}
   #svgWrap svg{display:block; width:100%; height:auto;}
@@ -186,7 +190,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   #fileInput{display:none;}
 
   @media print{
-    header, #mapbar{display:none !important;}
+    header, #mapbar, #warnbar{display:none !important;}
     body{background:#fff;}
     #planScreen{padding:0;}
     #svgWrap{border:none; box-shadow:none; padding:0; overflow:visible;}
@@ -256,6 +260,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   </section>
 
   <section id="planScreen">
+    <div id="warnbar" role="status" aria-live="polite"></div>
     <div id="mapbar"></div>
     <div id="svgWrap"></div>
   </section>
@@ -291,7 +296,8 @@ const S = {
   palette: "classic",
   overrides: {},       // bucketKey -> hex
   labels: {sf:true, exp:true, suite:true, rent:false, compact:false},
-  hasRent: false
+  hasRent: false,
+  warnings: []       // non-blocking data-quality notices surfaced above the plan
 };
 
 // ---------- utils ----------
@@ -305,20 +311,74 @@ function parseNum(v){
   const n = parseFloat(String(v).replace(/[$,\s]/g,""));
   return isFinite(n)?n:null;
 }
-function parseDateVal(v){
-  if(v==null || v==="") return null;
-  if(v instanceof Date) return isNaN(v)?null:v;
-  if(typeof v==="number"){                       // excel serial
-    if(v>20000 && v<80000) return new Date(Date.UTC(1899,11,30)+v*86400000);
-    return null;
-  }
-  const s = String(v).trim();
-  if(!s || /^(mtm|month|vacant|n\/?a|-+)$/i.test(s)) return null;
-  const m = s.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
-  if(m){ let y=+m[3]; if(y<100) y+=2000; const d=new Date(y, +m[1]-1, +m[2]); return isNaN(d)?null:d; }
-  const d = new Date(s);
-  return isNaN(d)?null:d;
+// ---------- date parsing (explicit format detection; ISO-8601 aware, TZ-safe) ----------
+const NON_DATE_RE = /^(mtm|m2m|month.?to.?month|holdover|vacant|available|occupied|n\/?a|na|tbd|pending|none|-+|—+|\.+)$/i;
+// [Stacking-02] Build from the serial's UTC components then re-home to LOCAL midnight so
+// getFullYear()/getDate() don't shift a day (and year bucket) backward in US timezones.
+function excelSerialToDate(serial){
+  const utc = new Date(Date.UTC(1899,11,30) + Math.round(serial)*86400000);
+  if(isNaN(utc)) return null;
+  return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
 }
+function mkDate(y,mo,da){
+  if(y<100) y += (y<70?2000:1900);
+  if(mo<1||mo>12||da<1||da>31) return null;
+  const d = new Date(y, mo-1, da);
+  return isNaN(d) ? null : d;
+}
+// [C-STK-01] Resolve M/D vs D/M for a whole column from its unambiguous rows,
+// rather than blindly assuming US order per-cell.
+function detectDateColumnFormat(values){
+  let mdy=0, dmy=0;
+  for(const v of values){
+    if(v==null||v===""||typeof v==="number"||v instanceof Date) continue;
+    const s=String(v).trim();
+    if(/^\d{4}[\/\-.]/.test(s)) continue;              // ISO — handled explicitly below
+    const m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+    if(!m) continue;
+    const a=+m[1], b=+m[2];
+    if(a>12 && b<=12) dmy++;
+    else if(b>12 && a<=12) mdy++;
+  }
+  if(dmy>0 && mdy===0) return {fmt:"dmy", conflict:false, undetermined:false};
+  if(mdy>0 && dmy===0) return {fmt:"mdy", conflict:false, undetermined:false};
+  if(mdy>0 && dmy>0)   return {fmt:"mdy", conflict:true,  undetermined:false}; // mixed → default US + flag
+  return {fmt:"mdy", conflict:false, undetermined:true};                        // no evidence → default US + flag ambiguous cells
+}
+// Parse one value given a resolved column format. Returns {date, status}.
+// status: ok | empty | nondate | ambiguous | unparsed
+function parseDateWith(v, fmt){
+  if(v==null||v==="") return {date:null, status:"empty"};
+  if(v instanceof Date) return isNaN(v)?{date:null,status:"unparsed"}:{date:v,status:"ok"};
+  if(typeof v==="number"){
+    if(v>20000 && v<80000){ const d=excelSerialToDate(v); return {date:d, status:d?"ok":"unparsed"}; }
+    return {date:null, status:"nondate"};
+  }
+  const s=String(v).trim();
+  if(!s) return {date:null, status:"empty"};
+  if(NON_DATE_RE.test(s)) return {date:null, status:"nondate"};
+  // ISO-8601 first: YYYY-MM-DD (also YYYY/MM/DD, YYYY.MM.DD) — never guessed as M/D/Y
+  let m=s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\b/);
+  if(m){ const d=mkDate(+m[1],+m[2],+m[3]); return {date:d, status:d?"ok":"unparsed"}; }
+  // numeric with separators
+  m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if(m){
+    const a=+m[1], b=+m[2], y=+m[3];
+    if(a>12 && b>12) return {date:null, status:"unparsed"};
+    if(a>12 && b<=12){ const d=mkDate(y,b,a); return {date:d, status:d?"ok":"unparsed"}; } // D/M/Y forced
+    if(b>12 && a<=12){ const d=mkDate(y,a,b); return {date:d, status:d?"ok":"unparsed"}; } // M/D/Y forced
+    // both <=12 → follow the column's detected order; flag ambiguous when order is unknown/mixed
+    const useDmy = fmt && fmt.fmt==="dmy";
+    const d = useDmy ? mkDate(y,b,a) : mkDate(y,a,b);
+    const amb = !fmt || fmt.undetermined || fmt.conflict;
+    return {date:d, status: d ? (amb?"ambiguous":"ok") : "unparsed"};
+  }
+  // month-name / ISO datetime / other formats — let Date try (risky M/D guessing already handled above)
+  const d=new Date(s);
+  return isNaN(d) ? {date:null, status:"unparsed"} : {date:d, status:"ok"};
+}
+// Back-compat single-value parser (popover edits, totals sanity check) — assumes US when ambiguous.
+function parseDateVal(v){ return parseDateWith(v, {fmt:"mdy", undetermined:false, conflict:false}).date; }
 function esc(s){ return String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
 // ---------- column detection ----------
@@ -376,32 +436,79 @@ function floorFromSuite(suite){
   if(d.length===2) return parseInt(d[0],10);
   return null;
 }
+// [Stacking-01] Totals / subtotal / summary row detection. Match a totals keyword in an
+// identity cell (suite/tenant/floor), then apply an SF sanity check so a legitimate tenant
+// that merely contains the word (e.g. "Total Wine & More") is NOT dropped.
+// Keyword may appear anywhere in the label (e.g. "Floor 1 Subtotal", "Total for Bldg A").
+const TOTALS_RE = /(^|\b)(sub\s*-?\s*total|grand\s*total|subtotals?|totals?|building\s+total|floor\s+total|occupied\s+total|vacant\s+total|leased\s+total|summary|weighted\s+average|averages?|net\s+rentable(\s+area)?|nra\s+total)\b/i;
+const MTM_TEXT_RE = /\bmtm\b|m2m|month.?to.?month|holdover/i;
+// A "clean" suite identifier looks like 110, 2A, B12, PH1 — not a phrase.
+const CLEAN_SUITE_RE = /^[a-z]{0,2}\d{1,5}[a-z]?$/i;
+function isTotalsRow(g, map){
+  const cellOf = k => (map[k]!=null ? String(g[map[k]]??"").trim() : "");
+  const suiteTxt  = cellOf("suite");
+  const tenantTxt = cellOf("tenant");
+  const floorTxt  = cellOf("floor");
+  const kwIn = t => TOTALS_RE.test(t);
+  let keyMatch = kwIn(suiteTxt) || kwIn(tenantTxt) || kwIn(floorTxt);
+  // totals label may sit in an unmapped column while suite/tenant are blank
+  if(!keyMatch && !suiteTxt && !tenantTxt){
+    keyMatch = g.some(x => kwIn(String(x??"").trim()));
+  }
+  if(!keyMatch) return false;
+  // SF sanity: a real tenant that merely contains a totals word (e.g. "Total Wine & More")
+  // still has a lease date OR a clean numeric suite id whose own text is not a totals label.
+  const hasEnd   = map.end  !=null && parseDateVal(g[map.end])   != null;
+  const hasStart = map.start!=null && parseDateVal(g[map.start]) != null;
+  if(hasEnd || hasStart) return false;
+  if(CLEAN_SUITE_RE.test(suiteTxt) && !kwIn(suiteTxt)) return false;
+  return true;
+}
 function buildRows(grid, det){
   const {row:hr, map} = det;
   const out = [];
   const today = new Date();
+  // [C-STK-01] Resolve each date column's format from the data before parsing any cell.
+  const colVals = c => { const a=[]; for(let r=hr+1;r<grid.length;r++){ const g=grid[r]; if(g&&map[c]!=null) a.push(g[map[c]]); } return a; };
+  const endFmt   = map.end  !=null ? detectDateColumnFormat(colVals("end"))   : null;
+  const startFmt = map.start!=null ? detectDateColumnFormat(colVals("start")) : null;
+  let excluded=0, ambig=0, unparsed=0;
   for(let r=hr+1; r<grid.length; r++){
     const g = grid[r]; if(!g) continue;
     const joined = g.map(x=>String(x??"")).join(" ").trim();
     if(!joined) continue;
-    if(/^(total|subtotal|grand total|occupied|vacant total|summary)/i.test(joined)) continue;
+    if(isTotalsRow(g, map)){ excluded++; continue; }
     const suite  = map.suite !=null ? String(g[map.suite] ??"").trim() : "";
     let tenant   = map.tenant!=null ? String(g[map.tenant]??"").trim() : "";
     const sf     = map.sf    !=null ? parseNum(g[map.sf]) : null;
-    const end    = map.end   !=null ? parseDateVal(g[map.end]) : null;
-    const start  = map.start !=null ? parseDateVal(g[map.start]) : null;
+    const endR   = map.end   !=null ? parseDateWith(g[map.end], endFmt)     : {date:null,status:"empty"};
+    const startR = map.start !=null ? parseDateWith(g[map.start], startFmt) : {date:null,status:"empty"};
+    const end = endR.date, start = startR.date;
     const rentN  = map.rent  !=null ? parseNum(g[map.rent]) : null;
     let floor    = map.floor !=null ? String(g[map.floor]??"").trim() : "";
     if(!suite && !tenant && sf==null) continue;
     if(!floor) floor = floorFromSuite(suite) ?? "?";
     const vac = !tenant || /^(vacant|available|vacancy|empty|-+)$/i.test(tenant);
     if(vac) tenant = "";
-    const mtmFlag = /\bmtm\b|month.to.month|holdover/i.test(tenant) || (!vac && end && end < today);
+    // date-quality tally on occupied rows only (a vacant suite's expiry is irrelevant)
+    if(!vac){
+      if(endR.status==="ambiguous") ambig++;
+      else if(endR.status==="unparsed") unparsed++;
+    }
+    const endRaw = map.end!=null ? String(g[map.end]??"") : "";
+    const mtmFlag = MTM_TEXT_RE.test(tenant) || MTM_TEXT_RE.test(endRaw) || (!vac && end && end < today);
     out.push({
       floor: String(floor), suite, tenant, sf, end, start,
       rent: rentN, status: vac ? "vacant" : (mtmFlag ? "mtm" : "occupied")
     });
   }
+  // assemble non-blocking data-quality warnings
+  const warn = [];
+  if(excluded>0) warn.push(`${excluded} summary/total row${excluded>1?"s were":" was"} detected and excluded from calculations.`);
+  if(endFmt && endFmt.conflict) warn.push(`The expiration column mixes date formats — some expirations may be wrong. Please verify.`);
+  if(ambig>0) warn.push(`${ambig} expiration date${ambig>1?"s were":" was"} ambiguous (day/month order unclear); assumed US M/D/Y.`);
+  if(unparsed>0) warn.push(`${unparsed} expiration value${unparsed>1?"s":""} couldn't be read as a date, so ${unparsed>1?"they aren't":"it isn't"} color-coded.`);
+  S.warnings = warn;
   return out.filter(r=> r.sf!=null || r.tenant || r.suite);
 }
 
@@ -509,6 +616,14 @@ async function handlePDF(file){
 }
 
 // ---------- ingest + mapbar ----------
+function renderWarnings(){
+  const wb = $("#warnbar"); const w = S.warnings || [];
+  if(!w.length){ wb.style.display="none"; wb.innerHTML=""; return; }
+  wb.innerHTML = w.map(m=>
+    `<div class="warn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b8860b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>${esc(m)}</span></div>`
+  ).join("");
+  wb.style.display="flex";
+}
 function ingest(grid, det){
   S.grid = grid; S.mapping = det;
   S.rows = buildRows(grid, det);
@@ -518,6 +633,7 @@ function ingest(grid, det){
   showPlan();
   renderMapbar(det, grid);
   render();
+  renderWarnings();
 }
 const FIELD_LABELS = {suite:"Suite", tenant:"Tenant", sf:"SF", end:"Expiration", start:"Start", floor:"Floor", rent:"Rent"};
 function renderMapbar(det, grid){
@@ -538,16 +654,17 @@ function renderMapbar(det, grid){
     });
     S.mapping = {row:det.row, map, score:det.score};
     S.rows = buildRows(S.grid, S.mapping);
-    if(S.rows.length){ S.hasRent = S.rows.some(r=>r.rent!=null); render(); }
+    if(S.rows.length){ S.hasRent = S.rows.some(r=>r.rent!=null); render(); renderWarnings(); }
     else showErr("That mapping produced no rows.");
   };
 }
 function showMapbarManual(grid){
   // no confident detection — show plan screen with mapbar defaulting header to row 0
   const det = {row:0, map:{}, score:0};
-  S.grid = grid; S.mapping = det; S.rows = [];
+  S.grid = grid; S.mapping = det; S.rows = []; S.warnings = [];
   showPlan();
   renderMapbar(det, grid);
+  renderWarnings();
   $("#svgWrap").innerHTML = `<div style="padding:40px;text-align:center;color:var(--ink-2);font-size:14px">
      Couldn't auto-detect the columns. Use the selectors above to point me at Suite, Tenant, SF, and Expiration, then hit <b>Re-apply</b>.</div>`;
 }
