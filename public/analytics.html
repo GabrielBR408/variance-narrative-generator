@@ -59,6 +59,7 @@ var range=localStorage.getItem('chiefeo_dash_range')||'30d';
 var appFilter=localStorage.getItem('chiefeo_dash_app')||'';         // '' = all apps
 var showInternal=localStorage.getItem('chiefeo_dash_internal')==='1'; // default: my/internal traffic hidden
 var DEVICES=[];  // last-loaded device list, referenced by index from buttons
+var FEEDBACK=[]; // last-loaded feedback list, referenced by index from delete buttons
 var CHARTS=[];
 var PALETTE=['#2e7da6','#5bc0be','#e08a3c','#9b5de5','#c0392b','#3fa34d','#e6b800','#6c757d','#ff6392','#00a6a6'];
 function colorFor(i){return PALETTE[i%PALETTE.length];}
@@ -83,12 +84,52 @@ function toolbar(d){
   h+="<select id='appSel' onchange='setApp(this.value)'>"+opts+"</select>";
   h+="<div class='ranges'>"+[['7d','7 days'],['30d','30 days'],['90d','90 days'],['all','All']].map(function(r){return "<button class='"+(range===r[0]?'on':'')+"' onclick=\"setRange('"+r[0]+"')\">"+r[1]+"</button>";}).join('')+"</div>";
   h+="<label class='chk'><input type='checkbox' "+(showInternal?"checked":"")+" onchange='setInternal(this.checked)'> Show my/internal traffic</label>";
+  h+="<span style='flex:1'></span>";
+  h+="<button class='mini' onclick=\"exportData('csv')\">Export CSV</button>";
+  h+="<button class='mini' onclick=\"exportData('json')\">Export JSON</button>";
   h+="</div>";
   return h;
 }
 function setRange(x){range=x;localStorage.setItem('chiefeo_dash_range',x);load();}
 function setApp(x){appFilter=x;localStorage.setItem('chiefeo_dash_app',x);load();}
 function setInternal(x){showInternal=!!x;localStorage.setItem('chiefeo_dash_internal',x?'1':'0');load();}
+
+/* ---- data export (CSV / JSON) — pulls raw filtered rows from the export endpoint ---- */
+function download(filename,text,mime){
+  var blob=new Blob([text],{type:mime||'text/plain'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+}
+function csvCell(v){
+  if(v==null)return '';
+  var s=typeof v==='object'?JSON.stringify(v):String(v);
+  if(/[",\n]/.test(s))s='"'+s.replace(/"/g,'""')+'"';
+  return s;
+}
+function rowsToCsv(rows){
+  var cols=['id','created_at','app','event','session_id','path','user_agent','internal','properties'];
+  var out=[cols.join(',')];
+  rows.forEach(function(r){out.push(cols.map(function(c){return csvCell(r[c]);}).join(','));});
+  return out.join('\n');
+}
+function exportData(fmt){
+  var t=tok();if(!t){askToken('');return;}
+  var qs='?export=1&range='+encodeURIComponent(range);
+  if(appFilter)qs+='&app='+encodeURIComponent(appFilter);
+  if(showInternal)qs+='&internal=1';
+  var stamp=new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+  var base='chiefeo-analytics_'+range+(appFilter?'_'+appFilter:'')+'_'+stamp;
+  fetch(API+qs,{headers:{Authorization:'Bearer '+t}})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(!d||!d.rows){alert('Export failed: '+((d&&d.error)||'no data'));return;}
+      if(fmt==='json')download(base+'.json',JSON.stringify(d.rows,null,2),'application/json');
+      else download(base+'.csv',rowsToCsv(d.rows),'text/csv');
+    })
+    .catch(function(e){alert('Export failed: '+e.message);});
+}
 
 function statCards(d){
   var cards=[
@@ -105,11 +146,12 @@ function appPill(name,i){return "<span class='pill' style='background:"+colorFor
 
 /* ---- feedback feed (from properties.feedback_type/message events) ---- */
 function feedbackCard(d){
-  var fb=d.feedback||[];
-  if(!fb.length)return "";
-  var h="<div class='card'><h3>Feedback <span class='muted'>("+fb.length+(showInternal?"":" · internal dimmed")+")</span></h3>";
-  h+="<div class='feedbox'><table class='tbl'><thead><tr><th>Time</th><th>App</th><th>Type</th><th>Message</th><th>Ver/commit</th><th>Screen</th></tr></thead><tbody>";
-  fb.forEach(function(f){
+  FEEDBACK=d.feedback||[];
+  if(!FEEDBACK.length)return "";
+  var h="<div class='card'><h3>Feedback <span class='muted'>("+FEEDBACK.length+(showInternal?"":" · internal dimmed")+")</span>"+
+    "<button class='mini' style='float:right' onclick='deleteAllFeedback()'>Delete all shown</button></h3>";
+  h+="<div class='feedbox'><table class='tbl'><thead><tr><th>Time</th><th>App</th><th>Type</th><th>Message</th><th>Ver/commit</th><th>Screen</th><th></th></tr></thead><tbody>";
+  FEEDBACK.forEach(function(f,i){
     h+="<tr class='"+(f.internal?"int":"")+"'>";
     h+="<td class='t'>"+fmtTime(f.time)+"</td>";
     h+="<td>"+esc(f.app)+"</td>";
@@ -117,10 +159,29 @@ function feedbackCard(d){
     h+="<td>"+esc(f.message)+"</td>";
     h+="<td class='mono'>"+esc(f.version||f.commit||'')+"</td>";
     h+="<td>"+esc(f.screen||'')+"</td>";
+    h+="<td><button class='mini' onclick='deleteFeedback("+i+")' title='Delete'>&times;</button></td>";
     h+="</tr>";
   });
   h+="</tbody></table></div></div>";
   return h;
+}
+function postDeleteFeedback(ids,cb){
+  fetch(API,{method:'POST',headers:{Authorization:'Bearer '+tok(),'Content-Type':'application/json'},
+    body:JSON.stringify({action:'delete_feedback',ids:ids})})
+    .then(function(r){return r.json();})
+    .then(function(res){if(res&&res.ok)cb(res);else alert('Delete failed: '+((res&&res.error)||'unknown'));})
+    .catch(function(e){alert('Delete failed: '+e.message);});
+}
+function deleteFeedback(i){
+  var f=FEEDBACK[i];if(!f||!f.id)return;
+  if(!confirm('Delete this feedback permanently?'))return;
+  postDeleteFeedback([f.id],function(){load();});
+}
+function deleteAllFeedback(){
+  var ids=FEEDBACK.map(function(f){return f.id;}).filter(Boolean);
+  if(!ids.length)return;
+  if(!confirm('Delete all '+ids.length+' feedback entries shown? This cannot be undone.'))return;
+  postDeleteFeedback(ids,function(res){alert('Deleted '+res.deleted+' feedback entries.');load();});
 }
 
 /* ---- device list with exclude/include buttons ---- */
