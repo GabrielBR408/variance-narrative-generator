@@ -103,6 +103,26 @@ function statCards(d){
 
 function appPill(name,i){return "<span class='pill' style='background:"+colorFor(i)+"'>"+esc(name)+"</span>";}
 
+/* ---- feedback feed (from properties.feedback_type/message events) ---- */
+function feedbackCard(d){
+  var fb=d.feedback||[];
+  if(!fb.length)return "";
+  var h="<div class='card'><h3>Feedback <span class='muted'>("+fb.length+(showInternal?"":" · internal dimmed")+")</span></h3>";
+  h+="<div class='feedbox'><table class='tbl'><thead><tr><th>Time</th><th>App</th><th>Type</th><th>Message</th><th>Ver/commit</th><th>Screen</th></tr></thead><tbody>";
+  fb.forEach(function(f){
+    h+="<tr class='"+(f.internal?"int":"")+"'>";
+    h+="<td class='t'>"+fmtTime(f.time)+"</td>";
+    h+="<td>"+esc(f.app)+"</td>";
+    h+="<td><span class='tag'>"+esc(f.feedback_type)+"</span></td>";
+    h+="<td>"+esc(f.message)+"</td>";
+    h+="<td class='mono'>"+esc(f.version||f.commit||'')+"</td>";
+    h+="<td>"+esc(f.screen||'')+"</td>";
+    h+="</tr>";
+  });
+  h+="</tbody></table></div></div>";
+  return h;
+}
+
 /* ---- device list with exclude/include buttons ---- */
 function devicesCard(d){
   DEVICES=d.devices||[];
@@ -147,6 +167,7 @@ function render(d){
   h+=toolbar(d);
   if(!d.rowCount){app.innerHTML=h+"<p class='muted'>No events in this range"+(appFilter?" for "+esc(appFilter):"")+(!d.internalIncluded&&d.hiddenInternalEvents?" (internal traffic is hidden — tick the checkbox to see it)":"")+".</p>"+devicesCard(d);return;}
   h+=statCards(d);
+  h+=feedbackCard(d);
   if(noChart){h+="<div class='card'><p class='note'>Charts unavailable (chart library didn't load). Tables below still work.</p></div>";}
 
   // 1. Events by day (stacked by app)
