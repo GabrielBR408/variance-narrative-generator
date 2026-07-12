@@ -369,12 +369,131 @@ async function freshPage() {
   const picker = await page.evaluate(() => window.__pickerOpened);
   assert(picker, 'kb: Enter on legend chip opens color picker');
 
-  // title rename via keyboard (prompt stubbed)
-  await page.evaluate(() => { window.prompt = () => 'Renamed Via Keyboard'; });
+  // title rename via keyboard — inline editor, no blocking prompt()
   await page.focus('#planTitle');
   await page.keyboard.press('Enter');
-  const title = await page.evaluate(() => S.title);
-  assert(title === 'Renamed Via Keyboard', 'kb: Enter on title renames plan (got "' + title + '")');
+  let ed = await page.evaluate(() => ({
+    open: !!document.querySelector('#titleEditor'),
+    focused: document.activeElement && document.activeElement.id === 'titleEditor',
+  }));
+  assert(ed.open, 'kb: Enter on title opens inline editor');
+  assert(ed.focused, 'kb: inline title editor receives focus');
+  await page.fill('#titleEditor', 'Renamed Via Keyboard');
+  await page.keyboard.press('Enter');
+  ed = await page.evaluate(() => ({
+    title: S.title,
+    closed: !document.querySelector('#titleEditor'),
+    back: document.activeElement && document.activeElement.id === 'planTitle',
+  }));
+  assert(ed.title === 'Renamed Via Keyboard', 'kb: inline editor commits rename (got "' + ed.title + '")');
+  assert(ed.closed, 'kb: inline editor removed after commit');
+  assert(ed.back, 'kb: focus returns to title after rename');
+  // Escape cancels without changing the title
+  await page.keyboard.press('Enter');
+  await page.fill('#titleEditor', 'Should Not Stick');
+  await page.keyboard.press('Escape');
+  const cancelled = await page.evaluate(() => ({ title: S.title, closed: !document.querySelector('#titleEditor') }));
+  assert(cancelled.title === 'Renamed Via Keyboard' && cancelled.closed, 'kb: Escape cancels rename');
+  await page.close();
+}
+
+// -------------- [Stacking-19 / B-STK-01 / C-STK-13] negative / zero SF clamp
+{
+  const page = await freshPage();
+  const csv = [
+    'Suite,Tenant,Floor,RSF,Lease Expiration',
+    '100,Alpha,1,10000,12/31/2028',
+    '110,Beta,1,-500,6/30/2029',   // negative -> ignored + warning
+    '200,Gamma,2,0,3/31/2030',     // zero -> excluded from math + warning
+    '210,Delta,2,4000,9/30/2031',
+  ].join('\n');
+  const r = await page.evaluate((c) => {
+    handlePaste(c, 'BadSF');
+    return {
+      sfs: S.rows.map(x => x.sf),
+      tot: S.rows.reduce((a, x) => a + (x.sf || 0), 0),
+      warn: S.warnings,
+    };
+  }, csv);
+  assert(JSON.stringify(r.sfs) === '[10000,null,null,4000]', 'sf: negative and zero SF nulled (got ' + JSON.stringify(r.sfs) + ')');
+  assert(r.tot === 14000, 'sf: headline RSF = 14000, unskewed (got ' + r.tot + ')');
+  assert(r.warn.some(w => /negative square-footage/.test(w)), 'sf: negative-SF warning surfaced');
+  assert(r.warn.some(w => /0 SF/.test(w)), 'sf: zero-SF warning surfaced');
+  // parseNum lower bound is also live in the suite editor path
+  const clamp = await page.evaluate(() => parseNum('-250', 0));
+  assert(clamp === null, 'sf: parseNum("-250", 0) -> null');
+  await page.close();
+}
+
+// -------------------- [C-STK-11] paste box works without a paste event
+{
+  const page = await freshPage();
+  await page.click('#pasteBtn');
+  await page.fill('#pasteArea', 'Suite,Tenant,Floor,RSF\n100,TypedIn Co,1,5000');
+  await page.click('#parseGoBtn');
+  const r = await page.evaluate(() => ({
+    n: S.rows.length,
+    plan: document.querySelector('#planScreen').style.display === 'block',
+  }));
+  assert(r.n === 1 && r.plan, 'pastebox: typed input parses via Generate button');
+  await page.close();
+}
+
+// ------------- enhancements: New-file full clear + confirm-before-discard
+{
+  const page = await freshPage();
+  await page.evaluate(() => document.querySelector('#sampleBtn').click());
+  await page.waitForTimeout(100);
+  // no manual edits -> no confirm needed, and everything clears
+  let r = await page.evaluate(() => {
+    document.querySelector('#newBtn').click();
+    return {
+      svg: document.querySelector('#svgWrap').innerHTML,
+      map: document.querySelector('#mapbar').innerHTML,
+      warnShown: document.querySelector('#warnbar').style.display,
+      rows: S.rows.length, grid: S.grid, title: S.title,
+      drop: document.querySelector('#dropScreen').style.display !== 'none',
+    };
+  });
+  assert(r.svg === '' && r.map === '', 'newfile: SVG and mapbar fully cleared');
+  assert(r.warnShown === 'none' && r.rows === 0 && r.grid === null, 'newfile: state cleared');
+  assert(r.title === 'Stacking Plan' && r.drop, 'newfile: title reset, back on drop screen');
+
+  // with manual edits: confirm=false keeps the plan, confirm=true discards
+  await page.evaluate(() => document.querySelector('#sampleBtn').click());
+  await page.waitForTimeout(100);
+  r = await page.evaluate(() => {
+    S.rows[0].tenant = 'Edited Co'; S.dirty = true;
+    window.confirm = () => false;
+    document.querySelector('#newBtn').click();
+    const kept = document.querySelector('#planScreen').style.display === 'block' && S.rows.length > 0;
+    window.confirm = () => true;
+    document.querySelector('#newBtn').click();
+    const discarded = document.querySelector('#planScreen').style.display === 'none' && S.rows.length === 0;
+    return { kept, discarded };
+  });
+  assert(r.kept, 'newfile: declining confirm keeps edited plan');
+  assert(r.discarded, 'newfile: accepting confirm discards and resets');
+  await page.close();
+}
+
+// --------------------------- inline title rename via mouse (no prompt())
+{
+  const page = await freshPage();
+  await page.evaluate(() => document.querySelector('#sampleBtn').click());
+  await page.waitForTimeout(100);
+  const usesPrompt = await page.evaluate(() => {
+    let called = false;
+    window.prompt = () => { called = true; return 'x'; };
+    document.querySelector('#planTitle').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    return { called, editor: !!document.querySelector('#titleEditor') };
+  });
+  assert(!usesPrompt.called, 'title: click does not call blocking prompt()');
+  assert(usesPrompt.editor, 'title: click opens inline editor');
+  await page.fill('#titleEditor', 'Clicked Rename');
+  await page.keyboard.press('Enter');
+  const t = await page.evaluate(() => S.title);
+  assert(t === 'Clicked Rename', 'title: mouse rename commits (got "' + t + '")');
   await page.close();
 }
 

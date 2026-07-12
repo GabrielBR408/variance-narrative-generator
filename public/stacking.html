@@ -271,6 +271,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     </div>
     <div id="pasteBox">
       <textarea id="pasteArea" placeholder="Paste rent roll cells here (Ctrl/Cmd-V), including the header row…"></textarea>
+      <!-- [C-STK-11] visible fallback for typed/edited input — parsing isn't tied to the paste event -->
+      <button class="chip-btn" id="parseGoBtn" style="margin-top:10px;background:var(--accent);color:#fff;border-color:var(--accent)">Generate plan →</button>
     </div>
     <div id="parseErr"></div>
     <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.tsv,.pdf">
@@ -314,7 +316,8 @@ const S = {
   overrides: {},       // bucketKey -> hex
   labels: {sf:true, exp:true, suite:true, rent:false, compact:false},
   hasRent: false,
-  warnings: []       // non-blocking data-quality notices surfaced above the plan
+  warnings: [],      // non-blocking data-quality notices surfaced above the plan
+  dirty: false       // true once the user makes manual edits (suite/legend/title)
 };
 
 // ---------- utils ----------
@@ -322,11 +325,15 @@ const $ = s => document.querySelector(s);
 const norm = s => String(s??"").toLowerCase().replace(/[^a-z0-9]/g,"");
 const fmtSF = n => n==null ? "" : Math.round(n).toLocaleString("en-US");
 function fmtDate(d){ return d ? (d.getMonth()+1)+"/"+d.getDate()+"/"+String(d.getFullYear()).slice(2) : ""; }
-function parseNum(v){
+// [Stacking-19 / B-STK-01 / C-STK-13] optional lower bound: values below `min`
+// (e.g. negative square footage) come back null instead of skewing totals.
+function parseNum(v, min){
   if(v==null || v==="") return null;
-  if(typeof v==="number") return isFinite(v)?v:null;
-  const n = parseFloat(String(v).replace(/[$,\s]/g,""));
-  return isFinite(n)?n:null;
+  let n;
+  if(typeof v==="number") n = isFinite(v)?v:null;
+  else { const p = parseFloat(String(v).replace(/[$,\s]/g,"")); n = isFinite(p)?p:null; }
+  if(n!=null && min!=null && n<min) return null;
+  return n;
 }
 // ---------- date parsing (explicit format detection; ISO-8601 aware, TZ-safe) ----------
 const NON_DATE_RE = /^(mtm|m2m|month.?to.?month|holdover|vacant|available|occupied|n\/?a|na|tbd|pending|none|-+|—+|\.+)$/i;
@@ -490,7 +497,7 @@ function buildRows(grid, det){
   const colVals = c => { const a=[]; for(let r=hr+1;r<grid.length;r++){ const g=grid[r]; if(g&&map[c]!=null) a.push(g[map[c]]); } return a; };
   const endFmt   = map.end  !=null ? detectDateColumnFormat(colVals("end"))   : null;
   const startFmt = map.start!=null ? detectDateColumnFormat(colVals("start")) : null;
-  let excluded=0, ambig=0, unparsed=0;
+  let excluded=0, ambig=0, unparsed=0, badSF=0, zeroSF=0;
   for(let r=hr+1; r<grid.length; r++){
     const g = grid[r]; if(!g) continue;
     const joined = g.map(x=>String(x??"")).join(" ").trim();
@@ -498,7 +505,10 @@ function buildRows(grid, det){
     if(isTotalsRow(g, map)){ excluded++; continue; }
     const suite  = map.suite !=null ? String(g[map.suite] ??"").trim() : "";
     let tenant   = map.tenant!=null ? String(g[map.tenant]??"").trim() : "";
-    const sf     = map.sf    !=null ? parseNum(g[map.sf]) : null;
+    let sf       = map.sf    !=null ? parseNum(g[map.sf]) : null;
+    // [Stacking-19 / B-STK-01 / C-STK-13] negative or zero SF can't contribute to RSF/occupancy
+    if(sf!=null && sf<0){ badSF++; sf=null; }
+    else if(sf===0){ zeroSF++; sf=null; }
     const endR   = map.end   !=null ? parseDateWith(g[map.end], endFmt)     : {date:null,status:"empty"};
     const startR = map.start !=null ? parseDateWith(g[map.start], startFmt) : {date:null,status:"empty"};
     const end = endR.date, start = startR.date;
@@ -534,6 +544,8 @@ function buildRows(grid, det){
   if(endFmt && endFmt.conflict) warn.push(`The expiration column mixes date formats — some expirations may be wrong. Please verify.`);
   if(ambig>0) warn.push(`${ambig} expiration date${ambig>1?"s were":" was"} ambiguous (day/month order unclear); assumed US M/D/Y.`);
   if(unparsed>0) warn.push(`${unparsed} expiration value${unparsed>1?"s":""} couldn't be read as a date, so ${unparsed>1?"they aren't":"it isn't"} color-coded.`);
+  if(badSF>0) warn.push(`${badSF} negative square-footage value${badSF>1?"s were":" was"} ignored.`);
+  if(zeroSF>0) warn.push(`${zeroSF} suite${zeroSF>1?"s have":" has"} 0 SF — excluded from RSF and occupancy math.`);
   S.warnings = warn;
   return kept;
 }
@@ -656,6 +668,7 @@ function ingest(grid, det){
   if(!S.rows.length) return showErr("Found the table but no usable rows — check that suites/tenants have data below the header row.");
   S.hasRent = S.rows.some(r=>r.rent!=null);
   S.overrides = {};
+  S.dirty = false;
   showPlan();
   renderMapbar(det, grid);
   render();
@@ -970,7 +983,7 @@ function wireSvg(){
       const key = g.dataset.key;
       const hc = $("#hiddenColor");
       hc.value = S.overrides[key] || "#2a78d6";
-      hc.oninput = ()=>{ S.overrides[key]=hc.value; render(); };
+      hc.oninput = ()=>{ S.overrides[key]=hc.value; S.dirty=true; render(); };
       hc.click();
     };
     const lbl = g.querySelector("text");
@@ -984,18 +997,43 @@ function wireSvg(){
   });
   const title = $("#planTitle");
   if(title){
-    const rename = ()=>{
-      const nt = prompt("Building / plan title:", S.title);
-      if(nt!=null && nt.trim()){ S.title = nt.trim(); render(); const t2=$("#planTitle"); if(t2) t2.focus(); }
-    };
     title.setAttribute("tabindex","0");
     title.setAttribute("role","button");
     title.setAttribute("aria-label","Plan title: "+S.title+". Press Enter to rename.");
-    title.addEventListener("click", rename);
+    title.addEventListener("click", startTitleEdit);
     title.addEventListener("keydown", e=>{
-      if(e.key==="Enter" || e.key===" "){ e.preventDefault(); rename(); }
+      if(e.key==="Enter" || e.key===" "){ e.preventDefault(); startTitleEdit(); }
     });
   }
+}
+// inline title editor — replaces the old blocking prompt()
+function startTitleEdit(){
+  const t = $("#planTitle");
+  if(!t || $("#titleEditor")) return;
+  const b = t.getBoundingClientRect();
+  const inp = document.createElement("input");
+  inp.id = "titleEditor";
+  inp.value = S.title;
+  inp.setAttribute("aria-label","Plan title");
+  Object.assign(inp.style, {position:"fixed", left:b.left+"px", top:(b.top-8)+"px",
+    width:Math.max(b.width+90, 280)+"px", font:"700 21px system-ui,-apple-system,'Segoe UI',sans-serif",
+    color:"#1c2a3a", background:"#fff", border:"2px solid var(--accent)", borderRadius:"8px",
+    padding:"3px 10px", zIndex:95});
+  document.body.appendChild(inp);
+  inp.focus(); inp.select();
+  let done = false;
+  const finish = commit=>{
+    if(done) return; done = true;
+    const v = inp.value.trim();
+    inp.remove();
+    if(commit && v && v!==S.title){ S.title = v; S.dirty = true; render(); }
+    const t2 = $("#planTitle"); if(t2) t2.focus();
+  };
+  inp.addEventListener("keydown", e=>{
+    if(e.key==="Enter"){ e.preventDefault(); finish(true); }
+    else if(e.key==="Escape"){ e.stopPropagation(); finish(false); }
+  });
+  inp.addEventListener("blur", ()=> finish(true));
 }
 function openPopover(r, x, y, srcIdx){
   const po = $("#popover");
@@ -1029,17 +1067,17 @@ function openPopover(r, x, y, srcIdx){
   $("#poVac").onclick = ()=>{
     if(r.status==="vacant"){ r.status="occupied"; r.tenant = r.tenant||"New Tenant"; }
     else { r.status="vacant"; r.tenant=""; }
-    po.style.display="none"; render(); refocus();
+    S.dirty=true; po.style.display="none"; render(); refocus();
   };
   $("#poSave").onclick = ()=>{
     r.tenant = $("#po_t").value.trim();
     r.suite  = $("#po_s").value.trim();
     r.floor  = $("#po_f").value.trim() || r.floor;
-    r.sf     = parseNum($("#po_sf").value);
+    r.sf     = parseNum($("#po_sf").value, 0);
     r.end    = parseDateVal($("#po_e").value);
     const today=new Date();
     r.status = !r.tenant ? "vacant" : (r.end && r.end<today ? "mtm" : "occupied");
-    po.style.display="none"; render(); refocus();
+    S.dirty=true; po.style.display="none"; render(); refocus();
   };
 }
 document.addEventListener("click", e=>{
@@ -1124,8 +1162,18 @@ $("#exportBtn").onclick = e=>{ e.stopPropagation(); $("#exportMenu").classList.t
   $("#lb_"+k).onchange = e=>{ S.labels[k]=e.target.checked; render(); };
 });
 $("#newBtn").onclick = ()=>{
+  // confirm before discarding unsaved manual edits
+  if(S.dirty && !confirm("Discard your manual edits and start a new file?")) return;
+  // fully clear the previous plan — no stale SVG, listeners, mapbar, or warnings
+  $("#svgWrap").innerHTML=""; $("#mapbar").innerHTML="";
+  $("#warnbar").style.display="none"; $("#warnbar").innerHTML="";
+  $("#popover").style.display="none"; $("#tooltip").style.display="none";
+  const te=$("#titleEditor"); if(te) te.remove();
+  S.rows=[]; S.grid=null; S.mapping=null; S.overrides={}; S.warnings=[];
+  S.hasRent=false; S.dirty=false; S.title="Stacking Plan";
   $("#planScreen").style.display="none"; $("#toolbar").classList.remove("active");
   $("#dropScreen").style.display="block"; $("#fileInput").value="";
+  $("#pasteArea").value="";
 };
 
 // ---------- drop screen wiring ----------
@@ -1149,6 +1197,7 @@ document.body.addEventListener("drop", e=>{ e.preventDefault(); if(e.dataTransfe
 
 $("#pasteBtn").onclick = ()=>{ const pb=$("#pasteBox"); pb.style.display = pb.style.display==="block"?"none":"block"; $("#pasteArea").focus(); };
 $("#pasteArea").addEventListener("paste", ()=> setTimeout(()=> handlePaste($("#pasteArea").value), 60));
+$("#parseGoBtn").onclick = ()=> handlePaste($("#pasteArea").value);   // [C-STK-11]
 document.addEventListener("paste", e=>{
   if($("#dropScreen").style.display!=="none" && e.target.id!=="pasteArea"){
     const t = e.clipboardData.getData("text");
