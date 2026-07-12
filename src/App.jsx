@@ -10,6 +10,7 @@ import SettingsPanel from './components/SettingsPanel.jsx'
 import UploadGuidance from './components/UploadGuidance.jsx'
 import PreviewBasis from './components/PreviewBasis.jsx'
 import ExtractionPreview from './components/ExtractionPreview.jsx'
+import TruncationNotice from './components/TruncationNotice.jsx'
 import VariancePreview from './components/VariancePreview.jsx'
 import NarrativeSummary from './components/NarrativeSummary.jsx'
 import {
@@ -391,6 +392,11 @@ export default function App() {
         {profileNotice && (
           <p className="upload-notice" role="status">{profileNotice}</p>
         )}
+
+        {/* Prominent truncation warning: a file that exceeded the extractor's
+            row cap had rows (and any variance in them) dropped. Rendered here —
+            outside the collapsed settings panel — so it is always visible. */}
+        <TruncationNotice items={previewItems} />
 
         {/* Everything else lives in one collapsible panel, closed on first load.
             Controls first (they drive generation), then the upload guidance and

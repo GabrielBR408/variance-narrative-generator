@@ -78,14 +78,41 @@ const NUM = String.raw`\(?[-−]?\$?\d[\d,]*(?:\.\d+)?%?\)?%?`
 // next row's label): a label ending in a numeric token ("Salaries 5100") keeps
 // that token in the label instead of donating it as the first value cell and
 // shifting every cell right.
-const ROW_RE = new RegExp(
-  String.raw`(\S(?:.*?\S)?)\s+(` +
-    Array(VALUE_COUNT).fill(NUM).join(String.raw`)\s+(`) +
-    String.raw`)(?=\s|$)(?!\s+(?:` +
-    NUM +
-    String.raw`)(?=\s|$))`,
-  'g'
-)
+// Build a data-row regex for a given number of trailing value cells. The label
+// (group 1) is followed by exactly `valueCount` numeric cells (groups 2..N+1),
+// with the trailing lookahead forbidding one MORE numeric token so the values
+// are the LAST run before the row's end. Shared by the comparative (8-cell) and
+// the single-period (3-cell) layouts so the two can never drift.
+function buildRowRe(valueCount) {
+  return new RegExp(
+    String.raw`(\S(?:.*?\S)?)\s+(` +
+      Array(valueCount).fill(NUM).join(String.raw`)\s+(`) +
+      String.raw`)(?=\s|$)(?!\s+(?:` +
+      NUM +
+      String.raw`)(?=\s|$))`,
+    'g'
+  )
+}
+
+const ROW_RE = buildRowRe(VALUE_COUNT)
+
+// --- Single-period layout (Fix VNG: single-period income statement) --------
+// A common single-period PDF lays out one Actual/Budget/Variance block only —
+// no YTD — so each account row carries exactly THREE numeric cells. The 8-cell
+// ROW_RE above never matches it, so the file used to parse to no table at all.
+// These mirror the comparative shape with a 3-cell run and a variance-only
+// (non-percent) cell set, and feed the same rowFromMatch/collectRows path.
+export const SINGLE_PERIOD_COLUMNS = Object.freeze([
+  'Account',
+  'Actual',
+  'Budget',
+  'Variance'
+])
+const SINGLE_VALUE_COUNT = 3
+// None of the three single-period cells is a percentage (Variance is a dollar
+// amount here), so the percent-cell set is empty.
+const SINGLE_PERCENT_CELLS = new Set()
+const SINGLE_ROW_RE = buildRowRe(SINGLE_VALUE_COUNT)
 
 // Lines we treat as report/page chrome rather than data or section headings.
 const NOISE_RE =
@@ -113,35 +140,58 @@ function cleanCell(token, isPercent) {
   return isPercent ? `${value}%` : value
 }
 
-// Parse one cell group from a regex match into [account, ...8 values], or null
-// when the label isn't a real account name.
-function rowFromMatch(m) {
+// Parse one cell group from a regex match into [account, ...values], or null
+// when the label isn't a real account name. `valueCount` and `percentCells`
+// select the layout (8-cell comparative or 3-cell single-period).
+function rowFromMatch(m, valueCount, percentCells) {
   const account = m[1].trim()
   // A real account row has a name: reject labels that are purely numeric (a
   // totals line / stray figure) or carry no letter at all.
   if (account === '' || looksLikeNumber(account) || !/[A-Za-z]/.test(account)) return null
 
   const cells = []
-  for (let i = 0; i < VALUE_COUNT; i++) {
-    const value = cleanCell(m[i + 2], PERCENT_CELLS.has(i))
+  for (let i = 0; i < valueCount; i++) {
+    const value = cleanCell(m[i + 2], percentCells.has(i))
     if (value === null) return null
     cells.push(value)
   }
   return [account, ...cells]
 }
 
-// Parse every data row found in a single line. Usually one; more only when a
-// line concatenates several rows (no end-of-line markers).
-function parseRows(line) {
+// Parse every data row found in a single line, for a given layout. Usually one;
+// more only when a line concatenates several rows (no end-of-line markers).
+function parseRowsWith(line, re, valueCount, percentCells) {
   const rows = []
-  ROW_RE.lastIndex = 0
+  re.lastIndex = 0
   let m
-  while ((m = ROW_RE.exec(line)) !== null) {
-    const row = rowFromMatch(m)
+  while ((m = re.exec(line)) !== null) {
+    const row = rowFromMatch(m, valueCount, percentCells)
     if (row) rows.push(row)
-    if (m.index === ROW_RE.lastIndex) ROW_RE.lastIndex++ // guard against zero-width
+    if (m.index === re.lastIndex) re.lastIndex++ // guard against zero-width
   }
   return rows
+}
+
+// Comparative (9-column) row parser — byte-for-byte the original behavior.
+function parseRows(line) {
+  return parseRowsWith(line, ROW_RE, VALUE_COUNT, PERCENT_CELLS)
+}
+
+// Single-period (Account | Actual | Budget | Variance) row parser.
+function parseSinglePeriodRows(line) {
+  return parseRowsWith(line, SINGLE_ROW_RE, SINGLE_VALUE_COUNT, SINGLE_PERCENT_CELLS)
+}
+
+// True when the text carries a single-period (non-comparative) report header:
+// Actual, Budget, and Variance are present but there is NO year-to-date band.
+// The absence of YTD cleanly separates this from a comparative statement (which
+// detectVarianceReport requires all four hints for), so the two layouts are
+// mutually exclusive and a genuine comparative report never routes here.
+export function detectSinglePeriodReport(lines = []) {
+  if (!Array.isArray(lines) || lines.length === 0) return false
+  const blob = lines.join(' \n ')
+  if (/year[\s-]*to[\s-]*date|\bytd\b/i.test(blob)) return false
+  return /\bactual\b/i.test(blob) && /\bbudget\b/i.test(blob) && /\bvariance\b/i.test(blob)
 }
 
 // True when a substantial body of extracted text carries almost no numeric
@@ -233,6 +283,42 @@ export function reconstructTable(lines = [], options = {}) {
 function reconstructVarianceTable(lines = []) {
   if (!Array.isArray(lines) || lines.length === 0) return null
 
+  // 1) Comparative (9-column) layout — tried first, byte-for-byte the original
+  //    behavior. When it yields a usable table it wins, so a genuine comparative
+  //    statement is never re-interpreted as single-period.
+  const comparative = collectDataRows(lines, parseRows)
+  const looksLikeReport = detectVarianceReport(lines)
+  if (comparative.dataRows.length > 0 && (looksLikeReport || comparative.dataRows.length >= 2)) {
+    return {
+      name: 'Reconstructed',
+      rows: [TABLE_COLUMNS.slice(), ...comparative.dataRows],
+      columnCount: TABLE_COLUMNS.length,
+      sections: comparative.sections
+    }
+  }
+
+  // 2) Single-period (Account | Actual | Budget | Variance) layout — only when
+  //    the comparative pass found no usable table. Gated on a single-period
+  //    header signature (Actual/Budget/Variance, no YTD) so an unrelated PDF
+  //    with a stray numeric run can't produce a phantom table.
+  const single = collectDataRows(lines, parseSinglePeriodRows)
+  const looksLikeSingle = detectSinglePeriodReport(lines)
+  if (single.dataRows.length > 0 && (looksLikeSingle || single.dataRows.length >= 2)) {
+    return {
+      name: 'Reconstructed',
+      rows: [SINGLE_PERIOD_COLUMNS.slice(), ...single.dataRows],
+      columnCount: SINGLE_PERIOD_COLUMNS.length,
+      sections: single.sections
+    }
+  }
+
+  return null
+}
+
+// Walk grouped text lines with a layout-specific row parser, collecting data
+// rows (capped at MAX_TABLE_ROWS) and short non-numeric section headings. The
+// section-heading logic is identical for both layouts, so it lives here once.
+function collectDataRows(lines, parseFn) {
   const dataRows = []
   const sections = []
 
@@ -240,7 +326,7 @@ function reconstructVarianceTable(lines = []) {
     const line = String(raw).replace(/\s+/g, ' ').trim()
     if (!line) continue
 
-    const parsed = parseRows(line)
+    const parsed = parseFn(line)
     if (parsed.length > 0) {
       for (const row of parsed) {
         if (dataRows.length < MAX_TABLE_ROWS) dataRows.push(row)
@@ -256,20 +342,7 @@ function reconstructVarianceTable(lines = []) {
     if (!hasDigits && wordCount > 0 && wordCount <= 6) sections.push(line)
   }
 
-  // Require a header signature plus at least one data row, OR a strong tabular
-  // signal (multiple data rows) on its own. This keeps unrelated PDFs from
-  // producing a phantom table.
-  const looksLikeReport = detectVarianceReport(lines)
-  if (dataRows.length === 0) return null
-  if (!looksLikeReport && dataRows.length < 2) return null
-
-  const rows = [TABLE_COLUMNS.slice(), ...dataRows]
-  return {
-    name: 'Reconstructed',
-    rows,
-    columnCount: TABLE_COLUMNS.length,
-    sections
-  }
+  return { dataRows, sections }
 }
 
 // --- Standalone budget reconstruction (content-aware classification) -------

@@ -22,14 +22,53 @@ function fail(reason, message) {
   return Object.assign(new Error(message || reason), { reason })
 }
 
+// Binary spreadsheet signatures we must NOT try to decode as text: a ZIP local
+// header ("PK\x03\x04" → xlsx/xlsm) and the OLE2 compound-file magic
+// (D0 CF 11 E0 → legacy xls). SheetJS reads these from the raw bytes.
+function hasBinarySignature(bytes) {
+  if (!bytes || bytes.length < 4) return false
+  const pk = bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04
+  const ole = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0
+  return pk || ole
+}
+
+// Decode bytes as UTF-8 iff they are WELL-FORMED UTF-8, else null. Uses the
+// platform's strict decoder (fatal:true throws on any invalid sequence) — a
+// standard UTF-8 validity check on the raw bytes, with no content guessing. A
+// leading UTF-8 BOM is honored/stripped by the decoder.
+function decodeUtf8(bytes) {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return null
+  }
+}
+
 export async function extractSpreadsheet(file, maxRows) {
   const data = new Uint8Array(await file.arrayBuffer())
+
+  // UTF-8 detection for a BOM-less text file (CSV/TSV): SheetJS has no UTF-8
+  // sniffing and falls back to Windows-1252 for CSVs read as bytes, which
+  // mangles any accented / currency / emoji character in an account name
+  // ("CafÃ©" for "Café"). When the bytes are NOT a binary workbook AND are
+  // well-formed UTF-8, decode them ourselves and hand SheetJS the string so it
+  // parses the text verbatim. A genuine cp1252 CSV fails the UTF-8 check and
+  // still falls through to SheetJS's default decoding, unchanged.
+  let readInput = data
+  let readType = 'array'
+  if (!hasBinarySignature(data)) {
+    const text = decodeUtf8(data)
+    if (text !== null) {
+      readInput = text
+      readType = 'string'
+    }
+  }
 
   let book
   try {
     // cellDates keeps date cells as JS Dates (not Excel serial numbers) so the
     // normalizer can recognize them as dates rather than plain values.
-    book = XLSX.read(data, { type: 'array', cellDates: true })
+    book = XLSX.read(readInput, { type: readType, cellDates: true })
   } catch {
     throw fail('corrupt')
   }
