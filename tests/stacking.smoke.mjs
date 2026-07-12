@@ -131,6 +131,98 @@ async function freshPage() {
   await page.close();
 }
 
+// ------------- [Stacking-03 / B-STK-02 / C-STK-05] portrait-phone toolbar smoke
+{
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto(PAGE_URL);
+  await page.evaluate(() => document.querySelector('#sampleBtn').click());
+  await page.waitForTimeout(100);
+  const boxes = await page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('#toolbar > .tb-select, #toolbar > .tb-btn, #toolbar .menu-wrap > .tb-btn')
+      .forEach(el => { const b = el.getBoundingClientRect(); out.push({ id: el.id || el.textContent.trim(), x: b.x, right: b.right, y: b.y, h: b.height }); });
+    return out;
+  });
+  assert(boxes.length >= 5, 'phone: found all 5 toolbar controls (got ' + boxes.length + ')');
+  for (const b of boxes) {
+    assert(b.h > 0 && b.x >= 0 && b.right <= 390 && b.y >= 0,
+      `phone: control "${b.id}" fully on-screen (x=${Math.round(b.x)} right=${Math.round(b.right)} y=${Math.round(b.y)} h=${Math.round(b.h)})`);
+  }
+  // the Color selector must actually be operable at phone width
+  await page.selectOption('#colorMode', 'tenant');
+  const mode = await page.evaluate(() => S.colorMode);
+  assert(mode === 'tenant', 'phone: Color selector reachable and functional');
+  await page.close();
+}
+
+// ---- [Stacking-04/12 / B-STK-14 / C-STK-03] keyboard-only: suite edit, legend, title
+{
+  const page = await freshPage();
+  await page.evaluate(() => document.querySelector('#sampleBtn').click());
+  await page.waitForTimeout(100);
+
+  // all interactive SVG targets are in the tab order
+  const tabbable = await page.evaluate(() => ({
+    suites: document.querySelectorAll('.suite-block[tabindex="0"][role="button"]').length,
+    chips: document.querySelectorAll('.legend-chip[tabindex="0"][role="button"]').length,
+    title: !!document.querySelector('#planTitle[tabindex="0"]'),
+    labeled: [...document.querySelectorAll('.suite-block')].every(g => g.getAttribute('aria-label')),
+  }));
+  assert(tabbable.suites === 17, 'kb: all 17 suite blocks tabbable (got ' + tabbable.suites + ')');
+  assert(tabbable.chips > 0, 'kb: legend chips tabbable');
+  assert(tabbable.title, 'kb: plan title tabbable');
+  assert(tabbable.labeled, 'kb: every suite block has an aria-label');
+
+  // suite edit: focus block -> Enter opens popover with focus in tenant field
+  await page.focus('.suite-block[data-i="0"]');
+  await page.keyboard.press('Enter');
+  let st = await page.evaluate(() => ({
+    open: document.querySelector('#popover').style.display === 'block',
+    focused: document.activeElement && document.activeElement.id,
+  }));
+  assert(st.open, 'kb: Enter on suite block opens editor');
+  assert(st.focused === 'po_t', 'kb: editor focuses tenant field (got ' + st.focused + ')');
+
+  // Escape cancels and returns focus to the suite block
+  await page.keyboard.press('Escape');
+  st = await page.evaluate(() => ({
+    open: document.querySelector('#popover').style.display === 'block',
+    back: document.activeElement && document.activeElement.classList.contains('suite-block'),
+  }));
+  assert(!st.open, 'kb: Escape closes editor');
+  assert(st.back, 'kb: Escape returns focus to suite block');
+
+  // keyboard save: reopen, retype tenant, tab to Save, Enter
+  await page.keyboard.press('Enter');
+  await page.fill('#po_t', 'Keyboard Tenant Inc');
+  await page.focus('#poSave');
+  await page.keyboard.press('Enter');
+  st = await page.evaluate(() => ({
+    tenant: S.rows[0].tenant,
+    back: document.activeElement && document.activeElement.classList.contains('suite-block'),
+  }));
+  assert(st.tenant === 'Keyboard Tenant Inc', 'kb: save applies edit (got "' + st.tenant + '")');
+  assert(st.back, 'kb: focus restored to suite block after save/re-render');
+
+  // legend recolor: Enter on a chip must invoke the color picker
+  await page.evaluate(() => {
+    window.__pickerOpened = false;
+    document.querySelector('#hiddenColor').click = () => { window.__pickerOpened = true; };
+  });
+  await page.focus('.legend-chip');
+  await page.keyboard.press('Enter');
+  const picker = await page.evaluate(() => window.__pickerOpened);
+  assert(picker, 'kb: Enter on legend chip opens color picker');
+
+  // title rename via keyboard (prompt stubbed)
+  await page.evaluate(() => { window.prompt = () => 'Renamed Via Keyboard'; });
+  await page.focus('#planTitle');
+  await page.keyboard.press('Enter');
+  const title = await page.evaluate(() => S.title);
+  assert(title === 'Renamed Via Keyboard', 'kb: Enter on title renames plan (got "' + title + '")');
+  await page.close();
+}
+
 await browser.close();
 console.log(failures ? `\n=== ${failures} TEST(S) FAILED ===` : '\n=== ALL STACKING TESTS PASS ===');
 process.exit(failures ? 1 : 0);

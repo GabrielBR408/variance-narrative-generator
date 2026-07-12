@@ -112,6 +112,23 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   .tb-btn.primary{background:var(--accent); border-color:var(--accent);}
   .tb-btn:hover,.tb-select:hover{filter:brightness(1.12);}
 
+  /* [Stacking-03 / B-STK-02 / C-STK-05] portrait-phone widths: the header grows and the
+     toolbar wraps below the wordmark instead of overflowing a fixed 52px header. */
+  @media (max-width: 700px){
+    header{flex-wrap:wrap; height:auto; min-height:52px; padding:8px 12px; row-gap:8px;}
+    #toolbar{margin-left:0; width:100%; gap:6px;}
+    .tb-select,.tb-btn{font-size:12px; padding:6px 8px;}
+    .tb-select{padding-right:24px;}
+  }
+
+  /* [Stacking-04/12 / B-STK-14 / C-STK-03] visible keyboard focus states */
+  .suite-block:focus{outline:none;}
+  .suite-block:focus-visible .blk, .suite-block.kb-focus .blk{stroke:#0b57d0; stroke-width:2.6;}
+  .legend-chip:focus{outline:none;}
+  .legend-chip:focus-visible rect, .legend-chip.kb-focus rect{stroke:#0b57d0; stroke-width:2;}
+  .plan-title:focus{outline:none;}
+  .plan-title:focus-visible, .plan-title.kb-focus{fill:#0b57d0; text-decoration:underline;}
+
   /* dropdown menus */
   .menu-wrap{position:relative;}
   .menu{position:absolute; right:0; top:calc(100% + 6px); background:#fff; color:var(--ink);
@@ -849,6 +866,21 @@ function wireSvg(){
   const tt = $("#tooltip");
   document.querySelectorAll(".suite-block").forEach(g=>{
     const r = S.rows[+g.dataset.i];
+    // [Stacking-04/12 / B-STK-14 / C-STK-03] keyboard-operable suite blocks
+    g.setAttribute("tabindex","0");
+    g.setAttribute("role","button");
+    g.setAttribute("aria-label",
+      (r.status==="vacant" ? "Vacant suite" : "Suite occupied by "+r.tenant) +
+      (r.suite ? ", suite "+r.suite : "") + ", floor "+r.floor +
+      (r.sf!=null ? ", "+fmtSF(r.sf)+" square feet" : "") +
+      (r.end ? ", expires "+fmtDate(r.end) : "") + ". Press Enter to edit.");
+    g.addEventListener("keydown", e=>{
+      if(e.key==="Enter" || e.key===" "){
+        e.preventDefault(); e.stopPropagation();
+        const b = g.getBoundingClientRect();
+        openPopover(r, b.left + b.width/2, b.top + b.height/2, +g.dataset.i);
+      }
+    });
     g.addEventListener("mousemove", e=>{
       tt.style.display="block";
       tt.style.left = Math.min(e.clientX+14, innerWidth-280)+"px";
@@ -867,23 +899,44 @@ function wireSvg(){
     g.addEventListener("click", e=>{ e.stopPropagation(); openPopover(r, e.clientX, e.clientY); });
   });
   document.querySelectorAll(".legend-chip").forEach(g=>{
-    g.addEventListener("click", e=>{
-      e.stopPropagation();
+    const openChipPicker = ()=>{
       const key = g.dataset.key;
       const hc = $("#hiddenColor");
       hc.value = S.overrides[key] || "#2a78d6";
       hc.oninput = ()=>{ S.overrides[key]=hc.value; render(); };
       hc.click();
+    };
+    const lbl = g.querySelector("text");
+    g.setAttribute("tabindex","0");
+    g.setAttribute("role","button");
+    g.setAttribute("aria-label","Change color for "+(lbl?lbl.textContent:g.dataset.key)+". Press Enter to open the color picker.");
+    g.addEventListener("click", e=>{ e.stopPropagation(); openChipPicker(); });
+    g.addEventListener("keydown", e=>{
+      if(e.key==="Enter" || e.key===" "){ e.preventDefault(); e.stopPropagation(); openChipPicker(); }
     });
   });
   const title = $("#planTitle");
-  if(title) title.addEventListener("click", ()=>{
-    const nt = prompt("Building / plan title:", S.title);
-    if(nt!=null && nt.trim()){ S.title = nt.trim(); render(); }
-  });
+  if(title){
+    const rename = ()=>{
+      const nt = prompt("Building / plan title:", S.title);
+      if(nt!=null && nt.trim()){ S.title = nt.trim(); render(); const t2=$("#planTitle"); if(t2) t2.focus(); }
+    };
+    title.setAttribute("tabindex","0");
+    title.setAttribute("role","button");
+    title.setAttribute("aria-label","Plan title: "+S.title+". Press Enter to rename.");
+    title.addEventListener("click", rename);
+    title.addEventListener("keydown", e=>{
+      if(e.key==="Enter" || e.key===" "){ e.preventDefault(); rename(); }
+    });
+  }
 }
-function openPopover(r, x, y){
+function openPopover(r, x, y, srcIdx){
   const po = $("#popover");
+  if(srcIdx==null){ const i=S.rows.indexOf(r); if(i>=0) srcIdx=i; }
+  const refocus = ()=>{
+    if(srcIdx!=null){ const el=document.querySelector(`.suite-block[data-i="${srcIdx}"]`); if(el) el.focus(); }
+  };
+  const close = ()=>{ po.style.display="none"; refocus(); };
   po.innerHTML = `
     <button class="close-x" id="poX">✕</button>
     <h4>Edit suite</h4>
@@ -903,11 +956,13 @@ function openPopover(r, x, y){
   po.style.display="block";
   po.style.left = Math.min(x, innerWidth-270)+"px";
   po.style.top  = Math.min(y, innerHeight-300)+"px";
-  $("#poX").onclick = ()=> po.style.display="none";
+  po.onkeydown = e=>{ if(e.key==="Escape"){ e.stopPropagation(); close(); } };
+  $("#po_t").focus();
+  $("#poX").onclick = close;
   $("#poVac").onclick = ()=>{
     if(r.status==="vacant"){ r.status="occupied"; r.tenant = r.tenant||"New Tenant"; }
     else { r.status="vacant"; r.tenant=""; }
-    po.style.display="none"; render();
+    po.style.display="none"; render(); refocus();
   };
   $("#poSave").onclick = ()=>{
     r.tenant = $("#po_t").value.trim();
@@ -917,13 +972,20 @@ function openPopover(r, x, y){
     r.end    = parseDateVal($("#po_e").value);
     const today=new Date();
     r.status = !r.tenant ? "vacant" : (r.end && r.end<today ? "mtm" : "occupied");
-    po.style.display="none"; render();
+    po.style.display="none"; render(); refocus();
   };
 }
 document.addEventListener("click", e=>{
   const po = $("#popover");
   if(po.style.display==="block" && !po.contains(e.target)) po.style.display="none";
   document.querySelectorAll(".menu.open").forEach(m=>{ if(!m.parentElement.contains(e.target)) m.classList.remove("open"); });
+});
+// [Stacking-04/12] Escape closes any open popover or menu
+document.addEventListener("keydown", e=>{
+  if(e.key!=="Escape") return;
+  const po = $("#popover");
+  if(po.style.display==="block") po.style.display="none";
+  document.querySelectorAll(".menu.open").forEach(m=>m.classList.remove("open"));
 });
 
 // ---------- exports ----------
