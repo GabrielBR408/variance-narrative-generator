@@ -406,7 +406,8 @@ const COL_PATTERNS = {
   end   : ["leaseend","leaseexpiration","expiration","expirationdate","expiry","expire","expires","lxd","endofterm","leaseto","expdate","leaseenddate","enddate","lxdate"],
   start : ["leasestart","commencement","commencementdate","leasefrom","startdate","lcd","leasecommence","begindate"],
   floor : ["floor","floorno","level","fl","flr","story"],
-  rent  : ["rent","monthlyrent","annualrent","baserent","currentrent","rentmonth","monthlybaserent","annualbaserent","rentpsf","rentamount"]
+  rent  : ["rent","monthlyrent","annualrent","baserent","currentrent","rentmonth","monthlybaserent","annualbaserent","rentpsf","rentamount"],
+  building: ["building","bldg","buildingname","bldgname","property","propertyname","propertycode","asset","assetname","tower"]  // [C-STK-09]
 };
 function scoreHeaderCell(text){
   const n = norm(text);
@@ -502,6 +503,7 @@ function buildRows(grid, det){
     const startR = map.start !=null ? parseDateWith(g[map.start], startFmt) : {date:null,status:"empty"};
     const end = endR.date, start = startR.date;
     const rentN  = map.rent  !=null ? parseNum(g[map.rent]) : null;
+    const building = map.building!=null ? String(g[map.building]??"").trim() : "";
     let floor    = map.floor !=null ? String(g[map.floor]??"").trim() : "";
     if(!suite && !tenant && sf==null) continue;
     if(!floor) floor = floorFromSuite(suite) ?? "?";
@@ -515,7 +517,7 @@ function buildRows(grid, det){
     const endRaw = map.end!=null ? String(g[map.end]??"") : "";
     const mtmFlag = MTM_TEXT_RE.test(tenant) || MTM_TEXT_RE.test(endRaw) || (!vac && end && end < today);
     out.push({
-      floor: String(floor), suite, tenant, sf, end, start,
+      floor: String(floor), suite, tenant, sf, end, start, building,
       rent: rentN, status: vac ? "vacant" : (mtmFlag ? "mtm" : "occupied")
     });
   }
@@ -659,7 +661,7 @@ function ingest(grid, det){
   render();
   renderWarnings();
 }
-const FIELD_LABELS = {suite:"Suite", tenant:"Tenant", sf:"SF", end:"Expiration", start:"Start", floor:"Floor", rent:"Rent"};
+const FIELD_LABELS = {suite:"Suite", tenant:"Tenant", sf:"SF", end:"Expiration", start:"Start", floor:"Floor", rent:"Rent", building:"Building"};
 function renderMapbar(det, grid){
   const mb = $("#mapbar");
   const hdr = grid[det.row].map(x=>String(x??"").trim());
@@ -709,12 +711,23 @@ function floorSortKey(f){
   if(/^(C|CONC)/.test(s)) return 0.2;
   return 0;
 }
-function getFloors(){
+function floorsOf(rows){
   const by = {};
-  for(const r of S.rows){ (by[r.floor] = by[r.floor]||[]).push(r); }
+  for(const r of rows){ (by[r.floor] = by[r.floor]||[]).push(r); }
   return Object.keys(by)
     .sort((a,b)=>floorSortKey(b)-floorSortKey(a))
     .map(f=>({name:f, suites: by[f].sort((a,b)=>String(a.suite).localeCompare(String(b.suite),undefined,{numeric:true}))}));
+}
+function getFloors(){ return floorsOf(S.rows); }
+// [C-STK-09] group rows into separate stacks per building when the rent roll covers
+// more than one; single-building files keep the plain single-stack layout (name:null).
+function getBuildings(){
+  const by = {};
+  for(const r of S.rows){ const b=(r.building||"").trim(); (by[b]=by[b]||[]).push(r); }
+  const names = Object.keys(by);
+  if(names.length<=1) return [{name:null, floors:floorsOf(S.rows)}];
+  return names.sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}))
+    .map(n=>({name: n||"(Building not specified)", floors: floorsOf(by[n])}));
 }
 function yearBuckets(){
   const years = [...new Set(S.rows.filter(r=>r.status==="occupied" && r.end).map(r=>r.end.getFullYear()))].sort();
@@ -753,19 +766,55 @@ function inkFor(hex){
 // ---------- render ----------
 const SVG_W = 1400;
 function render(){
-  const floors = getFloors();
-  if(!floors.length) return;
+  const bldgs = getBuildings();                       // [C-STK-09] one stack per building
+  if(!bldgs.length || !bldgs.some(b=>b.floors.length)) return;
   const buckets = yearBuckets();
   const tenants = [...new Set(S.rows.filter(r=>r.tenant).map(r=>r.tenant))];
   const tenantIdx = {}; tenants.forEach((t,i)=>tenantIdx[t]=i);
+  const pal = PALETTES[S.palette];
 
   const compact = S.labels.compact;
   const rowH = compact ? 44 : 66;
   const gap = 5;
   const leftW = 128, rightPad = 24;
   const titleH = 86;
-  const legendH = 56;
-  const H = titleH + floors.length*(rowH+gap) + legendH + 18;
+  const bldgHdrH = 30;
+
+  // ---- legend items (computed up front so legend height can size the canvas) ----
+  const legendItems = [];
+  if(S.colorMode==="year"){
+    buckets.forEach((b,i)=> legendItems.push({key:b.key, label:b.label, color:S.overrides[b.key]||pal[i%pal.length]}));
+    if(S.rows.some(r=>r.status==="mtm")) legendItems.push({key:"mtm", label:"MTM / Holdover", color:S.overrides["mtm"]||MTM_FILL});
+    // [B-STK-10 / C-STK-07/10/12/14] occupied-with-no-expiration gets its own key
+    if(S.rows.some(r=>r.status==="occupied" && !r.end))
+      legendItems.push({key:"nodate", label:"No exp. date", color:S.overrides["nodate"]||"#b3b9c2"});
+  }else if(S.colorMode==="status"){
+    legendItems.push({key:"occupied", label:"Occupied", color:S.overrides["occupied"]||pal[0]});
+    if(S.rows.some(r=>r.status==="mtm")) legendItems.push({key:"mtm", label:"MTM / Holdover", color:S.overrides["mtm"]||MTM_FILL});
+  }else{ // [B-STK-16 / C-STK-06/15] tenant mode gets a legend too
+    const MAXT = 18;
+    tenants.slice(0,MAXT).forEach(t=> legendItems.push({
+      key:"t:"+t, label: t.length>24 ? t.slice(0,23)+"…" : t,
+      color: S.overrides["t:"+t] || pal[tenantIdx[t]%pal.length]
+    }));
+    if(tenants.length>MAXT) legendItems.push({key:null, label:`+ ${tenants.length-MAXT} more`, color:null});
+  }
+  legendItems.push({key:"vacant", label:"Vacant", color:S.overrides["vacant"]||VACANT_FILL, hatch:true});
+
+  // wrap legend chips into rows so long legends (tenant mode) never overflow the canvas
+  const chipW = it => it.color!=null ? 21 + it.label.length*7 + 26 : it.label.length*7 + 26;
+  const legendMaxW = SVG_W - leftW - rightPad;
+  const legendRows = [[]]; let lwAcc = 0;
+  for(const it of legendItems){
+    const cw = chipW(it);
+    if(lwAcc + cw > legendMaxW && legendRows[legendRows.length-1].length){ legendRows.push([]); lwAcc = 0; }
+    legendRows[legendRows.length-1].push(it); lwAcc += cw;
+  }
+  const legendH = 34 + legendRows.length*24;
+
+  const stacksH = bldgs.reduce((a,b)=> a + (b.name?bldgHdrH:0) + b.floors.length*(rowH+gap), 0)
+                + (bldgs.length>1 ? (bldgs.length-1)*10 : 0);
+  const H = titleH + stacksH + legendH + 18;
 
   const totalSF = S.rows.reduce((a,r)=>a+(r.sf||0),0);
   const occSF   = S.rows.filter(r=>r.status!=="vacant").reduce((a,r)=>a+(r.sf||0),0);
@@ -784,11 +833,16 @@ function render(){
   s += `<text x="${leftW}" y="62" font-size="13.5" fill="#52514e">${fmtSF(totalSF)} RSF &nbsp;·&nbsp; ${occPct}% leased &nbsp;·&nbsp; ${fmtSF(vacSF)} SF available &nbsp;·&nbsp; as of ${(S.asOf.getMonth()+1)}/${S.asOf.getDate()}/${S.asOf.getFullYear()}</text>`;
   s += `<text x="${SVG_W-rightPad}" y="38" text-anchor="end" font-size="13" font-weight="700" fill="#8d99a6" letter-spacing="1">CHIEFEO</text>`;
 
-  // floors
+  // stacks (one per building; single-building files have one unnamed stack)
   const planW = SVG_W - leftW - rightPad;
-  const maxFloorSF = Math.max(...floors.map(f=>f.suites.reduce((a,r)=>a+(r.sf||0),0)), 1);
-  floors.forEach((f,fi)=>{
-    const y = titleH + fi*(rowH+gap);
+  let yCur = titleH;
+  for(const bl of bldgs){
+  if(bl.name){
+    s += `<text x="${leftW}" y="${yCur+18}" font-size="15" font-weight="700" fill="#2d4258">${esc(bl.name)}</text>`;
+    yCur += bldgHdrH;
+  }
+  bl.floors.forEach(f=>{
+    const y = yCur;
     const fsf = f.suites.reduce((a,r)=>a+(r.sf||0),0);
     // floor label
     s += `<text x="${leftW-14}" y="${y+rowH/2-4}" text-anchor="end" font-size="15" font-weight="700" fill="#1c2a3a">${esc(f.name)}</text>`;
@@ -843,29 +897,31 @@ function render(){
       s += `</g>`;
       x += widths[si];
     });
+    yCur += rowH + gap;
   });
+  if(bl.name) yCur += 10;
+  }
 
-  // legend
-  const ly = titleH + floors.length*(rowH+gap) + 26;
-  let lx = leftW;
-  const legendItems = [];
-  if(S.colorMode==="year"){
-    buckets.forEach((b,i)=> legendItems.push({key:b.key, label:b.label, color:S.overrides[b.key]||PALETTES[S.palette][i%8]}));
-    if(S.rows.some(r=>r.status==="mtm")) legendItems.push({key:"mtm", label:"MTM / Holdover", color:S.overrides["mtm"]||MTM_FILL});
-  }else if(S.colorMode==="status"){
-    legendItems.push({key:"occupied", label:"Occupied", color:S.overrides["occupied"]||PALETTES[S.palette][0]});
-    if(S.rows.some(r=>r.status==="mtm")) legendItems.push({key:"mtm", label:"MTM / Holdover", color:S.overrides["mtm"]||MTM_FILL});
+  // legend (multi-row; items computed above)
+  let ly = yCur + 20;
+  const keyLabel = S.colorMode==="year" ? "EXPIRES" : (S.colorMode==="tenant" ? "TENANTS" : "KEY");
+  s += `<text x="${leftW-14}" y="${ly+11}" text-anchor="end" font-size="11" font-weight="600" fill="#898781">${keyLabel}</text>`;
+  s += `<text x="${SVG_W-rightPad}" y="${ly+11}" text-anchor="end" font-size="10.5" fill="#b3b3ae">click a color chip to change it · click a suite to edit</text>`;
+  for(const rowItems of legendRows){
+    let lx = leftW;
+    for(const it of rowItems){
+      if(it.color==null){ // non-interactive overflow note ("+ N more")
+        s += `<text x="${lx}" y="${ly+12}" font-size="12.5" fill="#898781">${esc(it.label)}</text>`;
+        lx += chipW(it); continue;
+      }
+      s += `<g class="legend-chip" data-key="${esc(it.key)}">`;
+      s += `<rect x="${lx}" y="${ly}" width="15" height="15" rx="3.5" fill="${it.hatch?"url(#hatch)":it.color}" stroke="#c9ccd2" stroke-width="${it.hatch?1:0}"/>`;
+      s += `<text x="${lx+21}" y="${ly+12}" font-size="12.5" fill="#52514e">${esc(it.label)}</text>`;
+      s += `</g>`;
+      lx += chipW(it);
+    }
+    ly += 24;
   }
-  legendItems.push({key:"vacant", label:"Vacant", color:S.overrides["vacant"]||VACANT_FILL, hatch:true});
-  s += `<text x="${leftW-14}" y="${ly+11}" text-anchor="end" font-size="11" font-weight="600" fill="#898781">${S.colorMode==="year"?"EXPIRES":"KEY"}</text>`;
-  for(const it of legendItems){
-    s += `<g class="legend-chip" data-key="${esc(it.key)}">`;
-    s += `<rect x="${lx}" y="${ly}" width="15" height="15" rx="3.5" fill="${it.hatch?"url(#hatch)":it.color}" stroke="#c9ccd2" stroke-width="${it.hatch?1:0}"/>`;
-    s += `<text x="${lx+21}" y="${ly+12}" font-size="12.5" fill="#52514e">${esc(it.label)}</text>`;
-    s += `</g>`;
-    lx += 21 + it.label.length*7 + 26;
-  }
-  s += `<text x="${SVG_W-rightPad}" y="${ly+12}" text-anchor="end" font-size="10.5" fill="#b3b3ae">click a color chip to change it · click a suite to edit</text>`;
   s += `</svg>`;
 
   $("#svgWrap").innerHTML = s;
@@ -1038,10 +1094,12 @@ $("#ex_pptx").onclick = async ()=>{ closeMenus();
   p.writeFile({fileName: fileBase()+"_stacking_plan.pptx"});
 };
 $("#ex_xlsx").onclick = ()=>{ closeMenus();
-  const wsData = [["Floor","Suite","Tenant","SF","Lease Start","Lease Expiration","Rent","Status"]];
-  for(const f of getFloors()) for(const r of f.suites)
-    wsData.push([r.floor, r.suite, r.status==="vacant"?"VACANT":r.tenant, r.sf,
-                 r.start?fmtDate(r.start):"", r.end?fmtDate(r.end):"", r.rent??"", r.status]);
+  const multiB = new Set(S.rows.map(r=>(r.building||"").trim())).size > 1;
+  const hdr = (multiB?["Building"]:[]).concat(["Floor","Suite","Tenant","SF","Lease Start","Lease Expiration","Rent","Status"]);
+  const wsData = [hdr];
+  for(const bl of getBuildings()) for(const f of bl.floors) for(const r of f.suites)
+    wsData.push((multiB?[r.building||""]:[]).concat([r.floor, r.suite, r.status==="vacant"?"VACANT":r.tenant, r.sf,
+                 r.start?fmtDate(r.start):"", r.end?fmtDate(r.end):"", r.rent??"", r.status]));
   const totalSF = S.rows.reduce((a,r)=>a+(r.sf||0),0);
   const occSF = S.rows.filter(r=>r.status!=="vacant").reduce((a,r)=>a+(r.sf||0),0);
   const sum = [["Property", S.title],["Total RSF", totalSF],["Occupied SF", occSF],
@@ -1049,7 +1107,10 @@ $("#ex_xlsx").onclick = ()=>{ closeMenus();
                ["As of", fmtDate(S.asOf)]];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsData), "Rent Roll");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sum), "Summary");
+  const sumWs = XLSX.utils.aoa_to_sheet(sum);
+  // [B-STK-04 / C-STK-08] owner-ready: show 94.8% not 0.9481…
+  if(sumWs["B5"] && typeof sumWs["B5"].v === "number") sumWs["B5"].z = "0.0%";
+  XLSX.utils.book_append_sheet(wb, sumWs, "Summary");
   XLSX.writeFile(wb, fileBase()+"_rent_roll.xlsx");
 };
 function closeMenus(){ document.querySelectorAll(".menu.open").forEach(m=>m.classList.remove("open")); }

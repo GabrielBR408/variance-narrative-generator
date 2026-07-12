@@ -185,8 +185,104 @@ async function freshPage() {
                              document.getElementById(s.getAttribute('aria-labelledby') || '')),
     };
   });
-  assert(r.n === 7, 'mapbar: 7 column selectors rendered (got ' + r.n + ')');
+  assert(r.n === 8, 'mapbar: 8 column selectors rendered incl Building (got ' + r.n + ')');
   assert(r.named, 'mapbar: every selector has aria-label + valid aria-labelledby');
+  await page.close();
+}
+
+// ---------------- [B-STK-16 / C-STK-06/15] legend in "Color: Tenant" mode
+{
+  const page = await freshPage();
+  await page.evaluate(() => document.querySelector('#sampleBtn').click());
+  await page.selectOption('#colorMode', 'tenant');
+  await page.waitForTimeout(50);
+  const r = await page.evaluate(() => ({
+    tenantChips: document.querySelectorAll('.legend-chip[data-key^="t:"]').length,
+    hasVacant: !!document.querySelector('.legend-chip[data-key="vacant"]'),
+    keyLabel: [...document.querySelectorAll('#svgWrap svg text')].some(t => t.textContent === 'TENANTS'),
+  }));
+  assert(r.tenantChips === 13, 'legend: tenant mode shows a chip per unique tenant (got ' + r.tenantChips + ')');
+  assert(r.hasVacant, 'legend: tenant mode keeps Vacant key');
+  assert(r.keyLabel, 'legend: tenant mode labeled TENANTS');
+  await page.close();
+}
+
+// -------- [B-STK-10 / C-STK-07/10/12/14] blank/MTM expirations: legend + status
+{
+  const page = await freshPage();
+  const csv = [
+    'Suite,Tenant,Floor,RSF,Lease Expiration',
+    '100,Alpha,1,1000,12/31/2028',
+    '110,NoDate Co,1,1000,',        // occupied, no expiration -> "No exp. date" key
+    '200,Monthly LLC,2,1000,MTM',   // MTM text in expiration column -> MTM status
+    '210,VACANT,2,1000,',
+  ].join('\n');
+  const r = await page.evaluate((c) => {
+    handlePaste(c, 'NoDates');
+    return {
+      statuses: S.rows.map(x => x.status),
+      nodateChip: !!document.querySelector('.legend-chip[data-key="nodate"]'),
+      mtmChip: !!document.querySelector('.legend-chip[data-key="mtm"]'),
+      warn: S.warnings,
+    };
+  }, csv);
+  assert(JSON.stringify(r.statuses) === '["occupied","occupied","mtm","vacant"]',
+    'nodate: statuses correct, MTM text honored (got ' + JSON.stringify(r.statuses) + ')');
+  assert(r.nodateChip, 'nodate: "No exp. date" legend key present');
+  assert(r.mtmChip, 'nodate: MTM legend key present');
+  assert(!r.warn.some(w => /couldn't be read/.test(w)), 'nodate: MTM text not counted as unparsed date');
+  await page.close();
+}
+
+// ------------------------- [B-STK-04 / C-STK-08] XLSX occupancy % formatting
+{
+  const page = await freshPage();
+  await page.evaluate(() => document.querySelector('#sampleBtn').click());
+  const r = await page.evaluate(() => {
+    let captured = null;
+    const orig = XLSX.writeFile;
+    XLSX.writeFile = (wb) => { captured = wb; };
+    document.querySelector('#ex_xlsx').onclick();
+    XLSX.writeFile = orig;
+    const cell = captured.Sheets.Summary.B5;
+    return { v: cell.v, z: cell.z, label: captured.Sheets.Summary.A5.v };
+  });
+  assert(r.label === 'Occupancy %', 'xlsx: B5 is the Occupancy % cell');
+  assert(typeof r.v === 'number' && r.v > 0 && r.v < 1, 'xlsx: stays a real number (' + r.v + ')');
+  assert(r.z === '0.0%', 'xlsx: percentage number format applied (z=' + r.z + ')');
+  await page.close();
+}
+
+// ------------------------------- [C-STK-09] multi-building rent roll separation
+{
+  const page = await freshPage();
+  const csv = [
+    'Building,Suite,Tenant,Floor,RSF,Lease Expiration',
+    'North Tower,100,Alpha,1,1000,12/31/2028',
+    'North Tower,200,Beta,2,1200,6/30/2029',
+    'South Tower,100,Gamma,1,900,3/31/2030',
+    'South Tower,110,VACANT,1,800,',
+  ].join('\n');
+  const r = await page.evaluate((c) => {
+    handlePaste(c, 'Two Towers');
+    const bl = getBuildings();
+    let captured = null;
+    const orig = XLSX.writeFile; XLSX.writeFile = wb => { captured = wb; };
+    document.querySelector('#ex_xlsx').onclick();
+    XLSX.writeFile = orig;
+    return {
+      n: bl.length, names: bl.map(b => b.name),
+      floorsPer: bl.map(b => b.floors.length),
+      hdrs: [...document.querySelectorAll('#svgWrap svg text')].map(t => t.textContent)
+              .filter(t => t === 'North Tower' || t === 'South Tower'),
+      xlsxA1: captured.Sheets['Rent Roll'].A1.v,
+    };
+  }, csv);
+  assert(r.n === 2, 'multibldg: 2 separate stacks (got ' + r.n + ')');
+  assert(JSON.stringify(r.names) === '["North Tower","South Tower"]', 'multibldg: building names kept');
+  assert(JSON.stringify(r.floorsPer) === '[2,1]', 'multibldg: floors grouped per building (got ' + JSON.stringify(r.floorsPer) + ')');
+  assert(r.hdrs.length === 2, 'multibldg: SVG renders a header per building');
+  assert(r.xlsxA1 === 'Building', 'multibldg: XLSX export gains Building column');
   await page.close();
 }
 
