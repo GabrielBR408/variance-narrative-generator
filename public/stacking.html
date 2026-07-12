@@ -521,12 +521,19 @@ function buildRows(grid, det){
   }
   // assemble non-blocking data-quality warnings
   const warn = [];
+  const kept = out.filter(r=> r.sf!=null || r.tenant || r.suite);
+  // [C-STK-04] tenant-column validation: never silently render an all-vacant building
+  if(map.tenant==null && kept.length){
+    warn.push("No Tenant column was detected, so every suite is shown as VACANT. Point the Tenant selector above at the right column and hit Re-apply.");
+  } else if(kept.length>2 && kept.every(r=>r.status==="vacant")){
+    warn.push("Every suite parsed as vacant — the Tenant column may be mapped to the wrong column. Check the selectors above and hit Re-apply.");
+  }
   if(excluded>0) warn.push(`${excluded} summary/total row${excluded>1?"s were":" was"} detected and excluded from calculations.`);
   if(endFmt && endFmt.conflict) warn.push(`The expiration column mixes date formats — some expirations may be wrong. Please verify.`);
   if(ambig>0) warn.push(`${ambig} expiration date${ambig>1?"s were":" was"} ambiguous (day/month order unclear); assumed US M/D/Y.`);
   if(unparsed>0) warn.push(`${unparsed} expiration value${unparsed>1?"s":""} couldn't be read as a date, so ${unparsed>1?"they aren't":"it isn't"} color-coded.`);
   S.warnings = warn;
-  return out.filter(r=> r.sf!=null || r.tenant || r.suite);
+  return kept;
 }
 
 // ---------- file intake ----------
@@ -660,7 +667,8 @@ function renderMapbar(det, grid){
                     + `<option value="-1" ${c==null?"selected":""}>— none —</option>`;
   mb.innerHTML = `<span style="font-weight:600;color:var(--brand)">Detected columns:</span>` +
     Object.keys(FIELD_LABELS).map(k=>
-      `<span class="tag">${FIELD_LABELS[k]}</span><select data-f="${k}">${opts(det.map[k])}</select>`
+      `<span class="tag" id="maplbl_${k}">${FIELD_LABELS[k]}</span>` +
+      `<select data-f="${k}" id="mapsel_${k}" aria-labelledby="maplbl_${k}" aria-label="Source column for ${FIELD_LABELS[k]}">${opts(det.map[k])}</select>`
     ).join("") +
     `<button class="apply" id="remapBtn">Re-apply</button>`;
   $("#remapBtn").onclick = ()=>{
@@ -690,12 +698,15 @@ function showMapbarManual(grid){
 function floorSortKey(f){
   const s = String(f).trim().toUpperCase();
   if(/^PH/.test(s)) return 9000 + (parseInt(s.replace(/\D/g,""),10)||0);
+  // [C-STK-02] below-ground levels (B/P/LL/BSMT + optional digit) must sort below the
+  // ground floor — checked BEFORE numeric extraction so "B1"/"P2" don't interleave
+  // with floors 1 and 2.
+  if(/^(LL|SB|BSMT|BASEMENT|PARKING|PK|B|P)(\d|$|\s|-)/.test(s)) return -1 - (parseInt(s.replace(/\D/g,""),10)||0);
   const n = parseFloat(s.replace(/[^\d.-]/g,""));
   if(!isNaN(n) && /\d/.test(s)) return n;
   if(/^(G|GR|GROUND|L|LOBBY)$/.test(s)) return 0.5;
   if(/^(M|MEZZ)/.test(s)) return 1.5;
   if(/^(C|CONC)/.test(s)) return 0.2;
-  if(/^(LL|B|BSMT|BASEMENT|P)/.test(s)) return -1 - (parseInt(s.replace(/\D/g,""),10)||0);
   return 0;
 }
 function getFloors(){

@@ -131,6 +131,65 @@ async function freshPage() {
   await page.close();
 }
 
+// ------------------------------ [C-STK-02] basement/parking floor sort order
+{
+  const page = await freshPage();
+  const csv = [
+    'Suite,Tenant,Floor,RSF',
+    '201,Alpha,2,1000',
+    '101,Beta,1,1000',
+    'G1,Gamma,G,1000',
+    'LL1,Delta,LL,1000',
+    'B101,Echo,B1,1000',
+    'P201,Foxtrot,P2,1000',
+  ].join('\n');
+  const r = await page.evaluate((c) => {
+    handlePaste(c, 'Floors');
+    return getFloors().map(f => f.name);
+  }, csv);
+  assert(JSON.stringify(r) === '["2","1","G","LL","B1","P2"]',
+    'floors: B/P/LL sort below ground, top-down [2,1,G,LL,B1,P2] (got ' + JSON.stringify(r) + ')');
+  await page.close();
+}
+
+// -------------------------- [C-STK-04] tenant-column detection validation
+{
+  const page = await freshPage();
+  // no tenant column at all -> must warn, not silently render all-vacant
+  let r = await page.evaluate(() => {
+    handlePaste('Suite,RSF,Lease Expiration\n100,1000,1/1/2028\n110,2000,6/30/2029\n200,1500,3/31/2030', 'NoTenantCol');
+    return { warn: S.warnings, allVacant: S.rows.every(x => x.status === 'vacant') };
+  });
+  assert(r.allVacant, 'tenantcol: rows render vacant when no tenant column (precondition)');
+  assert(r.warn.some(w => /No Tenant column/i.test(w)), 'tenantcol: missing-column warning surfaced');
+
+  // tenant column exists but every cell is blank -> suspicious all-vacant warning
+  r = await page.evaluate(() => {
+    handlePaste('Suite,Tenant,RSF\n100,,1000\n110,,2000\n200,,1500', 'BlankTenants');
+    return { warn: S.warnings };
+  });
+  assert(r.warn.some(w => /Every suite parsed as vacant/i.test(w)), 'tenantcol: all-vacant warning surfaced');
+  await page.close();
+}
+
+// ------------------- [Stacking-06 / B-STK-03] mapbar selects: accessible names
+{
+  const page = await freshPage();
+  await page.evaluate(() => document.querySelector('#sampleBtn').click());
+  await page.waitForTimeout(100);
+  const r = await page.evaluate(() => {
+    const sels = [...document.querySelectorAll('#mapbar select')];
+    return {
+      n: sels.length,
+      named: sels.every(s => (s.getAttribute('aria-label') || '').length > 0 &&
+                             document.getElementById(s.getAttribute('aria-labelledby') || '')),
+    };
+  });
+  assert(r.n === 7, 'mapbar: 7 column selectors rendered (got ' + r.n + ')');
+  assert(r.named, 'mapbar: every selector has aria-label + valid aria-labelledby');
+  await page.close();
+}
+
 // ------------- [Stacking-03 / B-STK-02 / C-STK-05] portrait-phone toolbar smoke
 {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
