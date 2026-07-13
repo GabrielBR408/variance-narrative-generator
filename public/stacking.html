@@ -403,6 +403,23 @@ function parseDateWith(v, fmt){
 }
 // Back-compat single-value parser (popover edits, totals sanity check) — assumes US when ambiguous.
 function parseDateVal(v){ return parseDateWith(v, {fmt:"mdy", undetermined:false, conflict:false}).date; }
+// [QA2-P1-2] Prefer the rent roll's own "As of <date>" (from the title rows above the
+// header) over the upload date — used for the subtitle, exports, and the MTM/holdover
+// comparison. Falls back to today when the file doesn't state a date.
+function detectAsOf(grid, hdrRow){
+  const RE = /\bas\s+of[:\s]+([A-Za-z]+\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{4}-\d{1,2}-\d{1,2})/i;
+  for(let r=0; r<Math.min(hdrRow, 20); r++){
+    const row = grid[r]; if(!row) continue;
+    for(const cell of row){
+      const m = String(cell??"").match(RE);
+      if(!m) continue;
+      let d = parseDateVal(m[1]);
+      if(!d){ const t = new Date(m[1]); d = isNaN(t) ? null : t; }
+      if(d) return d;
+    }
+  }
+  return null;
+}
 function esc(s){ return String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
 // ---------- column detection ----------
@@ -419,12 +436,17 @@ const COL_PATTERNS = {
 function scoreHeaderCell(text){
   const n = norm(text);
   if(!n) return null;
+  // [QA2-P1-1] "% of Bldg"-style share columns are ratios, not building names —
+  // never let them claim the Building mapping (it splits the plan into one-suite stacks).
+  const isPct = /%/.test(String(text??""));
   for(const key in COL_PATTERNS){
+    if(key==="building" && isPct) continue;
     for(const p of COL_PATTERNS[key]){
       if(n===p) return {key, exact:true};
     }
   }
   for(const key in COL_PATTERNS){
+    if(key==="building" && isPct) continue;
     for(const p of COL_PATTERNS[key]){
       if(p.length>=4 && (n.includes(p) || p.includes(n) && n.length>=3)) return {key, exact:false};
     }
@@ -492,12 +514,19 @@ function isTotalsRow(g, map){
 function buildRows(grid, det){
   const {row:hr, map} = det;
   const out = [];
-  const today = new Date();
+  // [QA2-P1-2] the date reference is the roll's stated as-of date when available,
+  // so a June roll uploaded in July doesn't drift ("as of" label + MTM detection).
+  const asOf = detectAsOf(grid, hr) || new Date();
+  S.asOf = asOf;
+  const today = asOf;
   // [C-STK-01] Resolve each date column's format from the data before parsing any cell.
   const colVals = c => { const a=[]; for(let r=hr+1;r<grid.length;r++){ const g=grid[r]; if(g&&map[c]!=null) a.push(g[map[c]]); } return a; };
   const endFmt   = map.end  !=null ? detectDateColumnFormat(colVals("end"))   : null;
   const startFmt = map.start!=null ? detectDateColumnFormat(colVals("start")) : null;
-  let excluded=0, ambig=0, unparsed=0, badSF=0, zeroSF=0;
+  let excluded=0, ambig=0, unparsed=0, badSF=0, zeroSF=0, ignoredRows=0, dupIgnored=0;
+  // [QA2-P0-1] decorated vacancy labels; [QA2-P0-2] occupancy-summary label/value pairs
+  const VACANT_WORD_RE = /\b(vacant|available|vacancy|unleased|unoccupied)\b/i;
+  const LABEL_ROW_RE = /\b(sf|rsf|square\s*feet|occupanc\w*|vacanc\w*|rent|psf|suites?|tenants?|deposit|total|summary|basis|weighted|avg|average|annualized|in.?place)\b/i;
   for(let r=hr+1; r<grid.length; r++){
     const g = grid[r]; if(!g) continue;
     const joined = g.map(x=>String(x??"")).join(" ").trim();
@@ -516,8 +545,28 @@ function buildRows(grid, det){
     const building = map.building!=null ? String(g[map.building]??"").trim() : "";
     let floor    = map.floor !=null ? String(g[map.floor]??"").trim() : "";
     if(!suite && !tenant && sf==null) continue;
+    // [QA2-P0-2] Row classification: only real suite rows may become blocks/floors.
+    // Everything else (summary label/value pairs, footnote sentences, options blocks,
+    // print header/footer artifacts) is counted and surfaced in the warnbar instead
+    // of silently rendering as phantom suites.
+    const populated = g.map(x=>String(x??"").trim()).filter(Boolean);
+    if(populated.some(x=>/^&[LCR8]/.test(x))){ ignoredRows++; continue; } // Excel print-header/footer codes
+    const cleanSuite = CLEAN_SUITE_RE.test(suite);
+    if(!cleanSuite && populated.length<=2 && LABEL_ROW_RE.test(suite || tenant || populated[0] || "")){
+      ignoredRows++; continue;  // "Leased SF | 101,160"-style summary pair
+    }
+    if(!(cleanSuite || (sf!=null && sf>0) || (tenant && (end || start)))){
+      ignoredRows++; continue;  // no suite id, no SF, no dated tenant — not a suite
+    }
     if(!floor) floor = floorFromSuite(suite) ?? "?";
-    const vac = !tenant || /^(vacant|available|vacancy|empty|-+)$/i.test(tenant);
+    // [QA2-P0-2] never use narrative text as a floor name
+    if(String(floor).length>12) floor = String(floorFromSuite(suite) ?? "?");
+    // [QA2-P0-1] decorated vacancy labels ("*** VACANT ***", "VACANT - Available",
+    // "VACANT (retail)") count as vacant. The no-dates/no-positive-rent guard keeps a
+    // real tenant whose name merely contains the word (with a lease) classified occupied.
+    const vac = !tenant
+      || /^(vacant|available|vacancy|empty|-+)$/i.test(tenant)
+      || (VACANT_WORD_RE.test(tenant) && !end && !start && !(rentN>0));
     if(vac) tenant = "";
     // date-quality tally on occupied rows only (a vacant suite's expiry is irrelevant)
     if(!vac){
@@ -533,7 +582,30 @@ function buildRows(grid, det){
   }
   // assemble non-blocking data-quality warnings
   const warn = [];
-  const kept = out.filter(r=> r.sf!=null || r.tenant || r.suite);
+  let kept = out.filter(r=> r.sf!=null || r.tenant || r.suite);
+  // [QA2-P0-2] ancillary blocks (renewal-options lists) can repeat a real suite id
+  // with no SF and no dates — drop the data-less duplicate, never the real row.
+  const bySuite = {};
+  kept.forEach(r=>{ if(r.suite){ const k=(r.building||"")+"|"+r.suite; (bySuite[k]=bySuite[k]||[]).push(r); } });
+  kept = kept.filter(r=>{
+    if(!r.suite) return true;
+    const k=(r.building||"")+"|"+r.suite;
+    if(bySuite[k].length<2) return true;
+    const hasData = r.sf!=null || r.end || r.start;
+    const othersHaveData = bySuite[k].some(o=>o!==r && (o.sf!=null || o.end || o.start));
+    if(!hasData && othersHaveData){ dupIgnored++; return false; }
+    return true;
+  });
+  // [QA2-P1-1] a real Building column has few distinct values. If nearly every suite
+  // carries its own "building", the mapping grabbed the wrong column — ignore it
+  // rather than shredding the stack into one-suite fragments.
+  if(map.building!=null){
+    const bvals = new Set(kept.filter(r=>r.building).map(r=>r.building));
+    if(bvals.size > Math.max(4, kept.length/2)){
+      kept.forEach(r=>{ r.building=""; });
+      warn.push("The detected Building column had a different value on nearly every row, so it was ignored. If this file really covers multiple buildings, pick the right column above and hit Re-apply.");
+    }
+  }
   // [C-STK-04] tenant-column validation: never silently render an all-vacant building
   if(map.tenant==null && kept.length){
     warn.push("No Tenant column was detected, so every suite is shown as VACANT. Point the Tenant selector above at the right column and hit Re-apply.");
@@ -541,6 +613,8 @@ function buildRows(grid, det){
     warn.push("Every suite parsed as vacant — the Tenant column may be mapped to the wrong column. Check the selectors above and hit Re-apply.");
   }
   if(excluded>0) warn.push(`${excluded} summary/total row${excluded>1?"s were":" was"} detected and excluded from calculations.`);
+  if(ignoredRows>0) warn.push(`${ignoredRows} non-suite row${ignoredRows>1?"s":""} (summary lines, notes, options, footers) ${ignoredRows>1?"were":"was"} ignored.`);
+  if(dupIgnored>0) warn.push(`${dupIgnored} duplicate suite row${dupIgnored>1?"s":""} without SF or dates ${dupIgnored>1?"were":"was"} ignored (likely a notes/options block).`);
   if(endFmt && endFmt.conflict) warn.push(`The expiration column mixes date formats — some expirations may be wrong. Please verify.`);
   if(ambig>0) warn.push(`${ambig} expiration date${ambig>1?"s were":" was"} ambiguous (day/month order unclear); assumed US M/D/Y.`);
   if(unparsed>0) warn.push(`${unparsed} expiration value${unparsed>1?"s":""} couldn't be read as a date, so ${unparsed>1?"they aren't":"it isn't"} color-coded.`);
@@ -1075,7 +1149,7 @@ function openPopover(r, x, y, srcIdx){
     r.floor  = $("#po_f").value.trim() || r.floor;
     r.sf     = parseNum($("#po_sf").value, 0);
     r.end    = parseDateVal($("#po_e").value);
-    const today=new Date();
+    const today = S.asOf || new Date();  // [QA2-P1-2] consistent date reference
     r.status = !r.tenant ? "vacant" : (r.end && r.end<today ? "mtm" : "occupied");
     S.dirty=true; po.style.display="none"; render(); refocus();
   };
@@ -1146,8 +1220,8 @@ $("#ex_xlsx").onclick = ()=>{ closeMenus();
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsData), "Rent Roll");
   const sumWs = XLSX.utils.aoa_to_sheet(sum);
-  // [B-STK-04 / C-STK-08] owner-ready: show 94.8% not 0.9481…
-  if(sumWs["B5"] && typeof sumWs["B5"].v === "number") sumWs["B5"].z = "0.0%";
+  // [B-STK-04 / C-STK-08] owner-ready: show 94.85% not 0.9485… ([QA2-P2-2] two decimals)
+  if(sumWs["B5"] && typeof sumWs["B5"].v === "number") sumWs["B5"].z = "0.00%";
   XLSX.utils.book_append_sheet(wb, sumWs, "Summary");
   XLSX.writeFile(wb, fileBase()+"_rent_roll.xlsx");
 };
