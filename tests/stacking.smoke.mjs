@@ -249,7 +249,7 @@ async function freshPage() {
   });
   assert(r.label === 'Occupancy %', 'xlsx: B5 is the Occupancy % cell');
   assert(typeof r.v === 'number' && r.v > 0 && r.v < 1, 'xlsx: stays a real number (' + r.v + ')');
-  assert(r.z === '0.0%', 'xlsx: percentage number format applied (z=' + r.z + ')');
+  assert(r.z === '0.00%', 'xlsx: percentage number format applied, two decimals [QA2-P2-2] (z=' + r.z + ')');
   await page.close();
 }
 
@@ -494,6 +494,160 @@ async function freshPage() {
   await page.keyboard.press('Enter');
   const t = await page.evaluate(() => S.title);
   assert(t === 'Clicked Rename', 'title: mouse rename commits (got "' + t + '")');
+  await page.close();
+}
+
+// --------------------------- [QA2-P0-1] decorated vacancy labels count as vacant
+{
+  const page = await freshPage();
+  const r = await page.evaluate(() => {
+    const c = [
+      'Suite\tTenant\tRSF\tLease Start\tLease Exp\tMonthly Base Rent',
+      '100\tAlpha Co\t1000\t01/01/2022\t12/31/2028\t2500',
+      '110\t*** VACANT ***\t1000\t-\t-\t0.00',
+      '120\tVACANT - Available\t1000\t-\t-\t-',
+      '130\tVACANT (retail)\t1000\t—\t—\t',
+      '140\tAvailable Storage Inc.\t1000\t01/01/2023\t12/31/2029\t2100',
+    ].join('\n');
+    handlePaste(c, 'VacLabels');
+    const st = {}; S.rows.forEach(x => st[x.suite] = x.status);
+    const totalSF = S.rows.reduce((a, x) => a + (x.sf || 0), 0);
+    const occSF = S.rows.filter(x => x.status !== 'vacant').reduce((a, x) => a + (x.sf || 0), 0);
+    return { st, occPct: Math.round(occSF / totalSF * 1000) / 10 };
+  });
+  assert(r.st['110'] === 'vacant', 'vacancy: "*** VACANT ***" is vacant');
+  assert(r.st['120'] === 'vacant', 'vacancy: "VACANT - Available" is vacant');
+  assert(r.st['130'] === 'vacant', 'vacancy: "VACANT (retail)" is vacant');
+  assert(r.st['140'] === 'occupied', 'vacancy: real tenant containing "Available" (with lease) stays occupied');
+  assert(r.occPct === 40, 'vacancy: occupancy reflects decorated vacants (got ' + r.occPct + '%)');
+  await page.close();
+}
+
+// --------------------------- [QA2-P0-2] non-suite rows never become blocks/floors
+{
+  const page = await freshPage();
+  const r = await page.evaluate(() => {
+    const c = [
+      'Suite\tTenant\tRSF\tLease Exp',
+      '100\tAlpha Co\t1000\t12/31/2028',
+      '110\tVACANT\t500\t-',
+      'OCCUPANCY SUMMARY\t\t\t',
+      'Leased SF\t1000\t\t',
+      'Physical Occupancy\t66.7%\t\t',
+      'Suite 110 (500 SF) has been vacant since 12/31/2025. Marketing underway.\t\t\t',
+      '&8FICTIONAL SAMPLE\t&8Page &P of &N\t\t',
+    ].join('\n');
+    handlePaste(c, 'Phantoms');
+    return {
+      rows: S.rows.map(x => x.suite),
+      floors: [...new Set(S.rows.map(x => x.floor))],
+      warns: S.warnings.join(' | '),
+    };
+  });
+  assert(r.rows.length === 2 && r.rows.includes('100') && r.rows.includes('110'),
+    'phantoms: only real suites survive (got ' + JSON.stringify(r.rows) + ')');
+  assert(r.floors.every(f => f === '1'), 'phantoms: no garbage floors (got ' + JSON.stringify(r.floors) + ')');
+  assert(/non-suite row/.test(r.warns), 'phantoms: ignored rows are surfaced in the warnbar');
+  await page.close();
+}
+
+// --------------------------- [QA2-P0-2] options-block duplicates of real suites are dropped
+{
+  const page = await freshPage();
+  const r = await page.evaluate(() => {
+    const c = [
+      'Suite\tTenant\tRSF\tLease Exp',
+      '100\tAlpha Co\t1000\t12/31/2028',
+      '200\tBeta LLC\t2000\t6/30/2029',
+      'RENEWAL / EXPANSION OPTIONS\t\t\t',
+      '100\tOne 5-yr option\t\t',
+      '200\tOne 3-yr option @ FMV\t\t',
+    ].join('\n');
+    handlePaste(c, 'Dupes');
+    return { n: S.rows.length, tenants: S.rows.map(x => x.tenant).sort(), warns: S.warnings.join(' | ') };
+  });
+  assert(r.n === 2, 'dupes: options block does not duplicate suites (got ' + r.n + ' rows)');
+  assert(r.tenants.join(',') === 'Alpha Co,Beta LLC', 'dupes: the real rows are the ones kept');
+  assert(/duplicate suite row/.test(r.warns), 'dupes: dropped duplicates are surfaced in the warnbar');
+  await page.close();
+}
+
+// --------------------------- [QA2-P1-1] "% of Bldg" must not map to Building
+{
+  const page = await freshPage();
+  const r = await page.evaluate(() => {
+    const c = [
+      'Suite\tTenant\tRSF\t% of Bldg\tLease Exp',
+      '100\tAlpha Co\t1000\t33.3%\t12/31/2028',
+      '200\tBeta LLC\t1000\t33.3%\t6/30/2029',
+      '300\tGamma Inc\t1000\t33.4%\t3/31/2030',
+    ].join('\n');
+    handlePaste(c, 'PctBldg');
+    return {
+      buildingMapped: S.mapping.map.building != null,
+      stacks: getBuildings().length,
+    };
+  });
+  assert(!r.buildingMapped, 'building: "% of Bldg" header is not mapped to Building');
+  assert(r.stacks === 1, 'building: plan renders as a single stack (got ' + r.stacks + ')');
+  await page.close();
+}
+
+// --------------------------- [QA2-P1-1] wrong Building mapping self-heals via cardinality check
+{
+  const page = await freshPage();
+  const r = await page.evaluate(() => {
+    const c = [
+      'Suite\tTenant\tRSF\tShare Code\tLease Exp',
+      '100\tAlpha Co\t1000\tX1\t12/31/2028',
+      '200\tBeta LLC\t1000\tX2\t6/30/2029',
+      '300\tGamma Inc\t1000\tX3\t3/31/2030',
+      '400\tDelta LP\t1000\tX4\t3/31/2031',
+      '500\tEps Co\t1000\tX5\t3/31/2031',
+      '600\tZeta Co\t1000\tX6\t3/31/2031',
+    ].join('\n');
+    handlePaste(c, 'CardCheck');
+    S.mapping.map.building = 3;                 // force a bad mapping (per-row-unique column)
+    S.rows = buildRows(S.grid, S.mapping);
+    return {
+      buildings: [...new Set(S.rows.map(x => x.building))],
+      warns: S.warnings.join(' | '),
+    };
+  });
+  assert(r.buildings.length === 1 && r.buildings[0] === '', 'building: per-row-unique column is unmapped (cardinality check)');
+  assert(/Building column/.test(r.warns), 'building: cardinality unmap is surfaced in the warnbar');
+  await page.close();
+}
+
+// --------------------------- [QA2-P1-2] "as of" comes from the file, and drives MTM
+{
+  const page = await freshPage();
+  const r = await page.evaluate(() => {
+    const c = [
+      'Kestrel Commercial Real Estate Services\t\t\t',
+      'RENT ROLL\t\t\t',
+      'As of June 30, 2026\t\t\t',
+      'Suite\tTenant\tRSF\tLease Exp',
+      '100\tAlpha Co\t1000\t07/05/2026',   // after the roll date: occupied, not MTM
+      '200\tBeta LLC\t2000\t6/30/2029',
+    ].join('\n');
+    handlePaste(c, 'AsOf');
+    return {
+      asOf: (S.asOf.getMonth() + 1) + '/' + S.asOf.getDate() + '/' + S.asOf.getFullYear(),
+      st100: S.rows.find(x => x.suite === '100').status,
+    };
+  });
+  assert(r.asOf === '6/30/2026', 'asof: date read from the file title rows (got ' + r.asOf + ')');
+  assert(r.st100 === 'occupied', 'asof: lease expiring after the roll date is not MTM/holdover');
+
+  // no as-of in the file -> falls back to today
+  const fb = await page.evaluate(() => {
+    document.querySelector('#newBtn').click();
+    handlePaste('Suite\tTenant\tRSF\tLease Exp\n100\tAlpha\t1000\t12/31/2028', 'NoAsOf');
+    const now = new Date();
+    return S.asOf.getFullYear() === now.getFullYear() && S.asOf.getMonth() === now.getMonth() && S.asOf.getDate() === now.getDate();
+  });
+  assert(fb, 'asof: falls back to today when the file states no date');
   await page.close();
 }
 
