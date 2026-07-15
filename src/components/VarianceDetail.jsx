@@ -45,7 +45,7 @@ export default function VarianceDetail({
   return (
     <details className="step step--panel">
       <summary>
-        <span className="step-eyebrow">Step 3</span>
+        <span className="step-eyebrow">Optional</span>
         <span className="step-title">Variance Detail</span>
         <span className="step-note">Control what gets discussed.</span>
       </summary>
@@ -157,7 +157,7 @@ export default function VarianceDetail({
           <legend>Include <span className="coming-soon-tag">Coming soon</span></legend>
           {VARIANCE_INCLUDE_FILTERS.map((c) => (
             <label className="field field--check field--coming-soon" key={c.key}>
-              <input type="checkbox" checked={variance.include[c.key]} disabled aria-disabled="true" readOnly />
+              <input type="checkbox" checked={false} disabled aria-disabled="true" readOnly />
               <span className="field-label">{c.label}</span>
             </label>
           ))}
@@ -167,7 +167,7 @@ export default function VarianceDetail({
           <legend>Ignore <span className="coming-soon-tag">Coming soon</span></legend>
           {VARIANCE_IGNORE_FILTERS.map((c) => (
             <label className="field field--check field--coming-soon" key={c.key}>
-              <input type="checkbox" checked={variance.ignore[c.key]} disabled aria-disabled="true" readOnly />
+              <input type="checkbox" checked={false} disabled aria-disabled="true" readOnly />
               <span className="field-label">{c.label}</span>
             </label>
           ))}

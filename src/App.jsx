@@ -97,20 +97,24 @@ export default function App() {
   // UX-1: generation always runs in AI mode ("cited"). The AI disclosure is
   // acknowledged once per session; the ref survives re-renders.
   const [showLlmDisclosure, setShowLlmDisclosure] = useState(false)
-  const llmAcknowledgedRef = useRef(false)
 
-  // First-visit privacy & AI disclosure. Shown once per browser; acknowledgement
-  // is persisted in localStorage so it never reappears on later visits. Reads are
-  // wrapped because localStorage can throw (private mode / disabled storage) — if
-  // it does, we simply don't show the modal rather than break the app.
+  // Single consent gate: the first-visit Privacy & AI modal now ALSO covers the
+  // AI-commentary data notice, so accepting it acknowledges AI mode too and the
+  // separate on-Generate modal never fires. Reads are wrapped because
+  // localStorage can throw (private mode / disabled storage).
   const PRIVACY_ACK_KEY = 'cheo:privacyDisclosureAck'
-  const [showPrivacyDisclosure, setShowPrivacyDisclosure] = useState(() => {
+  const privacyAlreadyAcked = (() => {
     try {
-      return localStorage.getItem(PRIVACY_ACK_KEY) !== '1'
+      return localStorage.getItem(PRIVACY_ACK_KEY) === '1'
     } catch {
       return false
     }
-  })
+  })()
+
+  // If the combined notice was already accepted in a prior session, AI is
+  // pre-acknowledged so a returning user goes straight from Generate to output.
+  const llmAcknowledgedRef = useRef(privacyAlreadyAcked)
+  const [showPrivacyDisclosure, setShowPrivacyDisclosure] = useState(!privacyAlreadyAcked)
 
   const handlePrivacyDisclosureAccept = useCallback(() => {
     try {
@@ -118,6 +122,8 @@ export default function App() {
     } catch {
       // Storage unavailable — the modal simply reappears next session.
     }
+    // Accepting the combined notice also acknowledges AI mode — one gate, not two.
+    llmAcknowledgedRef.current = true
     setShowPrivacyDisclosure(false)
   }, [])
 

@@ -359,7 +359,8 @@ function summarizeDetail(rows) {
   const top = mostFrequent(rows, 'detailText')
   // Phase 19B: column-typed vendor/description candidates. These are raw strings;
   // the contribution stage decides whether either is clean enough to render.
-  const vendor = mostFrequent(rows, 'vendorText').value
+  const vendorTop = mostFrequent(rows, 'vendorText')
+  const vendor = vendorTop.value
   const description = mostFrequent(rows, 'descText').value
 
   return {
@@ -369,6 +370,10 @@ function summarizeDetail(rows) {
     topVendor: top.value,
     topVendorCount: top.count,
     vendor,
+    // How many matched rows carry this same top vendor. Lets the render layer
+    // tell a single-vendor movement (safe to name) from a multi-vendor one
+    // (naming one silently drops the others — the DoorPro attribution bug).
+    vendorCount: vendorTop.count,
     description,
     signed
   }

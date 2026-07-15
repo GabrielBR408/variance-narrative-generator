@@ -17,7 +17,7 @@ export default function StylePanel({ style, setStyle }) {
   return (
     <details className="step step--panel">
       <summary>
-        <span className="step-eyebrow">Step 2</span>
+        <span className="step-eyebrow">Optional</span>
         <span className="step-title">Style</span>
         <span className="step-note">Control how the report reads.</span>
       </summary>

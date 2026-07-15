@@ -152,13 +152,22 @@ export function rankContribution({
   const vendor = String(detail.vendor || '').trim()
   const description = String(detail.description || '').trim()
 
+  // The top vendor may cover only SOME matched rows. Naming it as the sole
+  // attribution then silently drops the other vendors (the DoorPro bug), so we
+  // only render a single vendor when it accounts for EVERY matched row. When the
+  // count is unknown (older callers), behave as before.
+  const vendorCount = Number(detail.vendorCount)
+  const vendorCoversAll = !Number.isFinite(vendorCount) || vendorCount >= count
+
   let vendorRenderable =
     Number.isFinite(confidence) &&
     confidence >= VENDOR_CONFIDENCE_MIN &&
     vendor.length > 0 &&
+    /[A-Za-z0-9]/.test(vendor) &&
     vendor.length <= VENDOR_MAX_LEN &&
     !isNumeric(vendor) &&
     !isReferenceLike(vendor) &&
+    vendorCoversAll &&
     count <= VENDOR_MAX_COUNT
 
   let descriptionRenderable =

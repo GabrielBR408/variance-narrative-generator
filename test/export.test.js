@@ -183,9 +183,19 @@ test('multi-period narrative renders Current then YTD as ordered sections', () =
 
 // --- copy flow -------------------------------------------------------------
 
-test('clipboard text is byte-identical to the markdown download', () => {
+test('clipboard text is clean plain text — no raw Markdown symbols', () => {
   const narrative = sampleNarrative()
-  assert.equal(narrativeToClipboardText(narrative), narrativeToMarkdown(narrative))
+  const clip = narrativeToClipboardText(narrative)
+  // It must NOT be the raw Markdown (that pasted literal #/- into Yardi/Word).
+  assert.notEqual(clip, narrativeToMarkdown(narrative))
+  // No heading hashes and no bullet dashes at the start of any line.
+  for (const line of clip.split('\n')) {
+    assert.ok(!/^\s*#/.test(line), `unexpected Markdown heading: ${line}`)
+    assert.ok(!/^\s*-\s/.test(line), `unexpected Markdown bullet: ${line}`)
+  }
+  // Same substance: the title and section headings survive as plain text.
+  assert.ok(clip.includes('Variance Narrative'))
+  assert.ok(clip.includes('Executive Summary'))
 })
 
 // --- export availability ---------------------------------------------------

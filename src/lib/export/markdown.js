@@ -88,8 +88,62 @@ export function narrativeToMarkdown(narrative) {
   return lines.join('\n').replace(/\n+$/, '\n')
 }
 
-// The text placed on the clipboard by "Copy Narrative". It is the same Markdown
-// as the download so copy and export are byte-identical, preserving formatting.
+// --- Plain-text rendering for "Copy Narrative" ----------------------------
+// The .md DOWNLOAD stays Markdown. But pasting Markdown into Yardi/Word drops
+// literal "#" and "-" symbols into the document, so the CLIPBOARD gets clean,
+// readable text instead: headings as plain lines, notes as sentences, no
+// Markdown syntax. Same content and order as the Markdown — only the syntax
+// characters are removed — so copy and download never diverge in substance.
+function plainMetaLines(narrative) {
+  return metaEntries(narrative).map((m) => `${m.label}: ${m.value}`)
+}
+
+function plainSectionBlock(period, { key, title }) {
+  const notes = notesOf(period, key)
+  const lines = [title]
+  if (notes.length === 0) {
+    lines.push('None.')
+  } else {
+    for (const n of notes) lines.push(n.text)
+  }
+  return lines
+}
+
+function plainPeriodBlock(period) {
+  const lines = [period?.periodLabel || 'Current', '']
+  SECTIONS.forEach((section, i) => {
+    if (i > 0) lines.push('')
+    lines.push(...plainSectionBlock(period, section))
+  })
+  if (notesOf(period, CONTEXT_SECTION.key).length > 0) {
+    lines.push('')
+    lines.push(...plainSectionBlock(period, CONTEXT_SECTION))
+  }
+  return lines
+}
+
+export function narrativeToPlainText(narrative) {
+  const lines = [TITLE, '']
+
+  const meta = plainMetaLines(narrative)
+  if (meta.length > 0) lines.push(...meta, '')
+
+  const periods = Array.isArray(narrative?.periods) ? narrative.periods : []
+  if (periods.length === 0) {
+    lines.push('No comparable variance data was found in the base report, so there is nothing to narrate.', '')
+    return lines.join('\n').replace(/\n+$/, '\n')
+  }
+
+  periods.forEach((period, i) => {
+    if (i > 0) lines.push('')
+    lines.push(...plainPeriodBlock(period))
+  })
+
+  return lines.join('\n').replace(/\n+$/, '\n')
+}
+
+// The text placed on the clipboard by "Copy Narrative" — clean plain text so it
+// pastes cleanly into Yardi/Word without stray Markdown symbols.
 export function narrativeToClipboardText(narrative) {
-  return narrativeToMarkdown(narrative)
+  return narrativeToPlainText(narrative)
 }

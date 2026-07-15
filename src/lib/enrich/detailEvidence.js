@@ -105,6 +105,9 @@ export function selectDetailEvidence({ reconstructed = null, contribution = null
     const reasons = forbiddenReasons(vendorIn, accountCode, 'vendor')
     if (vendorIn.length > VENDOR_RENDER_MAX_LEN) reasons.push('vendor:length')
     if (isGenericVendor(vendorIn)) reasons.push('vendor:generic')
+    // A vendor with no letter/digit (e.g. a lone "-" placeholder) must never
+    // render — it produced garbage like "activity from -" in the fallback path.
+    if (!/[A-Za-z0-9]/.test(vendorIn)) reasons.push('vendor:empty')
     if (reasons.length === 0) {
       vendorRenderable = true
       vendorOut = vendorIn

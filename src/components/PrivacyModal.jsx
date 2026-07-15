@@ -20,7 +20,7 @@ export default function PrivacyModal({ onAccept }) {
         <p className="llm-disclosure-body">
           Your files are processed locally in your browser and are never stored on our servers. File content is only sent to Anthropic (creator of Claude AI) when GL transaction detail is sent to generate cited commentary, or when PDF text scanning is needed to read a file. Anthropic does not use API data for model training by default. See Anthropic&rsquo;s privacy policy at{' '}
           <a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener noreferrer">anthropic.com/privacy</a>{' '}
-          for details on how API data is handled.
+          for details on how API data is handled. Your files and figures are not stored on our servers — processing is in-memory for the session; only anonymous usage analytics and any feedback you submit are stored.
         </p>
         <p className="llm-disclosure-body">
           AI-generated narratives may contain errors or omissions. Always review and verify output against your source documents before distribution.

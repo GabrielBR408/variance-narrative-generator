@@ -23,7 +23,7 @@ export default function GeneratePanel({ status, message, readiness, pendingSuppo
   return (
     <section className="step step--generate">
       <div className="step-head">
-        <span className="step-eyebrow">Step 4</span>
+        <span className="step-eyebrow">Step 2</span>
         <h2 className="step-title">Generate</h2>
       </div>
 
