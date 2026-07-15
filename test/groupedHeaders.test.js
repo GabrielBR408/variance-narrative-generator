@@ -127,12 +127,20 @@ test('variance detects both Current and YTD comparison sets from the grouped wor
 test('grouped workbook produces correct variance math and flags the right rows', () => {
   const current = computeVariance(groupedExtraction()).comparisonSets.find((s) => s.period === 'current')
   const byName = Object.fromEntries(current.comparisons.map((c) => [c.account, c]))
+  // Math and flagging are independent of direction: the dollar movement and the
+  // threshold trigger stand on their own.
   assert.equal(byName['Rental Income'].varianceAmount, 30000)
   assert.equal(byName['Rental Income'].thresholdTriggered, true)
-  assert.equal(byName['Rental Income'].category, 'favorable')
   assert.equal(byName['Repairs Expense'].varianceAmount, 20000)
-  assert.equal(byName['Repairs Expense'].category, 'unfavorable')
   assert.equal(byName['Reserves'].missingData, true)
+  // Favorability is SECTION-driven, never keyword-driven. This minimal
+  // header-folding fixture carries only detail rows (no TOTAL REVENUE / TOTAL
+  // OPERATING EXPENSES subtotals), so neither line has a resolvable income-
+  // statement side and both are correctly neutral — the account name alone
+  // ("Income" / "Expense") no longer decides direction. Section-driven direction
+  // is asserted end-to-end in varianceDirectionFixB.test.js.
+  assert.equal(byName['Rental Income'].category, 'neutral')
+  assert.equal(byName['Repairs Expense'].category, 'neutral')
 })
 
 test('grouped workbook narrates and exports to Markdown + DOCX (Current + YTD)', () => {

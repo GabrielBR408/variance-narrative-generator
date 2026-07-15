@@ -108,7 +108,11 @@ test('favorable and unfavorable rows trigger the same; only category differs', (
     { account: 'Service Revenue', actual: 12000, budget: 10000, prior: null, sourceRows: [1] }, // rev +2000 favorable
     { account: 'Repairs Expense', actual: 12000, budget: 10000, prior: null, sourceRows: [2] } // exp +2000 unfavorable
   ]
-  const [rev, exp] = calculate(aligned, THR, 100)
+  // Direction is section-driven: the income-statement side is supplied per source
+  // row (row 1 rolls into a revenue subtotal, row 2 into an expense subtotal),
+  // never inferred from the account name.
+  const sectionByRow = { 1: 'revenue', 2: 'expense' }
+  const [rev, exp] = calculate(aligned, THR, 100, sectionByRow)
   assert.equal(rev.thresholdTriggered, true)
   assert.equal(exp.thresholdTriggered, true)
   assert.equal(rev.category, 'favorable')
@@ -122,13 +126,19 @@ const COLUMNS = ['Account', 'Current Actual', 'Current Budget', 'YTD Actual', 'Y
 
 // Each row targets one trigger case under the default $1,000 / 10% rule.
 // Current and YTD carry the same figures so both periods narrate identically.
+// Grouped by income-statement section with subtotals, since favorability is
+// section-driven: revenue lines roll into TOTAL REVENUE, expense lines into
+// TOTAL OPERATING EXPENSES. (Ordering is irrelevant to the flagging tests, which
+// sort; the rollup subtotals are neutralized and never flagged.)
 const ROWS = [
   ['Service Revenue', '52000', '50000', '52000', '50000'], // +2000 / +4%  → dollar-only (favorable)
   ['Membership Income', '600', '500', '600', '500'], // +100 / +20% → percent-only (favorable)
+  ['Consulting Income', '550', '500', '550', '500'], // +50 / +10% → exact percent (favorable)
+  ['TOTAL REVENUE', '53150', '51000', '53150', '51000'], // revenue section subtotal (neutralized rollup)
   ['Repairs Expense', '3000', '1000', '3000', '1000'], // +2000 / +200% → both (unfavorable)
   ['Office Supplies Expense', '50500', '50000', '50500', '50000'], // +500 / +1% → neither
   ['Insurance Expense', '51000', '50000', '51000', '50000'], // +1000 / +2% → exact dollar (unfavorable)
-  ['Consulting Income', '550', '500', '550', '500'] // +50 / +10% → exact percent (favorable)
+  ['TOTAL OPERATING EXPENSES', '104500', '101000', '104500', '101000'] // expense section subtotal (neutralized rollup)
 ]
 
 function fixtureExtraction() {

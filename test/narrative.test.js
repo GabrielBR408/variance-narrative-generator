@@ -259,10 +259,17 @@ test('headline rows are deferred out of their category notes; the rest remain', 
   assert.ok(!p.expenseNotes.some((n) => /Exp Big|Exp Mid/.test(n.account)))
 })
 
-test('Executive Summary still counts and totals every triggered row, regardless of section', () => {
+test('Executive Summary counts and totals only DIRECTIONAL rows so fav+unfav reconciles to the count', () => {
   const p = generateNarrative(dedupeFixture()).periods[0]
-  // 6 triggered rows; totals are unchanged by the de-duplication (thresholds intact).
-  assert.match(p.executiveSummary[0].text, /6 variances totaling \$165,000 crossed/)
+  // 6 rows cross the thresholds, but the "Untyped" neutral row ($10k) has no
+  // income-statement side and therefore no favorability opinion. Counting it in
+  // the total while excluding it from the (unfavorable, favorable) split is the
+  // reconciliation bug this fix closes, so the headline now counts and totals
+  // exactly the 5 directional rows ($155,000) and the parenthetical sums to 5.
+  assert.match(
+    p.executiveSummary[0].text,
+    /5 variances totaling \$155,000 crossed the \$1,000 or 10% thresholds \(3 unfavorable, 2 favorable\)/
+  )
 })
 
 // --- missing data ----------------------------------------------------------
