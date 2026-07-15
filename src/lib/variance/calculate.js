@@ -1,34 +1,27 @@
 // --- Variance calculation — Phase 8 ---------------------------------------
 // The arithmetic core: for each aligned row, compute the dollar and percent
 // movement of actual against its comparison, classify it favorable/unfavorable/
-// neutral using a deterministic account heuristic, and flag it against the
-// central thresholds.
+// neutral from the section-derived income-statement side (never the account
+// name), and flag it against the central thresholds.
 //
 // Pure functions, deterministic, no AI/ML, no persistence, no text generation.
 
 import { DEFAULT_THRESHOLDS, isTriggered } from './thresholds.js'
 
-// Account-name heuristics — LAST-RESORT FALLBACK ONLY (see accountType below).
+// --- Favorability is SECTION-DRIVEN, never keyword-driven -------------------
 // The authoritative revenue/expense signal is a line's POSITION in the income
-// statement (which section subtotal it rolls into); see ./sectionType.js. These
-// keyword patterns are used only for lines whose section cannot be determined
-// (e.g. a flat table with no subtotals). Expense is tested first because
-// expense-ish wording ("cost of sales", "sales tax") would otherwise be
-// miscaught by the broad revenue word "sales". Anything unmatched stays unknown.
-const EXPENSE_RE =
-  /expense|cost|\bcogs\b|salar|wage|payroll|\brent\b|utilit|deprec|amorti|insurance|supplies|maintenance|repair|\btax(es)?\b|overhead|freight|marketing|advertis|interest\s*expense|fees?\s*(paid|expense)|spend/i
-const REVENUE_RE =
-  /revenue|\bsales\b|\bincome\b|\bfees?\b|turnover|proceeds|receipts?|earnings|billings/i
-
-// Returns 'revenue' | 'expense' | 'unknown'. FALLBACK ONLY — prefer the
-// section-derived type threaded through calculate()/calculateRow(). On real
-// statements an account NAME does not reliably indicate revenue vs expense
-// (e.g. "Admin Fee" can be OTHER INCOME), so this is consulted only when the
-// line's section subtotal could not be resolved.
-export function accountType(account = '') {
-  const name = String(account)
-  if (EXPENSE_RE.test(name)) return 'expense'
-  if (REVENUE_RE.test(name)) return 'revenue'
+// statement (which section subtotal it rolls into); see ./sectionType.js. An
+// account NAME is NOT a reliable signal: generic words fire on the wrong side
+// (a revenue line "Base Rent - NNN" matched an expense pattern via \brent\b; a
+// genuine "R&M - General Building" repair matched nothing at all and read
+// Neutral). The old EXPENSE_RE / REVENUE_RE keyword classifier has therefore
+// been REMOVED — no line's direction may depend on its account-name text.
+//
+// `accountType` is retained as a neutralized no-op so any remaining importer
+// still resolves, but it deliberately never reads the name: a line whose
+// income-statement section cannot be resolved has NO favorability opinion
+// ('unknown' → neutral), rather than a guessed one from keywords.
+export function accountType(/* account */) {
   return 'unknown'
 }
 
@@ -85,9 +78,13 @@ export function calculateRow(aligned, thresholds = DEFAULT_THRESHOLDS, fileConfi
     variancePercent = comparison === 0 ? null : (varianceAmount / Math.abs(comparison)) * 100
   }
 
-  // Authoritative type is the section-derived classification; the account-name
-  // heuristic is consulted only when the section is unknown.
-  const type = sectionType === 'revenue' || sectionType === 'expense' ? sectionType : accountType(account)
+  // Type is ENTIRELY section-derived. A line whose section subtotal could not be
+  // resolved stays 'unknown' (→ neutral); its direction is never inferred from
+  // the account name. This is the intended architecture: favorable/unfavorable
+  // depends only on which subtotal a line rolls into, so a contra-revenue line
+  // in the revenue section (e.g. Vacancy Loss) is typed 'revenue' and a
+  // worse-than-budget (more-negative) movement correctly reads unfavorable.
+  const type = sectionType === 'revenue' || sectionType === 'expense' ? sectionType : 'unknown'
   const category = classify(type, varianceAmount)
   const thresholdTriggered =
     varianceAmount === null ? false : isTriggered(varianceAmount, variancePercent, thresholds)

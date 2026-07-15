@@ -33,8 +33,13 @@ const GRID = [
   ['', 'Current Period', '', '', 'Year-To-Date', '', ''],
   ['Account', 'Actual', 'Budget', 'Variance', 'Actual', 'Budget', 'Variance'],
   ['Rental Income', '130000', '100000', '30000', '700000', '600000', '100000'],
+  // Section subtotals drive revenue/expense typing (favorability is section-
+  // driven, never keyword-driven): Rental Income rolls into TOTAL REVENUE, and
+  // Repairs Expense / Reserves roll into TOTAL OPERATING EXPENSES.
+  ['TOTAL REVENUE', '130000', '100000', '30000', '700000', '600000', '100000'],
   ['Repairs Expense', '60000', '40000', '20000', '300000', '250000', '50000'],
-  ['Reserves', '', '20000', '', '', '120000', '']
+  ['Reserves', '', '20000', '', '', '120000', ''],
+  ['TOTAL OPERATING EXPENSES', '60000', '60000', '0', '300000', '370000', '-70000']
 ]
 
 function spreadsheet(grid) {

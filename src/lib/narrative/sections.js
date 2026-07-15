@@ -336,11 +336,24 @@ export function buildMissingData(comparisons) {
 // headline is as traceable as the lines beneath it.
 export function buildExecutiveSummary(comparisons, period, thresholds = {}) {
   const triggered = triggeredRows(comparisons)
-  const total = triggered.reduce((sum, c) => sum + Math.abs(c.varianceAmount ?? 0), 0)
-  const favorable = triggered.filter((c) => c.category === 'favorable').length
-  const unfavorable = triggered.filter((c) => c.category === 'unfavorable').length
+  // Reconciliation invariant: the headline count and its (unfavorable, favorable)
+  // parenthetical must always agree. Favorability is section-driven, so every
+  // counted line lands in exactly one bucket — favorable or unfavorable. Rows
+  // with no income-statement side (category 'neutral' — e.g. capital-expenditure
+  // detail or bottom-line lines that roll into neither a revenue nor an expense
+  // subtotal) carry no favorability opinion; they were the lines previously
+  // counted in the total yet absent from the split, so the parenthetical failed
+  // to sum. The exec summary now counts and totals EXACTLY the directional rows,
+  // guaranteeing favorable + unfavorable === count by construction.
+  const directional = triggered.filter(
+    (c) => c.category === 'favorable' || c.category === 'unfavorable'
+  )
+  const total = directional.reduce((sum, c) => sum + Math.abs(c.varianceAmount ?? 0), 0)
+  const favorable = directional.filter((c) => c.category === 'favorable').length
+  const unfavorable = directional.filter((c) => c.category === 'unfavorable').length
+  const count = favorable + unfavorable
 
-  const sourceRows = unionSourceRows(triggered)
+  const sourceRows = unionSourceRows(directional)
   const thresholdAmount = formatMoney(thresholds.amount ?? 0)
   const thresholdPercent = `${thresholds.percent ?? 0}%`
 
@@ -349,7 +362,7 @@ export function buildExecutiveSummary(comparisons, period, thresholds = {}) {
   const lead = {
     text: executiveSentence({
       period,
-      count: triggered.length,
+      count,
       total: formatMoney(total),
       favorable,
       unfavorable,

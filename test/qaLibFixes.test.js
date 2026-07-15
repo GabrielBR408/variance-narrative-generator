@@ -115,7 +115,11 @@ test('sub-$1 percent-triggered rows are cleared at the engine level', () => {
       ['Account', 'Actual', 'Budget'],
       [
         ['Rounding Adjustment', 0.7, 0.2], // +$0.50, +250%
-        ['Janitorial', 3000, 2000] // +$1,000, +50%
+        ['Janitorial', 3000, 2000], // +$1,000, +50%
+        // Section-driven direction: both detail lines roll into this expense
+        // subtotal, so Janitorial is typed 'expense' (over budget => unfavorable,
+        // i.e. directional) rather than depending on its account-name text.
+        ['TOTAL OPERATING EXPENSES', 3000.7, 2000.2]
       ]
     )
   )
