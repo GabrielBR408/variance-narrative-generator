@@ -176,6 +176,47 @@ export async function signInWithEmail(
   }
 }
 
+/**
+ * Start the Google OAuth flow. PKCE + detectSessionInUrl (configured on the
+ * getSupabase() client) complete the returned session on redirect back —
+ * the same path email verification uses, so no dedicated callback route is
+ * needed. redirectTo is the current origin so it works on both
+ * http://localhost:5173 and https://chiefeotool.com (both allowlisted in the
+ * Supabase dashboard). On success the browser navigates away to Google, so
+ * the returned result is typically only seen on failure.
+ */
+export async function signInWithGoogle(): Promise<AuthActionResult> {
+  const supabase = getSupabase();
+  if (!supabase) return envMissing();
+
+  const redirectTo =
+    typeof window !== 'undefined' ? window.location.origin : SITE_URL;
+
+  try {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo },
+    });
+    if (error) {
+      return error.status === 429
+        ? {
+            ok: false,
+            message: 'Too many attempts — wait a minute and try again.',
+            code: 'rate_limited',
+          }
+        : { ok: false, message: error.message, code: 'error' };
+    }
+    // Browser redirects to Google; this is generally not reached.
+    return { ok: true, message: 'Redirecting to Google…', code: 'ok' };
+  } catch {
+    return {
+      ok: false,
+      message: 'Could not start Google sign-in — try again.',
+      code: 'error',
+    };
+  }
+}
+
 /** Log out. Idempotent — succeeds even with no active session. */
 export async function signOut(): Promise<AuthActionResult> {
   const supabase = getSupabase();
