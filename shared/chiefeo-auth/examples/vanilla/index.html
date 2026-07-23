@@ -1,0 +1,96 @@
+<!doctype html>
+<!--
+  examples/vanilla/index.html
+
+  Reference: consuming the framework-free auth core from a ZERO-BUILD page — no
+  bundler, no npm, no React. This is the shape the GL Down Driller (Agent 4)
+  uses. supabase-js is loaded from a CDN as a UMD global (window.supabase); the
+  core is imported directly as a browser ES module and gets createClient
+  injected via configureAuth().
+
+  To run this example against the real project, either:
+    - copy shared/chiefeo-auth/core next to this file, or
+    - adjust the import path below to point at ../../core/index.js (as written).
+
+  Anonymous access is never gated — everything below is opt-in account UI.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChiefEO auth — vanilla core demo</title>
+    <!-- supabase-js UMD build → exposes window.supabase.createClient -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <style>
+      body { font: 15px system-ui, sans-serif; max-width: 420px; margin: 40px auto; color: #1e3a5f; }
+      input, button { font: inherit; padding: 8px 10px; margin: 4px 0; width: 100%; box-sizing: border-box; }
+      #status { margin-top: 12px; padding: 10px; border-radius: 6px; background: #eef4ff; }
+    </style>
+  </head>
+  <body>
+    <h1>Vanilla auth core demo</h1>
+    <p>Anonymous users see and use everything. Sign-in is optional.</p>
+
+    <input id="email" type="email" placeholder="Email" autocomplete="email" />
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+    <button id="login">Log in</button>
+    <button id="signup">Create account</button>
+    <button id="logout">Sign out</button>
+    <div id="status">Loading…</div>
+
+    <script type="module">
+      // NOTE: path is relative to this example. In the GL Down Driller the
+      // vendored copy sits at ./auth/core/index.js — adjust to match.
+      import {
+        configureAuth,
+        captureReferralCode,
+        getSupabase,
+        signInWithEmail,
+        signUpWithEmail,
+        signOut,
+      } from '../../core/index.js';
+
+      // 1) Inject config. Anon/publishable key ONLY — never service_role.
+      configureAuth({
+        supabaseUrl: 'https://dsmbppzvembacitwdrsj.supabase.co',
+        supabaseAnonKey: 'REPLACE_WITH_ANON_OR_PUBLISHABLE_KEY',
+        siteUrl: 'https://chiefeotool.com',
+        createClient: window.supabase.createClient, // the UMD global
+      });
+
+      // 2) Capture ?ref=CODE into the chiefeo_ref cookie (30d).
+      captureReferralCode();
+
+      const $ = (id) => document.getElementById(id);
+      const status = $('status');
+
+      // 3) Read + reflect session. detectSessionInUrl (set inside the core)
+      //    also completes the email-verify / OAuth redirect automatically.
+      async function refresh() {
+        const supabase = getSupabase();
+        if (!supabase) { status.textContent = 'Auth not configured.'; return; }
+        const { data } = await supabase.auth.getUser();
+        status.textContent = data.user
+          ? `Signed in as ${data.user.email}`
+          : 'Signed out (full access — auth is optional)';
+      }
+      getSupabase()?.auth.onAuthStateChange(refresh);
+      refresh();
+
+      // 4) Wire buttons. Actions return { ok, message, code } — never throw.
+      $('login').onclick = async () => {
+        const r = await signInWithEmail($('email').value, $('password').value);
+        status.textContent = r.message;
+        if (r.ok) refresh();
+      };
+      $('signup').onclick = async () => {
+        const r = await signUpWithEmail($('email').value, $('password').value);
+        status.textContent = r.message; // 'check_inbox' on success
+      };
+      $('logout').onclick = async () => {
+        await signOut();
+        refresh();
+      };
+    </script>
+  </body>
+</html>
