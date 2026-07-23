@@ -153,11 +153,11 @@ export function ReferralBanner({
         <span>Create a free account to unlock referral rewards</span>
         {onSignupClick ? (
           <button type="button" onClick={onSignupClick} style={styles.link}>
-            Sign up
+            Sign up / Sign in
           </button>
         ) : (
           <a href={signupHref} style={styles.link}>
-            Sign up
+            Sign up / Sign in
           </a>
         )}
       </span>
