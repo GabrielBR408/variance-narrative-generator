@@ -5,6 +5,7 @@ import Hub from './routes/Hub.jsx'
 import './styles/app.css'
 import { registerUpdatePrompt } from './pwa/registerUpdate.js'
 import { Analytics } from '@vercel/analytics/react'
+import AccountShell from './components/auth/AccountShell.jsx'
 
 // --- Lightweight path routing ---------------------------------------------
 // The app has no router dependency; a single pathname switch keeps it that way.
@@ -41,7 +42,10 @@ function pickRoute() {
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    {pickRoute()}
+    {/* Optional-auth wrapper: ?ref= capture + email-verify session pickup for
+        the whole SPA, plus the dismissible anon signup banner + modal. Anon
+        users keep 100% tool access — this never gates or redirects. */}
+    <AccountShell>{pickRoute()}</AccountShell>
     {/* App-wide Vercel Web Analytics (page views/traffic) for this single
         deployment — covers the hub and every route/proxied view. Unrelated to
         the /vng-only `app_opened` custom event, which is fired inside App.jsx.
