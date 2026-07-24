@@ -651,6 +651,63 @@ async function freshPage() {
   await page.close();
 }
 
+// ------------------------- analytics instrumentation: event names + slug + props
+{
+  const page = await freshPage();
+  // Wrap the fire-and-forget helper to capture every event the app emits, so the
+  // assertions never depend on the network (the real helper no-ops under file://).
+  await page.evaluate(() => {
+    window.__ev = [];
+    window.chiefeoTrack = (app, event, props) => window.__ev.push({ app, event, props });
+  });
+  // sample building -> a plan-generation from the "sample" source
+  await page.evaluate(() => document.querySelector('#sampleBtn').click());
+  // an XLSX export (writeFile stubbed so nothing hits disk)
+  await page.evaluate(() => {
+    const orig = XLSX.writeFile; XLSX.writeFile = () => {};
+    document.querySelector('#ex_xlsx').onclick();
+    XLSX.writeFile = orig;
+  });
+  const ev = await page.evaluate(() => window.__ev);
+  const gen = ev.find(e => e.event === 'plan_generated');
+  const exp = ev.find(e => e.event === 'export');
+  assert(ev.length > 0 && ev.every(e => e.app === 'stacking-plan'),
+    "analytics: every event is emitted under the 'stacking-plan' app slug");
+  assert(gen && gen.props.source === 'sample' && gen.props.rows === 17,
+    'analytics: sample emits plan_generated {source:sample, rows:17} (got ' + JSON.stringify(gen && gen.props) + ')');
+  assert(gen && typeof gen.props.buildings === 'number', 'analytics: plan_generated carries a buildings count');
+  assert(exp && exp.props.type === 'xlsx', 'analytics: XLSX export emits export {type:xlsx}');
+  await page.close();
+}
+
+// ------------------------- analytics: paste-box Generate tags source = 'paste'
+{
+  const page = await freshPage();
+  await page.evaluate(() => { window.__ev = []; window.chiefeoTrack = (app, event, props) => window.__ev.push({ app, event, props }); });
+  await page.click('#pasteBtn');
+  await page.fill('#pasteArea', 'Suite,Tenant,Floor,RSF\n100,Typed Co,1,5000');
+  await page.click('#parseGoBtn');
+  const ev = await page.evaluate(() => window.__ev);
+  const gen = ev.find(e => e.event === 'plan_generated');
+  assert(gen && gen.props.source === 'paste', "analytics: paste-box Generate emits plan_generated {source:paste} (got " + JSON.stringify(gen && gen.props) + ')');
+  await page.close();
+}
+
+// ------------------------- analytics: #internal URL flag self-tags (persisted)
+{
+  const page = await browser.newPage();
+  await page.goto(PAGE_URL + '#internal');
+  await page.waitForTimeout(100);
+  const flagged = await page.evaluate(() => localStorage.getItem('chiefeo_internal'));
+  assert(flagged === '1', "analytics: #internal URL flag self-tags via localStorage (got " + flagged + ')');
+  await page.close();
+
+  const clean = await freshPage();
+  const noFlag = await clean.evaluate(() => localStorage.getItem('chiefeo_internal'));
+  assert(noFlag === null, 'analytics: a normal load is not internal-tagged');
+  await clean.close();
+}
+
 await browser.close();
 console.log(failures ? `\n=== ${failures} TEST(S) FAILED ===` : '\n=== ALL STACKING TESTS PASS ===');
 process.exit(failures ? 1 : 0);

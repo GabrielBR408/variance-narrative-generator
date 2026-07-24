@@ -406,6 +406,78 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   </div>
 </div>
 
+<!-- =====================================================================
+     ChiefEO analytics — fire-and-forget usage tracking.
+     Mirrors src/lib/track.js (the canonical impl used by vng + chiefeo-inspector)
+     verbatim: same Supabase endpoint, same publishable anon key, the same
+     "chiefeo_session_id" localStorage key, and the #internal URL-flag self-tag
+     that stamps properties.internal:true so the user can filter their own
+     traffic. Inlined (not imported) because this is a zero-build static page.
+     Never throws and never blocks the tool. The network send is skipped under
+     file:// so the offline smoke harness (tests/stacking.smoke.mjs) stays
+     network-free — exactly like the optional account layer below.
+     ===================================================================== -->
+<script>
+(function () {
+  "use strict";
+  var SUPABASE_URL = "https://dsmbppzvembacitwdrsj.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_jqiREpSEu8ItzSEcjTypsQ_41EivRsM";
+
+  function getSessionId() {
+    try {
+      var id = localStorage.getItem("chiefeo_session_id");
+      if (!id) {
+        id = (typeof crypto !== "undefined" && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : Math.random().toString(36).slice(2) + Date.now().toString(36);
+        localStorage.setItem("chiefeo_session_id", id);
+      }
+      return id;
+    } catch (e) { return "unknown"; }
+  }
+
+  function isInternal() {
+    try {
+      if (/[#?&]internal\b/.test(location.hash + location.search)) {
+        localStorage.setItem("chiefeo_internal", "1");
+      }
+      return localStorage.getItem("chiefeo_internal") === "1";
+    } catch (e) { return false; }
+  }
+
+  // Fire-and-forget usage event. Deliberately silent: analytics must never block
+  // the UI or throw, so errors are swallowed. Skips the network send under
+  // file:// (offline regression harness) — the #internal self-tag is preserved
+  // and verified on the live https deploy.
+  window.chiefeoTrack = function (app, event, properties) {
+    try {
+      var props = Object.assign({}, properties || {}, isInternal() ? { internal: true } : {});
+      if (location.protocol === "file:") return; // offline smoke harness: no network noise
+      fetch(SUPABASE_URL + "/rest/v1/app_events", {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: "Bearer " + SUPABASE_KEY,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify({
+          app: app,
+          event: event,
+          session_id: getSessionId(),
+          properties: props,
+          path: window.location.pathname,
+          user_agent: navigator.userAgent,
+        }),
+        keepalive: true,
+      }).catch(function () {});
+    } catch (e) {
+      // never throw — analytics must never break the app
+    }
+  };
+})();
+</script>
+
 <script>
 "use strict";
 /* =====================================================================
@@ -442,6 +514,8 @@ const $ = s => document.querySelector(s);
 const norm = s => String(s??"").toLowerCase().replace(/[^a-z0-9]/g,"");
 const fmtSF = n => n==null ? "" : Math.round(n).toLocaleString("en-US");
 function fmtDate(d){ return d ? (d.getMonth()+1)+"/"+d.getDate()+"/"+String(d.getFullYear()).slice(2) : ""; }
+// ---------- analytics ---------- fire-and-forget; window.chiefeoTrack is defined in the head script above.
+const track = (event, props) => { try { window.chiefeoTrack && window.chiefeoTrack("stacking-plan", event, props); } catch(e){} };
 // [Stacking-19 / B-STK-01 / C-STK-13] optional lower bound: values below `min`
 // (e.g. negative square footage) come back null instead of skewing totals.
 function parseNum(v, min){
@@ -742,10 +816,11 @@ function buildRows(grid, det){
 }
 
 // ---------- file intake ----------
-function handleFile(file){
+function handleFile(file, source){
   hideErr();
   const name = file.name.toLowerCase();
   S.title = file.name.replace(/\.(xlsx|xls|csv|tsv|pdf)$/i,"").replace(/[_-]+/g," ").trim() || "Stacking Plan";
+  track("file_uploaded", { format: name.endsWith(".pdf") ? "pdf" : /\.(csv|tsv)$/.test(name) ? "csv" : "xlsx", source: source || "browse" });
   if(name.endsWith(".pdf")) return handlePDF(file);
   const reader = new FileReader();
   reader.onload = e => {
@@ -762,12 +837,12 @@ function handleFile(file){
         const grid = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:true, defval:""});
         return showMapbarManual(grid);
       }
-      ingest(bestGrid, bestDet);
+      ingest(bestGrid, bestDet, "file");
     }catch(err){ showErr("Couldn't read that file: "+err.message); }
   };
   reader.readAsArrayBuffer(file);
 }
-function handlePaste(text, title){
+function handlePaste(text, title, source){
   hideErr();
   if(!text || !text.trim()) return;
   const delim = text.includes("\t") ? "\t" : ",";
@@ -785,7 +860,7 @@ function handlePaste(text, title){
   S.title = title || "Stacking Plan";
   const det = detectMapping(grid);
   if(!det) return showMapbarManual(grid);
-  ingest(grid, det);
+  ingest(grid, det, source || "paste");
 }
 async function handlePDF(file){
   try{
@@ -840,7 +915,7 @@ async function handlePDF(file){
     const g2 = grid.map(toRow);
     const det = detectMapping(g2);
     if(!det) return showMapbarManual(g2);
-    ingest(g2, det);
+    ingest(g2, det, "file");
   }catch(err){ showErr("PDF read failed: "+err.message); }
 }
 
@@ -853,7 +928,7 @@ function renderWarnings(){
   ).join("");
   wb.style.display="flex";
 }
-function ingest(grid, det){
+function ingest(grid, det, source){
   S.grid = grid; S.mapping = det;
   S.rows = buildRows(grid, det);
   if(!S.rows.length) return showErr("Found the table but no usable rows — check that suites/tenants have data below the header row.");
@@ -864,6 +939,8 @@ function ingest(grid, det){
   renderMapbar(det, grid);
   render();
   renderWarnings();
+  let buildings = 1; try { buildings = getBuildings().length; } catch(e){}
+  track("plan_generated", { source: source || "file", rows: S.rows.length, buildings });
 }
 const FIELD_LABELS = {suite:"Suite", tenant:"Tenant", sf:"SF", end:"Expiration", start:"Start", floor:"Floor", rent:"Rent", building:"Building"};
 function renderMapbar(det, grid){
@@ -1306,12 +1383,12 @@ function svgToPng(scale=2){
 function dl(url, name){ const a=document.createElement("a"); a.href=url; a.download=name; a.click(); }
 function fileBase(){ return S.title.replace(/[^\w\- ]/g,"").replace(/\s+/g,"_") || "stacking_plan"; }
 
-$("#ex_png").onclick = async ()=>{ closeMenus();
+$("#ex_png").onclick = async ()=>{ closeMenus(); track("export", {type:"png"});
   const c = await svgToPng(2);
   c.toBlob(b=> dl(URL.createObjectURL(b), fileBase()+"_stacking_plan.png"), "image/png");
 };
-$("#ex_pdf").onclick = ()=>{ closeMenus(); window.print(); };
-$("#ex_pptx").onclick = async ()=>{ closeMenus();
+$("#ex_pdf").onclick = ()=>{ closeMenus(); track("export", {type:"pdf"}); window.print(); };
+$("#ex_pptx").onclick = async ()=>{ closeMenus(); track("export", {type:"pptx"});
   const c = await svgToPng(2);
   const data = c.toDataURL("image/png");
   const p = new PptxGenJS();
@@ -1322,7 +1399,7 @@ $("#ex_pptx").onclick = async ()=>{ closeMenus();
   slide.addImage({data, x:(13.33-w)/2, y:Math.max((7.5-h)/2,0.2), w, h: Math.min(h,7.1)});
   p.writeFile({fileName: fileBase()+"_stacking_plan.pptx"});
 };
-$("#ex_xlsx").onclick = ()=>{ closeMenus();
+$("#ex_xlsx").onclick = ()=>{ closeMenus(); track("export", {type:"xlsx"});
   const multiB = new Set(S.rows.map(r=>(r.building||"").trim())).size > 1;
   const hdr = (multiB?["Building"]:[]).concat(["Floor","Suite","Tenant","SF","Lease Start","Lease Expiration","Rent","Status"]);
   const wsData = [hdr];
@@ -1379,12 +1456,12 @@ function hideErr(){ $("#parseErr").style.display="none"; }
 
 const dz = $("#dropzone");
 dz.onclick = ()=> $("#fileInput").click();
-$("#fileInput").onchange = e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); };
+$("#fileInput").onchange = e=>{ if(e.target.files[0]) handleFile(e.target.files[0], "browse"); };
 ["dragover","dragenter"].forEach(ev=> dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.add("drag"); }));
 ["dragleave","drop"].forEach(ev=> dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.remove("drag"); }));
-dz.addEventListener("drop", e=>{ if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+dz.addEventListener("drop", e=>{ if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0], "drop"); });
 document.body.addEventListener("dragover", e=>e.preventDefault());
-document.body.addEventListener("drop", e=>{ e.preventDefault(); if(e.dataTransfer.files[0] && $("#dropScreen").style.display!=="none") handleFile(e.dataTransfer.files[0]); });
+document.body.addEventListener("drop", e=>{ e.preventDefault(); if(e.dataTransfer.files[0] && $("#dropScreen").style.display!=="none") handleFile(e.dataTransfer.files[0], "drop"); });
 
 $("#pasteBtn").onclick = ()=>{ const pb=$("#pasteBox"); pb.style.display = pb.style.display==="block"?"none":"block"; $("#pasteArea").focus(); };
 $("#pasteArea").addEventListener("paste", ()=> setTimeout(()=> handlePaste($("#pasteArea").value), 60));
@@ -1417,8 +1494,11 @@ $("#sampleBtn").onclick = ()=>{
 220,VACANT,2,4700,,,
 100,Bluebird Fitness,1,5900,1/1/2023,12/31/2029,24780
 110,First Meridian Bank,1,6550,6/1/2020,5/31/2030,36025`;
-  handlePaste(csv, "350 Example Street");
+  handlePaste(csv, "350 Example Street", "sample");
 };
+
+// ---------- app open ---------- fire once on load (mirrors vng's 'app_opened').
+track("app_opened");
 </script>
 
 <!-- =====================================================================
