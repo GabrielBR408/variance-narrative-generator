@@ -23,17 +23,17 @@ const TOOLS = [
     desc: 'Talk through a property inspection → auto-drafted, editable report → PDF/Word.'
   },
   {
-    label: 'Stacking Plan (Prototype)',
+    label: 'Stacking Plan (Beta)',
     href: '/stacking',
     desc: 'Drop a rent roll → instant stacking plan. Recolor, edit suites, export PNG/PDF/PPTX/Excel.'
   },
   {
-    label: 'Variance Narrative Generator (Prototype)',
+    label: 'Variance Narrative Generator (Beta)',
     href: '/vng',
     desc: 'Turns a budget-vs-actual statement into owner-ready variance narratives.'
   },
   {
-    label: 'Owner Report Generator (Prototype)',
+    label: 'Owner Report Generator (Beta)',
     href: '/orgen',
     desc: 'Compiles monthly owner reports.'
   }
