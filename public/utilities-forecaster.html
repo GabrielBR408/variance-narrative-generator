@@ -499,7 +499,7 @@
     <div class="container">
         <h1>Utilities Forecaster</h1>
         <p class="subtitle"><span id="property-name-display">Property Name</span> | <span id="rsf-display">&mdash;</span> RSF</p>
-        <div class="disclaimer-banner">&#9888; <strong>ESTIMATE ONLY &mdash; NOT this building's billed actuals.</strong> Figures are modeled from CBECS / ENERGY STAR consumption benchmarks &times; current PG&amp;E / SFPUC rates. Replace with the property's real trailing-12 billed data wherever possible before using these figures in underwriting, owner reporting, or a lender package.</div>
+        <div class="disclaimer-banner">&#9888; <strong>ESTIMATE ONLY &mdash; NOT this building's billed actuals.</strong> Figures are modeled from CBECS / ENERGY STAR consumption benchmarks &times; U.S. national average commercial utility rates. Replace with the property's real trailing-12 billed data &mdash; and your market's actual utility rates &mdash; wherever possible before using these figures in underwriting, owner reporting, or a lender package.</div>
 
         <div class="grid">
             <!-- Left: Inputs -->
@@ -575,31 +575,31 @@
                         <tbody id="tenant-mix-body"></tbody>
                     </table>
                     <div class="total-pct-display valid" id="total-pct-display">Total: 100%</div>
-                    <div class="citation">Electric: CBECS 2018 (EIA), Pacific division / national office median. Gas &amp; water: CBECS 2018 Tables C24/C32 and EPA ENERGY STAR/WaterSense U.S. Water Use Intensity Technical Reference (2023). The "Elec. Mult." column applies to electricity only &mdash; lab/medical space scales gas and water by different multiples.</div>
+                    <div class="citation">Electric: CBECS 2018 (EIA), national office median. Gas &amp; water: CBECS 2018 Tables C24/C32 and EPA ENERGY STAR/WaterSense U.S. Water Use Intensity Technical Reference (2023). The "Elec. Mult." column applies to electricity only &mdash; lab/medical space scales gas and water by different multiples.</div>
                     <div class="info-banner">&#9888; <strong>CAM</strong> (Common Area Maintenance) is the shared building cost billed back to tenants. These percentages describe the whole building's blended consumption in a master-metered building (one meter for the whole building, not per-suite), not one tenant's suite. Changing the mix (e.g. converting one floor to lab/medical) changes the blended cost &mdash; and therefore the CAM cost billed to <em>every</em> tenant, not just the space that changed. For true tenant-by-tenant CAM billing, each tenant's suite needs its own meter ("submetering") or a separate model.</div>
                 </div>
 
                 <div style="margin-top: 8px;">
                     <div class="section-title">Utility Rates</div>
-                    <span style="font-size: 11px; color: #666; display: block; margin: 4px 0 4px;">Rates as of PG&amp;E tariffs effective Mar/Jul 2026 and SFPUC FY2026-27 schedule.</span>
+                    <span style="font-size: 11px; color: #666; display: block; margin: 4px 0 4px;">Rates default to U.S. national averages &mdash; local rates vary widely (California and the Northeast tend to run well above these defaults; much of the South and Midwest runs below). Replace with your market's actual rates whenever you have them.</span>
                 </div>
 
                 <div class="input-group">
                     <label>Electric ($/kWh)</label>
-                    <input type="number" id="electric-rate" value="0.28" step="0.01" min="0">
-                    <div class="citation">PG&amp;E Schedule B-19 bundled, all-in blended (energy + demand), eff. Mar 1 2026.</div>
+                    <input type="number" id="electric-rate" value="0.13" step="0.01" min="0">
+                    <div class="citation">U.S. average commercial electricity price, EIA (2024 annual data, most recent published) &mdash; 12.75&cent;/kWh.</div>
                 </div>
 
                 <div class="input-group">
                     <label>Natural Gas ($/therm)</label>
-                    <input type="number" id="gas-rate" value="1.92" step="0.01" min="0">
-                    <div class="citation">PG&amp;E Schedule G-NR1 all-in incl. G-PPPS surcharge, summer/winter blend, eff. Jul 1 2026.</div>
+                    <input type="number" id="gas-rate" value="1.00" step="0.01" min="0">
+                    <div class="citation">U.S. average commercial natural gas price, EIA (2024 annual data) &mdash; $10.39/Mcf, converted at ~10.37 therms/Mcf.</div>
                 </div>
 
                 <div class="input-group">
                     <label>Water &amp; Sewer ($/CCF)</label>
-                    <input type="number" id="water-rate" value="24.47" step="0.25" min="0">
-                    <div class="citation">SFPUC combined water ($13.13) + sewer ($11.34) non-residential rate, FY2026-27. If your bill separates sewer, adjust accordingly.</div>
+                    <input type="number" id="water-rate" value="10.00" step="0.25" min="0">
+                    <div class="citation">Approximate U.S. combined water + sewer commercial rate. Unlike electric/gas, water is set by thousands of local utilities with no single national-average source like EIA &mdash; this is a rough planning figure, not a hard benchmark. Local commercial rates commonly range roughly $5-$20/CCF; replace with your market's actual combined rate.</div>
                 </div>
                 </div>
 
@@ -711,10 +711,10 @@
                         </div>
                         <div class="input-group">
                             <label>Water Esc %/yr</label>
-                            <input type="number" id="esc-water" value="7.0" min="0" step="0.25">
+                            <input type="number" id="esc-water" value="4.5" min="0" step="0.25">
                         </div>
                     </div>
-                    <div class="citation">Trailing PG&amp;E commercial rate CAGR (2023-2026) and SFPUC's adopted FY2026-28 schedule.</div>
+                    <div class="citation">Electric/gas: typical long-run commercial rate escalation used in CRE underwriting. Water: ~4.4%/yr CAGR, derived from AWWA/Bluefield Research reporting that U.S. water &amp; sewer bills rose ~24% over 2019-2024.</div>
                 </div>
 
                 <div style="margin-top: 8px;">
@@ -1402,7 +1402,7 @@
             function blank() { wsData.push([]); rowNum++; }
 
             push('UTILITIES FORECASTER - ' + propertyName);
-            push('DISCLAIMER', 'These are ESTIMATED benchmark utility costs derived from CBECS/ENERGY STAR consumption benchmarks and current PG&E/SFPUC rate schedules -- NOT the building\'s billed actuals. Replace with trailing-12 billed data wherever possible before relying on these figures in underwriting, owner reporting, or a lender package. Sourcing and methodology for every assumption are documented inline throughout this sheet (see the SOURCES section below and the citation next to each input on the web tool).');
+            push('DISCLAIMER', 'These are ESTIMATED benchmark utility costs derived from CBECS/ENERGY STAR consumption benchmarks and U.S. national average commercial utility rates -- NOT the building\'s billed actuals. Replace with trailing-12 billed data and your market\'s actual rates wherever possible before relying on these figures in underwriting, owner reporting, or a lender package. Sourcing and methodology for every assumption are documented inline throughout this sheet (see the SOURCES section below and the citation next to each input on the web tool).');
             blank();
 
             push('INPUT PARAMETERS', '');
@@ -1567,9 +1567,9 @@
             blank();
 
             push('SOURCES', 'Consumption: CBECS 2018 (EIA); ENERGY STAR/WaterSense WUI Technical Reference 2023.');
-            push('', 'Rates: PG&E Sched. B-19 / G-NR1 (eff. Mar/Jul 2026); SFPUC FY2026-27.');
+            push('', 'Rates: U.S. national average commercial electric & gas, EIA 2024 annual data; approximate national water/sewer rate (no single national-average source exists for water -- see web tool citation). Replace with your market\'s actual rates.');
             push('', 'Fixed/variable: PNNL-26019; NYC LL84 2020 analysis; Fort Collins 2020 meter study.');
-            push('', 'Escalation: Trailing PG&E commercial rate CAGR (2023-2026) and SFPUC\'s adopted FY2026-28 schedule.');
+            push('', 'Escalation: typical long-run commercial electric/gas rate trend used in CRE underwriting; water ~4.4%/yr CAGR (AWWA/Bluefield Research, 2019-2024 national bill trend).');
 
             // NOTE: formula/row-map documentation for anyone auditing this workbook's
             // formulas lives in the "Row Map (Technical)" tab at the very end of this
@@ -1749,9 +1749,9 @@
                 // Same safe default as Annual mode: 100% Standard Office / 0% else,
                 // not an even split across space types (see initTenantMix note).
                 mix: { 'Standard Office': 100, 'Lab / Biotech': 0, 'Life Sciences (Non-Lab)': 0, 'Medical / Clinical': 0 },
-                electricRate: 0.28,
-                gasRate: 1.92,
-                waterRate: 24.47
+                electricRate: 0.13,
+                gasRate: 1.00,
+                waterRate: 10.00
             };
         }
 
