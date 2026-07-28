@@ -2,6 +2,7 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
 import Hub from './routes/Hub.jsx'
+import Skills from './routes/Skills.jsx'
 import './styles/app.css'
 import { registerUpdatePrompt } from './pwa/registerUpdate.js'
 import { Analytics } from '@vercel/analytics/react'
@@ -35,6 +36,10 @@ function pickRoute() {
   if (path === '/vng' || path.startsWith('/vng/')) {
     document.title = 'Variance Narrative Generator'
     return <App />
+  }
+  if (path === '/skills' || path.startsWith('/skills/')) {
+    document.title = 'Skills — ChiefEO Tool'
+    return <Skills />
   }
   document.title = 'ChiefEO Tools'
   return <Hub />

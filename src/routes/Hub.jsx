@@ -82,6 +82,7 @@ export default function Hub() {
           <span aria-hidden="true" className="hub-share-icon">⤴</span>
           Share
         </button>
+        <a className="hub-share hub-share--secondary" href="/skills">Skills</a>
         {toast && (
           <span className="hub-share-toast" role="status">{toast}</span>
         )}
