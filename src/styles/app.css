@@ -754,8 +754,88 @@ body {
 }
 .hub-share:hover { background: var(--accent-ink-hover); }
 .hub-share:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hub-share--secondary { background: var(--surface); color: var(--accent-ink); border: 1px solid var(--accent-ink); text-decoration: none; }
+.hub-share--secondary:hover { background: #e8f3f9; }
 .hub-share-icon { font-size: 1rem; line-height: 1; }
 .hub-share-toast { color: var(--muted); font-size: 0.85rem; }
+
+/* --- Skills page (chiefeotool.com/skills) ---------------------------------- */
+.step--skill-hero { text-align: center; padding: 1.75rem 1.5rem; }
+.skill-eyebrow {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  background: #e8f3f9;
+  border: 1px solid #bcd9ea;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  margin-bottom: 0.75rem;
+}
+.skill-title { font-size: 1.5rem; font-weight: 700; margin: 0 0 0.5rem; letter-spacing: -0.01em; }
+.skill-subtitle { color: var(--muted); font-size: 0.95rem; margin: 0; }
+
+.skill-traits { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.skill-trait {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+}
+
+.skill-feature-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.skill-feature-list li {
+  position: relative;
+  padding: 0.75rem 0.9rem 0.75rem 2.1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.9rem;
+}
+.skill-feature-list li::before {
+  content: '✓';
+  position: absolute;
+  left: 0.85rem;
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.skill-install-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.skill-download-btn { flex: none; min-width: 0; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.skill-steps { margin: 0; padding-left: 1.2rem; font-size: 0.88rem; color: var(--ink); }
+.skill-steps li { margin-bottom: 0.4rem; }
+.skill-steps li:last-child { margin-bottom: 0; }
+
+.skill-query-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
+.skill-query-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 0.8rem 0.9rem;
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+@media (max-width: 520px) {
+  .skill-query-grid { grid-template-columns: 1fr; }
+  .skill-install-card { flex-direction: column; align-items: stretch; }
+  .skill-download-btn { width: 100%; }
+}
 
 /* --- Feedback widget (VNG only) -------------------------------------------- */
 /* Floating pill bottom-right, below the modal overlays (9999) and the update
