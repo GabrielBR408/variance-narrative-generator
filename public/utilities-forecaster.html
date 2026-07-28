@@ -1,0 +1,2314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Utilities Forecaster — ChiefEO</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1080px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            padding: 32px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            color: #1a1a1a;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 32px;
+            font-size: 14px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            margin-bottom: 32px;
+        }
+
+        .section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #999;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-size: 13px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .label-with-value {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .label-with-value label {
+            margin: 0;
+        }
+
+        .current-value {
+            font-size: 12px;
+            color: #666;
+            font-weight: 600;
+        }
+
+        input[type="number"],
+        input[type="range"] {
+            font-size: 14px;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        input[type="text"] {
+            font-size: 14px;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+            width: 100%;
+        }
+
+        input[type="number"] {
+            width: 100%;
+        }
+
+        input:disabled {
+            background: #f2f2f2;
+            color: #999;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+            background: linear-gradient(to right, #e0e0e0 0%, #e0e0e0 100%);
+            border: none;
+            padding: 0;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #1a73e8;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #1a73e8;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .results {
+            background: #f9f9f9;
+            border-left: 4px solid #1a73e8;
+            padding: 24px;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 16px;
+        }
+
+        .result-label {
+            font-size: 13px;
+            color: #666;
+            flex: 1;
+        }
+
+        .result-value {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1a1a1a;
+            font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
+        }
+
+        .result-value.secondary {
+            font-size: 16px;
+        }
+
+        .result-value.tertiary {
+            font-size: 13px;
+        }
+
+        .divider {
+            height: 1px;
+            background: #e0e0e0;
+            margin: 8px 0;
+        }
+
+        .comparison {
+            font-size: 12px;
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .comparison-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .tenant-mix-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+
+        .tenant-mix-table th {
+            text-align: left;
+            padding: 8px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .tenant-mix-table td {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .tenant-mix-table input[type="number"] {
+            width: 70px;
+            padding: 4px;
+            font-size: 12px;
+        }
+
+        .tenant-type-name {
+            color: #333;
+            font-weight: 500;
+        }
+
+        .tenant-type-multiplier {
+            font-size: 11px;
+            color: #999;
+        }
+
+        .total-pct-display {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 8px;
+            text-align: center;
+        }
+
+        .total-pct-display.valid {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .total-pct-display.invalid {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .total-pct-display.blocked {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .note {
+            font-size: 11px;
+            color: #888;
+            line-height: 1.5;
+        }
+
+        .citation {
+            font-size: 10.5px;
+            color: #9a9a9a;
+            line-height: 1.6;
+            font-style: italic;
+        }
+
+        .subgrid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+
+        .subgrid label {
+            font-size: 11px;
+        }
+
+        .btn-secondary {
+            padding: 7px 10px;
+            background: white;
+            color: #1a73e8;
+            border: 1px solid #1a73e8;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-secondary:hover {
+            background: #eef4fe;
+        }
+
+        .radio-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .radio-row label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-weight: 400;
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .checkbox-row label {
+            font-weight: 400;
+            cursor: pointer;
+        }
+
+        .warning-banner {
+            font-size: 12px;
+            font-weight: 600;
+            color: #c62828;
+            background: #ffebee;
+            padding: 8px 10px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .warning-banner.show {
+            display: block;
+        }
+
+        .disclaimer-banner {
+            font-size: 14px;
+            color: #5c4400;
+            background: #fff3cd;
+            border: 2px solid #e0a800;
+            border-radius: 4px;
+            padding: 10px 14px;
+            margin: 8px 0 16px;
+            line-height: 1.5;
+        }
+
+        .info-banner {
+            font-size: 11.5px;
+            font-weight: 500;
+            color: #7a5b00;
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+            padding: 8px 10px;
+            border-radius: 4px;
+            line-height: 1.5;
+            margin-top: 6px;
+        }
+
+        .mini-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        .mini-table th, .mini-table td {
+            padding: 4px 6px;
+            text-align: right;
+            border-bottom: 1px solid #eee;
+        }
+
+        .mini-table th:first-child, .mini-table td:first-child {
+            text-align: left;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+                gap: 24px;
+            }
+
+            .result-value {
+                font-size: 18px;
+            }
+        }
+    </style>
+
+    <!-- ===================================================================
+         ChiefEO hub chrome + optional account layer styles (matches the
+         Stacking Plan / VNG tools). Hardcoded colors here instead of the
+         hub's CSS custom properties so this stays a drop-in static file
+         with no dependency on a shared stylesheet.
+         =================================================================== -->
+    <style>
+        header.chiefeo-header{background:#1c2a3a; color:#fff; display:flex; align-items:center; gap:14px;
+               padding:0 16px; height:52px; position:sticky; top:0; z-index:150;}
+        header.chiefeo-header .wordmark{font-weight:700; font-size:16px; letter-spacing:.2px; white-space:nowrap;
+               color:#fff; text-decoration:none;}
+        header.chiefeo-header .wordmark span{opacity:.55; font-weight:500;}
+
+        #authAccount{position:relative; margin-left:auto;}
+        .acct-trigger{display:flex; align-items:center; justify-content:center; width:34px; height:34px;
+                      padding:0; border-radius:50%; border:1px solid rgba(255,255,255,.28);
+                      background:rgba(255,255,255,.14); color:#fff; font-weight:700; font-size:14px;
+                      cursor:pointer; overflow:hidden;}
+        .acct-trigger:hover{filter:brightness(1.12);}
+        .acct-trigger img{width:100%; height:100%; object-fit:cover; display:block;}
+        #authMenu{position:absolute; right:0; top:calc(100% + 8px); min-width:220px; max-width:280px;
+                  background:#fff; color:#0b0b0b; border:1px solid #e1e0d9; border-radius:10px;
+                  box-shadow:0 10px 28px rgba(0,0,0,.18); padding:10px; display:none; z-index:170;}
+        #authMenu.open{display:block;}
+        #authMenu .acct-name{font-size:13px; font-weight:700; margin:2px 4px 0; white-space:nowrap;
+                             overflow:hidden; text-overflow:ellipsis;}
+        #authMenu .acct-email{font-size:12px; color:#52514e; margin:0 4px 8px; white-space:nowrap;
+                              overflow:hidden; text-overflow:ellipsis;}
+        #authMenu .sep{height:1px; background:#e1e0d9; margin:4px 0 8px;}
+        #authMenu .acct-signout{width:100%; padding:8px 10px; font-size:13px; font-weight:600; color:#0b0b0b;
+                                background:#f0f3f7; border:1px solid #e1e0d9; border-radius:7px;
+                                cursor:pointer; text-align:left;}
+        #authMenu .acct-signout:hover{background:#e7edf4;}
+
+        #authBanner{display:none; align-items:center; justify-content:space-between; gap:12px;
+                    margin:12px auto 0; max-width:1080px; padding:8px 14px; font-size:13.5px; line-height:1.4;
+                    background:#eef4fb; color:#1c2a3a; border:1px solid #cfe0f5; border-radius:10px;}
+        #authBanner.show{display:flex;}
+        #authBanner .ab-msg{display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0;}
+        #authBanner .ab-cta{color:#3987e5; font-weight:600; text-decoration:underline; white-space:nowrap;
+                            background:none; border:none; cursor:pointer; font-size:inherit; font-family:inherit; padding:0;}
+        #authBanner .ab-x{flex:none; border:none; background:none; color:#1c2a3a; cursor:pointer;
+                          font-size:16px; line-height:1; padding:4px 6px; border-radius:4px;}
+        #authBanner .ab-x:hover{background:rgba(0,0,0,.06);}
+
+        #authModal{position:fixed; inset:0; z-index:1000; display:none; align-items:center; justify-content:center;
+                   padding:16px; background:rgba(15,23,42,.45);}
+        #authModal.show{display:flex;}
+        #authModal .am-card{width:100%; max-width:380px; background:#fff; color:#0b0b0b;
+                            border:1px solid #e1e0d9; border-radius:12px; box-shadow:0 12px 36px rgba(0,0,0,.28);
+                            padding:22px; position:relative;}
+        #authModal .am-x{position:absolute; top:10px; right:12px; border:none; background:none; color:#52514e;
+                         font-size:17px; line-height:1; cursor:pointer; padding:4px 6px;}
+        #authModal h2{font-size:18px; font-weight:700; margin:0 0 4px; color:#1c2a3a;}
+        #authModal .am-sub{font-size:13px; color:#52514e; margin:0 0 16px;}
+        #authModal .am-google{width:100%; display:flex; align-items:center; justify-content:center; gap:10px;
+                              padding:10px 12px; font-size:14px; font-weight:600; color:#1f2937; background:#fff;
+                              border:1px solid #d0d7e2; border-radius:8px; cursor:pointer;}
+        #authModal .am-google:hover{background:#f7f9fc;}
+        #authModal .am-divider{display:flex; align-items:center; gap:10px; margin:14px 0; color:#898781; font-size:12px;}
+        #authModal .am-divider span.line{flex:1; height:1px; background:#e1e0d9;}
+        #authModal label{display:block; font-size:13px; font-weight:600; margin:10px 0 4px; color:#0b0b0b;}
+        #authModal input{width:100%; box-sizing:border-box; padding:9px 11px; font-size:14px;
+                         border:1px solid #e1e0d9; border-radius:8px;}
+        #authModal .am-submit{width:100%; margin-top:16px; padding:10px 12px; font-size:14px; font-weight:600;
+                              color:#fff; background:#3987e5; border:none; border-radius:8px; cursor:pointer;}
+        #authModal .am-submit[disabled], #authModal .am-google[disabled]{opacity:.6; cursor:default;}
+        #authModal .am-msg{margin-top:14px; padding:9px 11px; font-size:13px; line-height:1.4; border-radius:8px;}
+        #authModal .am-msg.ok{background:#eef4fb; color:#1c2a3a; border:1px solid #cfe0f5;}
+        #authModal .am-msg.err{background:#fdf0ef; color:#8c2f28; border:1px solid #f2c4c0;}
+        #authModal .am-link{background:none; border:none; color:#3987e5; font-weight:600; cursor:pointer;
+                            font-size:inherit; font-family:inherit; padding:0; text-decoration:underline;}
+        #authModal .am-toggle{margin-top:14px; font-size:13px; text-align:center; color:#52514e;}
+
+        @media print{
+            header.chiefeo-header, #authBanner, #authAccount{display:none !important;}
+        }
+    </style>
+</head>
+<body>
+<header class="chiefeo-header">
+    <a class="wordmark" href="https://chiefeotool.com">ChiefEO <span>| Utilities Forecaster</span></a>
+    <!-- Logged-in account control (hidden until a session is detected). Anonymous
+         users never see this — they get #authBanner and full tool access. -->
+    <div id="authAccount" hidden>
+        <button class="acct-trigger" id="acctTrigger" type="button" aria-haspopup="menu"
+                aria-expanded="false" aria-label="Account">?</button>
+        <div id="authMenu" role="menu" aria-label="Account menu">
+            <div class="acct-name" id="acctName"></div>
+            <div class="acct-email" id="acctEmail"></div>
+            <div class="sep"></div>
+            <button class="acct-signout" id="acctSignout" type="button" role="menuitem">Sign out</button>
+        </div>
+    </div>
+</header>
+
+<!-- Logged-out signup nudge. Dismissible; never gates the tool. -->
+<div id="authBanner" role="region" aria-label="Account signup notice">
+    <span class="ab-msg">
+        <span>Create a free account to unlock referral rewards</span>
+        <button class="ab-cta" id="authBannerCta" type="button">Sign up / Sign in</button>
+    </span>
+    <button class="ab-x" id="authBannerDismiss" type="button" aria-label="Dismiss signup notice">&#10005;</button>
+</div>
+
+
+    <div class="container">
+        <h1>Utilities Forecaster</h1>
+        <p class="subtitle"><span id="property-name-display">Property Name</span> | <span id="rsf-display">&mdash;</span> RSF</p>
+        <div class="disclaimer-banner">&#9888; <strong>ESTIMATE ONLY &mdash; NOT this building's billed actuals.</strong> Figures are modeled from CBECS / ENERGY STAR consumption benchmarks &times; current PG&amp;E / SFPUC rates. Replace with the property's real trailing-12 billed data wherever possible before using these figures in underwriting, owner reporting, or a lender package.</div>
+
+        <div class="grid">
+            <!-- Left: Inputs -->
+            <div class="section">
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600;">Forecast Mode</label>
+                    <div style="display: flex; gap: 12px;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="radio" name="mode" value="annual" checked>
+                            Annual
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="radio" name="mode" value="monthly">
+                            Monthly
+                        </label>
+                    </div>
+                </div>
+
+                <div id="annual-inputs">
+                <div class="section-title">Building &amp; Occupancy</div>
+
+                <div class="input-group">
+                    <label>Property Name</label>
+                    <input type="text" id="property-name" value="" placeholder="e.g. 123 Main St">
+                </div>
+
+                <div class="input-group">
+                    <label>Building RSF</label>
+                    <input type="number" id="rsf" value="" step="1000" min="1" placeholder="e.g. 150000">
+                    <div id="rsf-warning" class="warning-banner">Enter a Building RSF greater than 0 to calculate.</div>
+                </div>
+
+                <div class="input-group">
+                    <div class="label-with-value">
+                        <label>Occupancy</label>
+                        <span class="current-value" id="occupancy-display">50%</span>
+                    </div>
+                    <input type="range" id="occupancy" min="0" max="100" value="50" step="5">
+                    <span style="font-size: 11px; color: #666;">Default starting value, not this property's actual occupancy &mdash; enter the real current (or planned) occupancy before relying on the estimate.</span>
+                </div>
+
+                <div style="margin-top: 4px;">
+                    <div class="section-title">Fixed vs. Variable Split (by utility)</div>
+                    <span style="font-size: 11px; color: #666; display: block; margin: 4px 0 8px;">% of cost that does NOT scale with occupancy (baseline load). Remainder is variable with occupancy.</span>
+                    <div class="subgrid">
+                        <div class="input-group">
+                            <label>Electric Fixed %</label>
+                            <input type="number" id="fixed-pct-electric" value="80" min="0" max="100" step="5">
+                        </div>
+                        <div class="input-group">
+                            <label>Gas Fixed %</label>
+                            <input type="number" id="fixed-pct-gas" value="90" min="0" max="100" step="5">
+                        </div>
+                        <div class="input-group">
+                            <label>Water Fixed %</label>
+                            <input type="number" id="fixed-pct-water" value="25" min="0" max="100" step="5">
+                        </div>
+                    </div>
+                    <div class="citation">Defaults reflect measured low-occupancy building energy studies (PNNL-26019; NYC LL84 2020 analysis; Fort Collins meter study), which found offices retain ~85-90% of baseline load near-vacant. Water tracks headcount closely and is treated as mostly variable. Override with building-specific data.</div>
+                </div>
+
+                <div style="margin-top: 16px;">
+                    <div class="section-title">Tenant Mix</div>
+                    <span style="font-size: 12px; color: #666; display: block; margin-bottom: 8px;">Mix of space types. Defaults to 100% Standard Office as a safe starting point &mdash; <strong>edit these to match this building's actual tenant mix</strong> before relying on the estimate; lab and medical space use several times more electricity than office. Blended consumption is weighted by these percentages regardless of total (auto-normalized) &mdash; keep total at 100% so the % values themselves stay meaningful.</span>
+                    <table class="tenant-mix-table">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th style="width: 70px;">%</th>
+                                <th style="width: 110px; text-align: right;">Elec. Mult.</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tenant-mix-body"></tbody>
+                    </table>
+                    <div class="total-pct-display valid" id="total-pct-display">Total: 100%</div>
+                    <div class="citation">Electric: CBECS 2018 (EIA), Pacific division / national office median. Gas &amp; water: CBECS 2018 Tables C24/C32 and EPA ENERGY STAR/WaterSense U.S. Water Use Intensity Technical Reference (2023). The "Elec. Mult." column applies to electricity only &mdash; lab/medical space scales gas and water by different multiples.</div>
+                    <div class="info-banner">&#9888; <strong>CAM</strong> (Common Area Maintenance) is the shared building cost billed back to tenants. These percentages describe the whole building's blended consumption in a master-metered building (one meter for the whole building, not per-suite), not one tenant's suite. Changing the mix (e.g. converting one floor to lab/medical) changes the blended cost &mdash; and therefore the CAM cost billed to <em>every</em> tenant, not just the space that changed. For true tenant-by-tenant CAM billing, each tenant's suite needs its own meter ("submetering") or a separate model.</div>
+                </div>
+
+                <div style="margin-top: 8px;">
+                    <div class="section-title">Utility Rates</div>
+                    <span style="font-size: 11px; color: #666; display: block; margin: 4px 0 4px;">Rates as of PG&amp;E tariffs effective Mar/Jul 2026 and SFPUC FY2026-27 schedule.</span>
+                </div>
+
+                <div class="input-group">
+                    <label>Electric ($/kWh)</label>
+                    <input type="number" id="electric-rate" value="0.28" step="0.01" min="0">
+                    <div class="citation">PG&amp;E Schedule B-19 bundled, all-in blended (energy + demand), eff. Mar 1 2026.</div>
+                </div>
+
+                <div class="input-group">
+                    <label>Natural Gas ($/therm)</label>
+                    <input type="number" id="gas-rate" value="1.92" step="0.01" min="0">
+                    <div class="citation">PG&amp;E Schedule G-NR1 all-in incl. G-PPPS surcharge, summer/winter blend, eff. Jul 1 2026.</div>
+                </div>
+
+                <div class="input-group">
+                    <label>Water &amp; Sewer ($/CCF)</label>
+                    <input type="number" id="water-rate" value="24.47" step="0.25" min="0">
+                    <div class="citation">SFPUC combined water ($13.13) + sewer ($11.34) non-residential rate, FY2026-27. If your bill separates sewer, adjust accordingly.</div>
+                </div>
+                </div>
+
+                <div id="monthly-inputs" style="display: none;">
+                    <div class="section-title">Monthly Parameters</div>
+                    <span style="font-size: 12px; color: #666; display: block; margin-bottom: 8px;">Set occupancy, tenant mix, and rates for each month independently. Consumption intensities are annual (per RSF/year); the model divides by 12 internally.</span>
+                    <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap: wrap;">
+                        <button type="button" id="monthly-copy-btn" class="btn-secondary">Copy January to all months</button>
+                    </div>
+                    <div style="background:#f9f9f9; border-radius:4px; padding:10px; margin-bottom:12px;">
+                        <div style="font-size:11px; font-weight:600; color:#333; margin-bottom:6px;">Occupancy Ramp Preset</div>
+                        <div class="subgrid" style="margin-bottom:8px;">
+                            <div class="input-group">
+                                <label>Start Occ %</label>
+                                <input type="number" id="ramp-start-occ" value="20" min="0" max="100" step="5">
+                            </div>
+                            <div class="input-group">
+                                <label>Stabilized Occ %</label>
+                                <input type="number" id="ramp-stabilized-occ" value="90" min="0" max="100" step="5">
+                            </div>
+                            <div class="input-group">
+                                <label>Ramp Months</label>
+                                <input type="number" id="ramp-months" value="6" min="1" max="12" step="1">
+                            </div>
+                        </div>
+                        <button type="button" id="ramp-apply-btn" class="btn-secondary">Apply ramp to Occ % column</button>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table style="border-collapse: collapse; font-size: 11px; white-space: nowrap;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align: left; padding: 4px 6px; background: #f5f5f5; border-bottom: 1px solid #ddd;">Month</th>
+                                    <th style="padding: 4px 6px; background: #f5f5f5; border-bottom: 1px solid #ddd;">Occ %</th>
+                                    <th style="padding: 4px 6px; background: #f5f5f5; border-bottom: 1px solid #ddd;">Office %</th>
+                                    <th style="padding: 4px 6px; background: #f5f5f5; border-bottom: 1px solid #ddd;">Lab %</th>
+                                    <th style="padding: 4px 6px; background: #f5f5f5; border-bottom: 1px solid #ddd;">Life Sci %</th>
+                                    <th style="padding: 4px 6px; background: #f5f5f5; border-bottom: 1px solid #ddd;">Medical %</th>
+                                    <th style="padding: 4px 6px; background: #f5f5f5; border-bottom: 1px solid #ddd;">Mix Total</th>
+                                    <th style="padding: 4px 6px; background: #f5f5f5; border-bottom: 1px solid #ddd;">Elec $/kWh</th>
+                                    <th style="padding: 4px 6px; background: #f5f5f5; border-bottom: 1px solid #ddd;">Gas $/therm</th>
+                                    <th style="padding: 4px 6px; background: #f5f5f5; border-bottom: 1px solid #ddd;">Water $/CCF</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthly-table-body"></tbody>
+                        </table>
+                    </div>
+                    <div style="font-size: 11px; color: #666; margin-top: 6px;">Fixed vs. Variable split above (Electric <span id="monthly-fixed-pct-e-display">80</span>% / Gas <span id="monthly-fixed-pct-g-display">90</span>% / Water <span id="monthly-fixed-pct-w-display">25</span>% fixed) applies to all months.</div>
+
+                    <div style="margin-top: 14px;">
+                        <div class="section-title">Monthly Dollar Breakdown (live)</div>
+                        <span style="font-size: 11px; color: #666; display: block; margin: 4px 0 8px;">The actual $ this ramp/seasonality produces each month &mdash; so you don't have to export to Excel to see it.</span>
+                        <table class="mini-table" style="width: 100%;">
+                            <thead>
+                                <tr><th>Month</th><th>Occ %</th><th>$/RSF</th><th>Monthly $</th></tr>
+                            </thead>
+                            <tbody id="monthly-breakdown-body"></tbody>
+                            <tfoot>
+                                <tr style="font-weight: 700; border-top: 2px solid #ccc;">
+                                    <td colspan="3">Annual Total</td>
+                                    <td id="monthly-breakdown-total">$0</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <div style="margin-top: 8px;">
+                    <div class="section-title">Metering &amp; CAM Recovery</div>
+                    <span style="font-size: 11px; color: #666; display: block; margin: 4px 0 8px;"><strong>Master-metered</strong> = one utility meter for the whole building. <strong>Submetered</strong> = each tenant's suite has its own meter. <strong>CAM Recovery</strong> = the % of shared building costs actually billed back to tenants (vs. absorbed by the landlord).</span>
+                    <div class="radio-row" style="margin: 8px 0;">
+                        <label><input type="radio" name="metering" value="master" id="metering-master" checked> Master-metered</label>
+                        <label><input type="radio" name="metering" value="submetered" id="metering-submetered"> Submetered</label>
+                    </div>
+                    <div class="subgrid">
+                        <div class="input-group">
+                            <label>Landlord-Paid Share %</label>
+                            <input type="number" id="landlord-share" value="100" min="0" max="100" step="5" disabled>
+                        </div>
+                        <div class="input-group">
+                            <label>CAM Recovery %</label>
+                            <input type="number" id="cam-recovery" value="100" min="0" max="100" step="5">
+                        </div>
+                        <div class="input-group">
+                            <label>Gross-Up Occ %</label>
+                            <input type="number" id="gross-up-occ" value="95" min="0" max="100" step="5">
+                        </div>
+                    </div>
+                    <div class="checkbox-row" style="margin-top: 8px;">
+                        <input type="checkbox" id="gross-up-enabled">
+                        <label for="gross-up-enabled">Apply CAM gross-up &mdash; scales the occupancy-driven portion of cost up to what it would be at the Gross-Up Occ % above (e.g. 95%, a stabilized building), so tenant CAM billing reflects a stabilized building instead of today's vacancy. The portion of cost that doesn't change with occupancy is left alone.</label>
+                    </div>
+                    <div id="grossup-monthly-warning" class="warning-banner" style="margin-top: 6px;">Gross-up isn't available in Monthly mode (rates and mix vary by month, so a single regrossed figure isn't well-defined) &mdash; the checkbox above is disabled here. Switch to Annual mode to use it.</div>
+                </div>
+
+                <div style="margin-top: 8px;">
+                    <div class="section-title">Escalation &amp; Hold Period</div>
+                    <div class="input-group" style="margin: 8px 0;">
+                        <label>Hold Period (years)</label>
+                        <input type="number" id="hold-years" value="5" min="1" max="15" step="1">
+                    </div>
+                    <div class="subgrid">
+                        <div class="input-group">
+                            <label>Electric Esc %/yr</label>
+                            <input type="number" id="esc-electric" value="3.5" min="0" step="0.25">
+                        </div>
+                        <div class="input-group">
+                            <label>Gas Esc %/yr</label>
+                            <input type="number" id="esc-gas" value="3.75" min="0" step="0.25">
+                        </div>
+                        <div class="input-group">
+                            <label>Water Esc %/yr</label>
+                            <input type="number" id="esc-water" value="7.0" min="0" step="0.25">
+                        </div>
+                    </div>
+                    <div class="citation">Trailing PG&amp;E commercial rate CAGR (2023-2026) and SFPUC's adopted FY2026-28 schedule.</div>
+                </div>
+
+                <div style="margin-top: 8px;">
+                    <div class="section-title">Sensitivity</div>
+                    <div class="input-group" style="margin-top: 8px;">
+                        <label>Consumption Sensitivity &plusmn;%</label>
+                        <input type="number" id="sensitivity" value="10" min="0" max="100" step="1">
+                    </div>
+                    <div class="input-group" style="margin-top: 8px;">
+                        <label>Rate Sensitivity &plusmn;%</label>
+                        <input type="number" id="rate-sensitivity" value="10" min="0" max="100" step="1">
+                        <span style="font-size: 11px; color: #666;">Stresses utility rates independently of consumption (e.g. a PG&amp;E rate case). Combined with consumption sensitivity below for the Low/High range.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Outputs -->
+            <div class="section">
+                <div class="section-title">Comparison Targets</div>
+
+                <div class="input-group">
+                    <label>Trailing 12-Mo Actual / Target ($)</label>
+                    <input type="number" id="variance-target-input" placeholder="e.g. 950000" step="1000">
+                    <span style="font-size: 11px; color: #666;">"Trailing 12-mo" = the sum of this property's actual utility bills over the last 12 months. Blank on purpose &mdash; enter that real billed total (preferred) or a stated underwriting target. Left blank, no comparison is shown rather than guessing.</span>
+                </div>
+
+                <div class="input-group">
+                    <label>Comp Building Cost/RSF</label>
+                    <input type="number" id="comp-psf" value="" step="0.01" placeholder="e.g. 2.75">
+                    <span style="font-size: 11px; color: #666;">Blank on purpose &mdash; enter a real comparable building's cost/RSF if you have one. Left blank, no comparison is shown rather than guessing. A large gap once entered is often driven by tenant-mix or building-type differences between the two properties, not an error.</span>
+                </div>
+
+                <button id="export-btn" style="width: 100%; padding: 10px; background: #1a73e8; color: white; border: none; border-radius: 4px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 4px;">Export to Excel</button>
+                <div id="export-confirmation" style="display:none; font-size: 12px; color: #1e7e34; background: #e6f4ea; border: 1px solid #b7dfc0; border-radius: 4px; padding: 6px 10px; margin-bottom: 12px;">&#10003; Downloaded <span id="export-confirmation-filename"></span></div>
+
+                <div class="results">
+                    <div class="result-row">
+                        <span class="result-label">Estimated Annual Utilities (gross, whole-building)</span>
+                        <span class="result-value">$<span id="annual-total">0</span></span>
+                    </div>
+
+                    <div class="result-row">
+                        <span class="result-label">Cost per RSF (Annual)</span>
+                        <span class="result-value secondary">$<span id="psf-total">0.00</span>/SF</span>
+                    </div>
+
+                    <div class="result-row">
+                        <span class="result-label">Monthly Average</span>
+                        <span class="result-value secondary">$<span id="monthly-avg">0</span></span>
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <div class="result-row">
+                        <span class="result-label" id="cam-recoverable-label">CAM-Recoverable Annual</span>
+                        <span class="result-value secondary">$<span id="cam-recoverable-total">0</span></span>
+                    </div>
+                    <div class="result-row" id="grossup-row" style="display:none;">
+                        <span class="result-label">CAM Gross-Up Adjusted (Recoverable)</span>
+                        <span class="result-value secondary">$<span id="grossup-total">0</span></span>
+                    </div>
+                    <div style="font-size: 10.5px; color: #888; margin-top: -4px; margin-bottom: 4px;" id="which-number-note">Use <strong>Estimated Annual Utilities</strong> above for whole-building budgeting. Use <strong>CAM-Recoverable Annual</strong><span id="which-number-grossup-clause"></span> for tenant CAM billing.</div>
+
+                    <div class="divider"></div>
+
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        <strong style="display: block; margin-bottom: 6px;">Utility Breakdown (Annual):</strong>
+                        <div>Electric: $<span id="electric-total">0</span></div>
+                        <div>Gas: $<span id="gas-total">0</span></div>
+                        <div>Water: $<span id="water-total">0</span></div>
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        <strong style="display: block; margin-bottom: 6px;">Sensitivity (&plusmn;<span id="sens-pct-label">10</span>% consumption &amp; &plusmn;<span id="rate-sens-pct-label">10</span>% rate, combined):</strong>
+                        <div>Low: $<span id="sens-low">0</span> &nbsp;|&nbsp; Base: $<span id="sens-base">0</span> &nbsp;|&nbsp; High: $<span id="sens-high">0</span></div>
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        <strong style="display: block; margin-bottom: 6px;">Escalation over <span id="esc-years-label">5</span>-yr hold:</strong>
+                        <div>Year 1: $<span id="esc-year1">0</span> &nbsp;|&nbsp; Year <span id="esc-yearN-label">5</span>: $<span id="esc-yearN">0</span> (<span id="esc-total-pct">0</span>% cumulative)</div>
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <div class="comparison">
+                        <strong>Comparison:</strong>
+                        <div style="margin-top: 8px;">
+                            <div><strong>Target Forecast:</strong> <span class="comparison-value" id="target-display">not entered</span></div>
+                            <div style="margin-top: 4px;"><strong>Comp Building:</strong> <span class="comparison-value" id="comp-display">not entered</span></div>
+                            <div style="margin-top: 8px;">
+                                vs. Target (gross annual estimate above): <span class="comparison-value" id="variance-target">&mdash;</span>
+                            </div>
+                            <div style="margin-top: 4px;">
+                                vs. Comp (gross annual estimate above): <span class="comparison-value" id="variance-comp">&mdash;</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="citation" style="margin-top: 4px;">Full sourcing and methodology notes for every assumption are shown inline next to each input above.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const inputs = {
+            propertyName: document.getElementById('property-name'),
+            occupancy: document.getElementById('occupancy'),
+            rsf: document.getElementById('rsf'),
+            fixedPctElectric: document.getElementById('fixed-pct-electric'),
+            fixedPctGas: document.getElementById('fixed-pct-gas'),
+            fixedPctWater: document.getElementById('fixed-pct-water'),
+            electricRate: document.getElementById('electric-rate'),
+            gasRate: document.getElementById('gas-rate'),
+            waterRate: document.getElementById('water-rate'),
+            varianceTarget: document.getElementById('variance-target-input'),
+            compPsf: document.getElementById('comp-psf'),
+            landlordShare: document.getElementById('landlord-share'),
+            camRecovery: document.getElementById('cam-recovery'),
+            grossUpOcc: document.getElementById('gross-up-occ'),
+            grossUpEnabled: document.getElementById('gross-up-enabled'),
+            holdYears: document.getElementById('hold-years'),
+            escElectric: document.getElementById('esc-electric'),
+            escGas: document.getElementById('esc-gas'),
+            escWater: document.getElementById('esc-water'),
+            sensitivity: document.getElementById('sensitivity'),
+            rateSensitivity: document.getElementById('rate-sensitivity')
+        };
+
+        const displays = {
+            propertyNameDisplay: document.getElementById('property-name-display'),
+            rsfDisplay: document.getElementById('rsf-display'),
+            occupancyDisplay: document.getElementById('occupancy-display'),
+            annualTotal: document.getElementById('annual-total'),
+            psfTotal: document.getElementById('psf-total'),
+            monthlyAvg: document.getElementById('monthly-avg'),
+            electricTotal: document.getElementById('electric-total'),
+            gasTotal: document.getElementById('gas-total'),
+            waterTotal: document.getElementById('water-total'),
+            targetDisplay: document.getElementById('target-display'),
+            compDisplay: document.getElementById('comp-display'),
+            varianceTarget: document.getElementById('variance-target'),
+            varianceComp: document.getElementById('variance-comp'),
+            totalPctDisplay: document.getElementById('total-pct-display'),
+            camRecoverableTotal: document.getElementById('cam-recoverable-total'),
+            grossupRow: document.getElementById('grossup-row'),
+            grossupTotal: document.getElementById('grossup-total'),
+            sensLow: document.getElementById('sens-low'),
+            sensBase: document.getElementById('sens-base'),
+            sensHigh: document.getElementById('sens-high'),
+            sensPctLabel: document.getElementById('sens-pct-label'),
+            rateSensPctLabel: document.getElementById('rate-sens-pct-label'),
+            escYear1: document.getElementById('esc-year1'),
+            escYearN: document.getElementById('esc-yearN'),
+            escYearNLabel: document.getElementById('esc-yearN-label'),
+            escYearsLabel: document.getElementById('esc-years-label'),
+            escTotalPct: document.getElementById('esc-total-pct'),
+            rsfWarning: document.getElementById('rsf-warning')
+        };
+
+        // Tenant type consumption profiles (annual, per RSF).
+        // Electric multiplier vs. standard-office baseline; gas/water scale by
+        // their own, separately-derived multiples (see citations in the UI and
+        // the QA report) -- lab/medical space does NOT scale gas and water by
+        // the same factor as electricity.
+        // Sources: CBECS 2018 (EIA) Tables C14/C19/C24/C29/C32; EPA ENERGY STAR /
+        // WaterSense U.S. Water Use Intensity Technical Reference (Aug 2023).
+        const tenantTypes = {
+            'Standard Office': { multiplier: 1.0, electric: 15.5, gas: 0.19, water: 0.02 },
+            'Lab / Biotech': { multiplier: 3.0, electric: 46.5, gas: 0.33, water: 0.04 },
+            'Life Sciences (Non-Lab)': { multiplier: 1.8, electric: 27.9, gas: 0.26, water: 0.03 },
+            'Medical / Clinical': { multiplier: 1.4, electric: 21.7, gas: 0.22, water: 0.025 }
+        };
+
+        const tenantMixBody = document.getElementById('tenant-mix-body');
+        const tenantMixInputs = {};
+
+        // ---------- helpers ----------
+        function num(el, fallback) {
+            const v = parseFloat(el && el.value);
+            return Number.isFinite(v) ? v : (fallback !== undefined ? fallback : 0);
+        }
+
+        function fmt(n) {
+            if (!Number.isFinite(n)) return '—';
+            return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+        }
+
+        // Shared variance formatter for both "vs. Target" and "vs. Comp" lines.
+        // Divides by ABS(base) so the %'s sign always agrees with the $ variance's
+        // sign and the arrow, even when the comparison base is negative or zero.
+        function formatVariance(amt, base) {
+            const sign = amt > 0 ? '↑' : amt < 0 ? '↓' : '→';
+            const label = (amt >= 0 ? '+' : '-') + '$' + fmt(Math.abs(amt));
+            const pctLabel = base === 0 ? 'n/a (base is $0)' : ((amt / Math.abs(base)) * 100).toFixed(1) + '%';
+            return `${sign} ${label} (${pctLabel})`;
+        }
+
+        function clampOnBlur(el, min, max) {
+            el.addEventListener('blur', () => {
+                let v = parseFloat(el.value);
+                if (!Number.isFinite(v)) return;
+                if (min != null && v < min) v = min;
+                if (max != null && v > max) v = max;
+                el.value = v;
+                calculate();
+            });
+        }
+
+        // Initialize tenant mix table
+        function initTenantMix() {
+            tenantMixBody.innerHTML = '';
+            const types = Object.keys(tenantTypes);
+            // Default to 100% Standard Office / 0% everything else -- the safe
+            // assumption for a typical building, rather than an even split across
+            // all types (which silently included 25% lab + 25% medical by default
+            // and overstated cost ~35-55% for a plain office building; caught by
+            // multiple property-manager usability testers who had no way to know
+            // this wasn't real data about their building). Users with an actual
+            // mixed-use building still need to enter their real mix either way --
+            // this just makes the out-of-the-box number a conservative default
+            // instead of a silently-inflated one.
+            types.forEach((type, idx) => {
+                const pct = idx === 0 ? 100 : 0;
+                const row = document.createElement('tr');
+
+                const nameCell = document.createElement('td');
+                nameCell.innerHTML = `<span class="tenant-type-name">${type}</span>`;
+
+                const inputCell = document.createElement('td');
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.min = '0';
+                input.max = '100';
+                input.step = '1';
+                input.value = pct;
+
+                input.addEventListener('input', () => {
+                    updateTenantMixTotal();
+                    calculate();
+                });
+
+                tenantMixInputs[type] = input;
+                inputCell.appendChild(input);
+
+                const multiplierCell = document.createElement('td');
+                multiplierCell.style.textAlign = 'right';
+                multiplierCell.style.fontSize = '11px';
+                multiplierCell.style.color = '#666';
+                multiplierCell.textContent = `${tenantTypes[type].multiplier}x`;
+
+                row.appendChild(nameCell);
+                row.appendChild(inputCell);
+                row.appendChild(multiplierCell);
+                tenantMixBody.appendChild(row);
+            });
+
+            updateTenantMixTotal();
+        }
+
+        function updateTenantMixTotal() {
+            let total = 0;
+            Object.values(tenantMixInputs).forEach(input => {
+                total += parseFloat(input.value) || 0;
+            });
+
+            const display = displays.totalPctDisplay;
+            display.textContent = `Total: ${total.toFixed(0)}%` + (Math.abs(total - 100) < 0.5 ? '' : ' (blend auto-normalized to these weights)');
+            display.classList.remove('valid', 'invalid', 'blocked');
+
+            if (total <= 0) {
+                display.classList.add('blocked');
+            } else if (Math.abs(total - 100) < 0.5) {
+                display.classList.add('valid');
+            } else {
+                display.classList.add('invalid');
+            }
+        }
+
+        // Weighted-average blend for an arbitrary mix object. Normalizes by the
+        // ACTUAL sum of weights entered, not a hardcoded 100 -- so a 90% or 110%
+        // mix still produces a mathematically correct weighted average instead
+        // of a silently scaled-down/up number. Total <= 0 returns zeros rather
+        // than throwing or dividing by zero.
+        function getBlendedConsumptionFor(mix) {
+            let totalElectric = 0, totalGas = 0, totalWater = 0, totalPct = 0;
+            Object.entries(mix).forEach(([type, pct]) => {
+                const p = parseFloat(pct) || 0;
+                const profile = tenantTypes[type];
+                if (!profile) return;
+                totalPct += p;
+                totalElectric += profile.electric * p;
+                totalGas += profile.gas * p;
+                totalWater += profile.water * p;
+            });
+            if (totalPct <= 0) return { electric: 0, gas: 0, water: 0, totalPct: 0 };
+            return { electric: totalElectric / totalPct, gas: totalGas / totalPct, water: totalWater / totalPct, totalPct };
+        }
+
+        function collectAnnualMix() {
+            const mix = {};
+            Object.entries(tenantMixInputs).forEach(([type, input]) => { mix[type] = parseFloat(input.value) || 0; });
+            return mix;
+        }
+
+        function getBlendedConsumption() {
+            return getBlendedConsumptionFor(collectAnnualMix());
+        }
+
+        // ---------- core scenario engine ----------
+        // Computes electric/gas/water/total annual cost for either mode.
+        // opts.consumptionScale: uniform multiplier on blended consumption (sensitivity).
+        // opts.rateMultipliers: {electric,gas,water} multipliers on rates (escalation).
+        // opts.occOverride: fraction (0-1) to use instead of actual occupancy, applied
+        //   uniformly to every month in Monthly mode (used for CAM gross-up).
+        // Reused for the live display AND the Excel export so both paths can never drift
+        // apart the way the original Annual/Monthly logic did.
+        function computeScenario(mode, opts) {
+            opts = opts || {};
+            const consumptionScale = opts.consumptionScale != null ? opts.consumptionScale : 1;
+            const rateMult = Object.assign({ electric: 1, gas: 1, water: 1 }, opts.rateMultipliers || {});
+            const occOverride = opts.occOverride;
+
+            const rsf = num(inputs.rsf, 0);
+            const fixedPctE = Math.min(100, Math.max(0, num(inputs.fixedPctElectric, 80))) / 100;
+            const fixedPctG = Math.min(100, Math.max(0, num(inputs.fixedPctGas, 90))) / 100;
+            const fixedPctW = Math.min(100, Math.max(0, num(inputs.fixedPctWater, 25))) / 100;
+            const varE = 1 - fixedPctE, varG = 1 - fixedPctG, varW = 1 - fixedPctW;
+
+            let electricAnnual = 0, gasAnnual = 0, waterAnnual = 0;
+
+            if (mode === 'monthly') {
+                months.forEach(month => {
+                    const data = monthlyData[month];
+                    const occ = occOverride != null ? occOverride : (parseFloat(data.occupancy) || 0) / 100;
+                    const blended = getBlendedConsumptionFor(data.mix);
+                    const eRate = (parseFloat(data.electricRate) || 0) * rateMult.electric;
+                    const gRate = (parseFloat(data.gasRate) || 0) * rateMult.gas;
+                    const wRate = (parseFloat(data.waterRate) || 0) * rateMult.water;
+
+                    const eCostPerSf = (blended.electric * consumptionScale) * eRate * (fixedPctE + varE * occ) / 12;
+                    const gCostPerSf = (blended.gas * consumptionScale) * gRate * (fixedPctG + varG * occ) / 12;
+                    const wCostPerSf = (blended.water * consumptionScale) * wRate * (fixedPctW + varW * occ) / 12;
+
+                    electricAnnual += eCostPerSf * rsf;
+                    gasAnnual += gCostPerSf * rsf;
+                    waterAnnual += wCostPerSf * rsf;
+                });
+            } else {
+                const occ = occOverride != null ? occOverride : num(inputs.occupancy, 50) / 100;
+                const blended = getBlendedConsumption();
+                const eRate = num(inputs.electricRate, 0) * rateMult.electric;
+                const gRate = num(inputs.gasRate, 0) * rateMult.gas;
+                const wRate = num(inputs.waterRate, 0) * rateMult.water;
+
+                const eCostPerSf = (blended.electric * consumptionScale) * eRate * (fixedPctE + varE * occ);
+                const gCostPerSf = (blended.gas * consumptionScale) * gRate * (fixedPctG + varG * occ);
+                const wCostPerSf = (blended.water * consumptionScale) * wRate * (fixedPctW + varW * occ);
+
+                electricAnnual = eCostPerSf * rsf;
+                gasAnnual = gCostPerSf * rsf;
+                waterAnnual = wCostPerSf * rsf;
+            }
+
+            const annualTotal = electricAnnual + gasAnnual + waterAnnual;
+            return {
+                annualTotal, electricAnnual, gasAnnual, waterAnnual, rsf,
+                fixedPctE, fixedPctG, fixedPctW, varE, varG, varW
+            };
+        }
+
+        // Per-month dollar breakdown for Monthly mode -- same math as computeScenario's
+        // monthly branch, just not summed across the year, so the actual monthly $ figures
+        // (not just one flat annual total) are visible on screen without exporting to Excel.
+        function computeMonthlyRows() {
+            const rsf = num(inputs.rsf, 0);
+            const fixedPctE = Math.min(100, Math.max(0, num(inputs.fixedPctElectric, 80))) / 100;
+            const fixedPctG = Math.min(100, Math.max(0, num(inputs.fixedPctGas, 90))) / 100;
+            const fixedPctW = Math.min(100, Math.max(0, num(inputs.fixedPctWater, 25))) / 100;
+            const varE = 1 - fixedPctE, varG = 1 - fixedPctG, varW = 1 - fixedPctW;
+
+            return months.map(month => {
+                const data = monthlyData[month];
+                const occ = (parseFloat(data.occupancy) || 0) / 100;
+                const blended = getBlendedConsumptionFor(data.mix);
+                const eCostPerSf = blended.electric * (parseFloat(data.electricRate) || 0) * (fixedPctE + varE * occ) / 12;
+                const gCostPerSf = blended.gas * (parseFloat(data.gasRate) || 0) * (fixedPctG + varG * occ) / 12;
+                const wCostPerSf = blended.water * (parseFloat(data.waterRate) || 0) * (fixedPctW + varW * occ) / 12;
+                const costPerSf = eCostPerSf + gCostPerSf + wCostPerSf;
+                return { month, occPct: data.occupancy, costPerSf, cost: costPerSf * rsf };
+            });
+        }
+
+        function renderMonthlyBreakdown() {
+            const tbody = document.getElementById('monthly-breakdown-body');
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            if (mode !== 'monthly') { tbody.innerHTML = ''; return; }
+            const rows = computeMonthlyRows();
+            tbody.innerHTML = '';
+            let total = 0;
+            rows.forEach(r => {
+                total += r.cost;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${r.month.slice(0, 3)}</td><td>${Number(r.occPct).toFixed(0)}%</td><td>$${r.costPerSf.toFixed(2)}</td><td>$${fmt(r.cost)}</td>`;
+                tbody.appendChild(tr);
+            });
+            document.getElementById('monthly-breakdown-total').textContent = '$' + fmt(total);
+        }
+
+        function calculate() {
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            const rsf = num(inputs.rsf, 0);
+
+            if (!(rsf > 0)) {
+                displays.rsfWarning.classList.add('show');
+                ['annualTotal', 'psfTotal', 'monthlyAvg', 'electricTotal', 'gasTotal', 'waterTotal',
+                 'camRecoverableTotal', 'grossupTotal', 'sensLow', 'sensBase', 'sensHigh', 'escYear1', 'escYearN'].forEach(k => {
+                    if (displays[k]) displays[k].textContent = '—';
+                });
+                document.getElementById('monthly-breakdown-body').innerHTML = '';
+                document.getElementById('monthly-breakdown-total').textContent = '$0';
+                window.currentCalc = null;
+                return;
+            }
+            displays.rsfWarning.classList.remove('show');
+            renderMonthlyBreakdown();
+
+            const base = computeScenario(mode);
+            const costPerSf = base.annualTotal / rsf;
+            const monthlyAvg = base.annualTotal / 12;
+
+            // Metering / CAM recovery
+            const metering = document.querySelector('input[name="metering"]:checked').value;
+            const landlordSharePct = metering === 'submetered' ? Math.min(100, Math.max(0, num(inputs.landlordShare, 100))) : 100;
+            const camRecoveryPct = Math.min(100, Math.max(0, num(inputs.camRecovery, 100)));
+            const camRecoverableAnnual = base.annualTotal * (landlordSharePct / 100) * (camRecoveryPct / 100);
+
+            // CAM gross-up (Annual mode only -- see note in UI/export)
+            const grossUpEnabled = inputs.grossUpEnabled.checked && mode === 'annual';
+            const grossUpOccPct = Math.min(100, Math.max(0, num(inputs.grossUpOcc, 95)));
+            let grossUpAnnualTotal = null, grossUpRecoverable = null;
+            if (grossUpEnabled) {
+                grossUpAnnualTotal = computeScenario(mode, { occOverride: grossUpOccPct / 100 }).annualTotal;
+                grossUpRecoverable = grossUpAnnualTotal * (landlordSharePct / 100) * (camRecoveryPct / 100);
+            }
+
+            // Sensitivity (exact linear scaling -- see QA report methodology note).
+            // Consumption and rate sensitivity are combined multiplicatively for
+            // the Low/High range: Low = Base*(1-consump%)*(1-rate%), High = mirror.
+            // This treats "everything goes wrong/right together" as the stress case,
+            // which is the conservative read a lender would want, rather than only
+            // stressing consumption and silently ignoring rate/escalation risk.
+            const sensPct = Math.min(100, Math.max(0, num(inputs.sensitivity, 10)));
+            const rateSensPct = Math.min(100, Math.max(0, num(inputs.rateSensitivity, 10)));
+            const sensLow = base.annualTotal * (1 - sensPct / 100) * (1 - rateSensPct / 100);
+            const sensHigh = base.annualTotal * (1 + sensPct / 100) * (1 + rateSensPct / 100);
+
+            // Escalation over hold period (exact linear scaling per utility)
+            const holdYears = Math.max(1, Math.min(15, parseInt(inputs.holdYears.value) || 5));
+            const escE = Math.max(0, num(inputs.escElectric, 3.5));
+            const escG = Math.max(0, num(inputs.escGas, 3.75));
+            const escW = Math.max(0, num(inputs.escWater, 7.0));
+            const escalationRows = [];
+            for (let y = 1; y <= holdYears; y++) {
+                const yearTotal = base.electricAnnual * Math.pow(1 + escE / 100, y - 1)
+                    + base.gasAnnual * Math.pow(1 + escG / 100, y - 1)
+                    + base.waterAnnual * Math.pow(1 + escW / 100, y - 1);
+                escalationRows.push({ year: y, annualTotal: yearTotal });
+            }
+            const escYear1 = escalationRows[0].annualTotal;
+            const escYearN = escalationRows[escalationRows.length - 1].annualTotal;
+            const escTotalPct = escYear1 > 0 ? ((escYearN / escYear1 - 1) * 100) : 0;
+
+            // Target comparison -- the field ships BLANK by default (no fabricated
+            // "trailing-12" number). A blank field shows a neutral "enter a value"
+            // state instead of a stale hardcoded target that made every fresh load
+            // look like the building was ~100% over budget out of the gate. A
+            // legitimately entered "0" is still respected (Number.isFinite check),
+            // it's only a genuinely empty field that's treated as "not entered".
+            const targetRawStr = inputs.varianceTarget.value.trim();
+            const hasTarget = targetRawStr !== '';
+            const targetRaw = parseFloat(targetRawStr);
+            const targetAnnual = hasTarget && Number.isFinite(targetRaw) ? targetRaw : null;
+            const varianceAmt = hasTarget ? base.annualTotal - targetAnnual : null;
+            const varianceText = hasTarget
+                ? `${formatVariance(varianceAmt, targetAnnual)} vs. $${fmt(targetAnnual)}`
+                : 'Enter a Trailing 12-Mo Actual above to compare';
+
+            // Comp Building Cost/RSF ships BLANK by default for the same reason as
+            // the Trailing-12 field above -- no fabricated "comp" number, and no
+            // "vs. Comp" line at all until a real comparable is entered.
+            const compPsfRawStr = inputs.compPsf.value.trim();
+            const hasComp = compPsfRawStr !== '';
+            const compPsfRaw = parseFloat(compPsfRawStr);
+            const compPsf = hasComp && Number.isFinite(compPsfRaw) ? compPsfRaw : null;
+            const compTotal = hasComp ? compPsf * rsf : null;
+            const varianceCompAmt = hasComp ? base.annualTotal - compTotal : null;
+            const varianceCompText = hasComp
+                ? `${formatVariance(varianceCompAmt, compTotal)} vs. $${fmt(compTotal)}`
+                : 'Enter a Comp Building Cost/RSF above to compare';
+
+            // ---- update displays ----
+            if (mode === 'monthly') {
+                displays.occupancyDisplay.textContent = getAverageOccupancy().toFixed(1) + '% (avg)';
+            } else {
+                displays.occupancyDisplay.textContent = inputs.occupancy.value + '%';
+            }
+            displays.annualTotal.textContent = fmt(base.annualTotal);
+            displays.psfTotal.textContent = costPerSf.toFixed(2);
+            displays.monthlyAvg.textContent = fmt(monthlyAvg);
+            displays.electricTotal.textContent = fmt(base.electricAnnual);
+            displays.gasTotal.textContent = fmt(base.gasAnnual);
+            displays.waterTotal.textContent = fmt(base.waterAnnual);
+            displays.targetDisplay.textContent = hasTarget ? ('$' + fmt(targetAnnual) + '/yr') : 'not entered';
+            displays.compDisplay.textContent = hasComp ? ('$' + fmt(compTotal) + '/yr') : 'not entered';
+            displays.varianceTarget.textContent = varianceText;
+            displays.varianceComp.textContent = varianceCompText;
+
+            document.getElementById('cam-recoverable-label').textContent =
+                (metering === 'submetered' || camRecoveryPct < 100) ? 'CAM-Recoverable Annual' : 'CAM-Recoverable Annual (= gross; master-metered, 100% recovery)';
+            displays.camRecoverableTotal.textContent = fmt(camRecoverableAnnual);
+
+            if (grossUpEnabled) {
+                displays.grossupRow.style.display = 'flex';
+                displays.grossupTotal.textContent = fmt(grossUpRecoverable);
+                document.getElementById('which-number-grossup-clause').textContent = ' -- or better, the Gross-Up Adjusted figure below it, since gross-up is on';
+            } else {
+                displays.grossupRow.style.display = 'none';
+                document.getElementById('which-number-grossup-clause').textContent = '';
+            }
+
+            displays.sensPctLabel.textContent = sensPct;
+            displays.rateSensPctLabel.textContent = rateSensPct;
+            displays.sensLow.textContent = fmt(sensLow);
+            displays.sensBase.textContent = fmt(base.annualTotal);
+            displays.sensHigh.textContent = fmt(sensHigh);
+
+            displays.escYearsLabel.textContent = holdYears;
+            displays.escYearNLabel.textContent = holdYears;
+            displays.escYear1.textContent = fmt(escYear1);
+            displays.escYearN.textContent = fmt(escYearN);
+            displays.escTotalPct.textContent = escTotalPct.toFixed(1);
+
+            window.currentCalc = {
+                mode, rsf, occupancy: (mode === 'monthly' ? getAverageOccupancy() / 100 : num(inputs.occupancy, 50) / 100),
+                fixedPctE: base.fixedPctE, fixedPctG: base.fixedPctG, fixedPctW: base.fixedPctW,
+                varE: base.varE, varG: base.varG, varW: base.varW,
+                costPerSf, annualTotal: base.annualTotal, monthlyAvg,
+                electricAnnual: base.electricAnnual, gasAnnual: base.gasAnnual, waterAnnual: base.waterAnnual,
+                targetAnnual, compTotal, compPsf,
+                metering, landlordSharePct, camRecoveryPct, camRecoverableAnnual,
+                grossUpEnabled, grossUpOccPct, grossUpAnnualTotal, grossUpRecoverable,
+                sensPct, rateSensPct, sensLow, sensHigh,
+                holdYears, escE, escG, escW, escalationRows, escYear1, escYearN, escTotalPct
+            };
+        }
+
+        function exportToExcel() {
+            if (typeof XLSX === 'undefined') {
+                alert('Excel export library is still loading. Please wait a moment and try again.');
+                console.error('XLSX library not available');
+                return;
+            }
+
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            const rsf = num(inputs.rsf, 0);
+            if (!(rsf > 0)) {
+                alert('Enter a Building RSF greater than 0 before exporting.');
+                return;
+            }
+
+            // Block export on an empty/zero tenant mix instead of silently injecting
+            // a synthetic "Standard Office 100%" row the user never entered.
+            if (mode === 'annual') {
+                const mix = collectAnnualMix();
+                const totalPct = Object.values(mix).reduce((a, b) => a + (parseFloat(b) || 0), 0);
+                if (totalPct <= 0) {
+                    alert('Enter at least one Tenant Mix percentage greater than 0 before exporting.');
+                    return;
+                }
+            } else {
+                const emptyMonths = months.filter(m => {
+                    const mix = monthlyData[m].mix;
+                    const total = Object.values(mix).reduce((a, b) => a + (parseFloat(b) || 0), 0);
+                    return total <= 0;
+                });
+                if (emptyMonths.length) {
+                    alert('These months have a 0% tenant mix total and would compute to $0: ' + emptyMonths.join(', ') + '. Fix before exporting.');
+                    return;
+                }
+            }
+
+            const propertyName = inputs.propertyName.value || 'Property';
+            const workbook = XLSX.utils.book_new();
+
+            // Fixed, conforming formula-cell writer: numeric type, no leading "=",
+            // full-precision cached value (not rounded to 2dp). Optional `fmt` sets
+            // a display number format (z) -- the underlying value/formula is always
+            // full precision regardless; fmt only controls how it's SHOWN, so a
+            // non-technical reader sees "$1,203,060" / "80.0%" instead of a raw
+            // float like "1203059.6790453126" (a real usability finding: exports
+            // with unformatted numbers read as broken/unfinished to every tester).
+            const FMT = {
+                usd: '$#,##0',                 // whole-dollar totals
+                usd2: '$#,##0.00',              // $/RSF-type figures
+                usd4: '$#,##0.0000',             // small $/unit rates
+                pctWhole: '0.0"%"',              // already-stored-as-e.g.-80 percents (not multiplied)
+                pctWhole2: '0.00"%"',            // same, 2 decimals (escalation %/yr)
+                fracPct: '0.0%',                 // true fractions Excel should multiply by 100
+                num: '#,##0',                    // plain integer counts
+                num2: '#,##0.00'                 // plain decimal quantities (consumption/RSF)
+            };
+            const formulaCell = (formula, value, fmt) => {
+                const cell = { t: 'n', f: String(formula).replace(/^=/, ''), v: Number.isFinite(value) ? value : 0 };
+                if (fmt) cell.z = fmt;
+                return cell;
+            };
+            const numCell = (value, fmt) => {
+                const cell = { t: 'n', v: Number.isFinite(value) ? value : 0 };
+                if (fmt) cell.z = fmt;
+                return cell;
+            };
+
+            const fixedPctE = Math.min(100, Math.max(0, num(inputs.fixedPctElectric, 80)));
+            const fixedPctG = Math.min(100, Math.max(0, num(inputs.fixedPctGas, 90)));
+            const fixedPctW = Math.min(100, Math.max(0, num(inputs.fixedPctWater, 25)));
+            const electricRate = num(inputs.electricRate, 0);
+            const gasRate = num(inputs.gasRate, 0);
+            const waterRate = num(inputs.waterRate, 0);
+            const targetRawStr = inputs.varianceTarget.value.trim();
+            const hasTarget = targetRawStr !== '';
+            const targetRawExp = parseFloat(targetRawStr);
+            const targetAnnual = hasTarget && Number.isFinite(targetRawExp) ? targetRawExp : null;
+            const compPsfRawStr = inputs.compPsf.value.trim();
+            const hasComp = compPsfRawStr !== '';
+            const compPsfRaw = parseFloat(compPsfRawStr);
+            const compPsfInput = hasComp && Number.isFinite(compPsfRaw) ? compPsfRaw : null;
+            const metering = document.querySelector('input[name="metering"]:checked').value;
+            const landlordSharePct = metering === 'submetered' ? Math.min(100, Math.max(0, num(inputs.landlordShare, 100))) : 100;
+            const camRecoveryPct = Math.min(100, Math.max(0, num(inputs.camRecovery, 100)));
+            const grossUpEnabled = inputs.grossUpEnabled.checked && mode === 'annual';
+            const grossUpOccPct = Math.min(100, Math.max(0, num(inputs.grossUpOcc, 95)));
+            const sensPct = Math.min(100, Math.max(0, num(inputs.sensitivity, 10)));
+            const rateSensPct = Math.min(100, Math.max(0, num(inputs.rateSensitivity, 10)));
+            const holdYears = Math.max(1, Math.min(15, parseInt(inputs.holdYears.value) || 5));
+            const escE = Math.max(0, num(inputs.escElectric, 3.5));
+            const escG = Math.max(0, num(inputs.escGas, 3.75));
+            const escW = Math.max(0, num(inputs.escWater, 7.0));
+
+            // Single source of truth for cached values written alongside every
+            // formula below -- computed once here with the exact same engine
+            // that drives the on-screen display, so the export can never show
+            // a cached number that disagrees with its own formula (Bug 4 fix).
+            const calc = computeScenario(mode);
+            const costPerSfCalc = calc.annualTotal / rsf;
+            const monthlyAvgCalc = calc.annualTotal / 12;
+            const camRecoverableAnnualCalc = calc.annualTotal * (landlordSharePct / 100) * (camRecoveryPct / 100);
+            const sensLowCalc = calc.annualTotal * (1 - sensPct / 100) * (1 - rateSensPct / 100);
+            const sensHighCalc = calc.annualTotal * (1 + sensPct / 100) * (1 + rateSensPct / 100);
+            const varianceAmtCalc = hasTarget ? calc.annualTotal - targetAnnual : null;
+            const variancePctCalc = !hasTarget ? null : (targetAnnual === 0 ? 0 : (varianceAmtCalc / Math.abs(targetAnnual)));
+            const compTotalCalc = hasComp ? compPsfInput * rsf : null;
+            const varianceCompAmtCalc = hasComp ? calc.annualTotal - compTotalCalc : null;
+            const varianceCompPctCalc = !hasComp ? null : (compTotalCalc === 0 ? 0 : (varianceCompAmtCalc / Math.abs(compTotalCalc)));
+
+            // ================= SUMMARY SHEET =================
+            const wsData = [];
+            let rowNum = 0;
+            const R = {}; // label key -> 1-indexed excel row number
+            function push(label, val, key) {
+                wsData.push([label, val]);
+                rowNum++;
+                if (key) R[key] = rowNum;
+                return rowNum;
+            }
+            function pushRow(arr) {
+                wsData.push(arr);
+                rowNum++;
+                return rowNum;
+            }
+            function blank() { wsData.push([]); rowNum++; }
+
+            push('UTILITIES FORECASTER - ' + propertyName);
+            push('DISCLAIMER', 'These are ESTIMATED benchmark utility costs derived from CBECS/ENERGY STAR consumption benchmarks and current PG&E/SFPUC rate schedules -- NOT the building\'s billed actuals. Replace with trailing-12 billed data wherever possible before relying on these figures in underwriting, owner reporting, or a lender package. Sourcing and methodology for every assumption are documented inline throughout this sheet (see the SOURCES section below and the citation next to each input on the web tool).');
+            blank();
+
+            push('INPUT PARAMETERS', '');
+            push('Property Name', propertyName);
+            push('Building RSF', numCell(rsf, FMT.num), 'rsf');
+            push('Mode', mode === 'monthly' ? 'Monthly (see Monthly tab)' : 'Annual');
+            const occupancyPct = mode === 'annual' ? num(inputs.occupancy, 50) : getAverageOccupancy();
+            push('Occupancy % (avg if Monthly)', numCell(occupancyPct, FMT.pctWhole), 'occupancy');
+            blank();
+
+            push('FIXED VS VARIABLE SPLIT (BY UTILITY)', '');
+            push('Electric Fixed %', numCell(fixedPctE, FMT.pctWhole), 'fixedE');
+            push('Electric Variable %', formulaCell('=100-B' + R.fixedE, 100 - fixedPctE, FMT.pctWhole), 'varE');
+            push('Gas Fixed %', numCell(fixedPctG, FMT.pctWhole), 'fixedG');
+            push('Gas Variable %', formulaCell('=100-B' + R.fixedG, 100 - fixedPctG, FMT.pctWhole), 'varG');
+            push('Water Fixed %', numCell(fixedPctW, FMT.pctWhole), 'fixedW');
+            push('Water Variable %', formulaCell('=100-B' + R.fixedW, 100 - fixedPctW, FMT.pctWhole), 'varW');
+            blank();
+
+            push('UTILITY RATES ($/unit)', '');
+            push('Electric ($/kWh)', numCell(electricRate, FMT.usd4), 'electricRate');
+            push('Gas ($/therm)', numCell(gasRate, FMT.usd4), 'gasRate');
+            push('Water & Sewer ($/CCF)', numCell(waterRate, FMT.usd4), 'waterRate');
+            blank();
+
+            let annualTotalRow, electricCostRow, gasCostRow, waterCostRow;
+
+            if (mode === 'annual') {
+                push('TENANT MIX BLENDED CONSUMPTION', '');
+                pushRow(['Tenant Type', 'Percentage', 'Elec. Multiplier', 'Electric', 'Gas', 'Water']);
+                const tenantMixStartRow = rowNum + 1;
+                let tenantCount = 0;
+                Object.entries(tenantMixInputs).forEach(([type, input]) => {
+                    const pct = parseFloat(input.value) || 0;
+                    if (pct > 0) {
+                        const profile = tenantTypes[type];
+                        wsData.push([
+                            type,
+                            { t: 'n', v: pct, z: FMT.pctWhole },
+                            { t: 'n', v: profile.multiplier, z: '0.00"x"' },
+                            { t: 'n', v: profile.electric, z: FMT.num2 },
+                            { t: 'n', v: profile.gas, z: FMT.num2 },
+                            { t: 'n', v: profile.water, z: FMT.num2 }
+                        ]);
+                        tenantCount++;
+                        rowNum++;
+                    }
+                });
+                const tenantMixEndRow = tenantMixStartRow + tenantCount - 1;
+                const mixTotalPctValue = Object.values(collectAnnualMix()).reduce((a, b) => a + (parseFloat(b) || 0), 0);
+                push('Total %', formulaCell('=SUM(B' + tenantMixStartRow + ':B' + tenantMixEndRow + ')', mixTotalPctValue, FMT.pctWhole), 'mixTotalPct');
+                blank();
+
+                push('Blended Consumption Calculation (auto-normalized by Total %)', '');
+                const blended = getBlendedConsumption();
+                push('Blended Electric (kWh/RSF)', formulaCell('=SUMPRODUCT(D' + tenantMixStartRow + ':D' + tenantMixEndRow + ',B' + tenantMixStartRow + ':B' + tenantMixEndRow + ')/B' + R.mixTotalPct, blended.electric, FMT.num2), 'blendedE');
+                push('Blended Gas (therms/RSF)', formulaCell('=SUMPRODUCT(E' + tenantMixStartRow + ':E' + tenantMixEndRow + ',B' + tenantMixStartRow + ':B' + tenantMixEndRow + ')/B' + R.mixTotalPct, blended.gas, FMT.num2), 'blendedG');
+                push('Blended Water (CCF/RSF)', formulaCell('=SUMPRODUCT(F' + tenantMixStartRow + ':F' + tenantMixEndRow + ',B' + tenantMixStartRow + ':B' + tenantMixEndRow + ')/B' + R.mixTotalPct, blended.water, FMT.num2), 'blendedW');
+                blank();
+
+                push('FULL OCCUPANCY COST PER RSF (BY UTILITY)', '');
+                push('Electric Cost/RSF', formulaCell('=B' + R.blendedE + '*B' + R.electricRate, blended.electric * electricRate, FMT.usd2), 'fullE');
+                push('Gas Cost/RSF', formulaCell('=B' + R.blendedG + '*B' + R.gasRate, blended.gas * gasRate, FMT.usd2), 'fullG');
+                push('Water Cost/RSF', formulaCell('=B' + R.blendedW + '*B' + R.waterRate, blended.water * waterRate, FMT.usd2), 'fullW');
+                push('Full Occupancy Cost/RSF', formulaCell('=B' + R.fullE + '+B' + R.fullG + '+B' + R.fullW, blended.electric * electricRate + blended.gas * gasRate + blended.water * waterRate, FMT.usd2), 'fullTotal');
+                blank();
+
+                push('OCCUPANCY-ADJUSTED COST (BY UTILITY)', '');
+                push('Occupancy Factor (decimal)', formulaCell('=B' + R.occupancy + '/100', occupancyPct / 100, FMT.fracPct), 'occFactor');
+                const occF = occupancyPct / 100;
+                push('Electric Cost/RSF (Adj.)', formulaCell('=B' + R.fullE + '*(B' + R.fixedE + '/100+B' + R.varE + '/100*B' + R.occFactor + ')', (blended.electric * electricRate) * (fixedPctE / 100 + (100 - fixedPctE) / 100 * occF), FMT.usd2), 'adjE');
+                push('Gas Cost/RSF (Adj.)', formulaCell('=B' + R.fullG + '*(B' + R.fixedG + '/100+B' + R.varG + '/100*B' + R.occFactor + ')', (blended.gas * gasRate) * (fixedPctG / 100 + (100 - fixedPctG) / 100 * occF), FMT.usd2), 'adjG');
+                push('Water Cost/RSF (Adj.)', formulaCell('=B' + R.fullW + '*(B' + R.fixedW + '/100+B' + R.varW + '/100*B' + R.occFactor + ')', (blended.water * waterRate) * (fixedPctW / 100 + (100 - fixedPctW) / 100 * occF), FMT.usd2), 'adjW');
+                push('Annual Cost per RSF', formulaCell('=B' + R.adjE + '+B' + R.adjG + '+B' + R.adjW, costPerSfCalc, FMT.usd2), 'costPerSf');
+                blank();
+
+                push('RESULTS', '');
+                annualTotalRow = push('Annual Utilities Cost (Gross, Whole-Building)', formulaCell('=B' + R.costPerSf + '*B' + R.rsf, calc.annualTotal, FMT.usd), 'annualTotal');
+                push('Cost per RSF/Year', formulaCell('=B' + R.costPerSf, costPerSfCalc, FMT.usd2));
+                push('Monthly Average', formulaCell('=B' + R.annualTotal + '/12', monthlyAvgCalc, FMT.usd));
+                blank();
+
+                push('UTILITY TYPE BREAKDOWN', '');
+                electricCostRow = push('Electric Annual Cost', formulaCell('=B' + R.adjE + '*B' + R.rsf, calc.electricAnnual, FMT.usd), 'electricAnnual');
+                gasCostRow = push('Gas Annual Cost', formulaCell('=B' + R.adjG + '*B' + R.rsf, calc.gasAnnual, FMT.usd), 'gasAnnual');
+                waterCostRow = push('Water Annual Cost', formulaCell('=B' + R.adjW + '*B' + R.rsf, calc.waterAnnual, FMT.usd), 'waterAnnual');
+                blank();
+            } else {
+                push('CONSUMPTION & COST DETAIL', 'See Monthly tab for per-month inputs, blended consumption, and formulas.');
+                blank();
+
+                push('RESULTS (pulled live from Monthly tab)', '');
+                annualTotalRow = push('Annual Utilities Cost (Gross, Whole-Building)', formulaCell('=Monthly!R30', calc.annualTotal, FMT.usd), 'annualTotal');
+                push('Cost per RSF/Year', formulaCell('=B' + R.annualTotal + '/B' + R.rsf, costPerSfCalc, FMT.usd2), 'costPerSf');
+                push('Monthly Average', formulaCell('=B' + R.annualTotal + '/12', monthlyAvgCalc, FMT.usd));
+                blank();
+
+                push('UTILITY TYPE BREAKDOWN', '');
+                electricCostRow = push('Electric Annual Cost', formulaCell('=Monthly!S30', calc.electricAnnual, FMT.usd), 'electricAnnual');
+                gasCostRow = push('Gas Annual Cost', formulaCell('=Monthly!T30', calc.gasAnnual, FMT.usd), 'gasAnnual');
+                waterCostRow = push('Water Annual Cost', formulaCell('=Monthly!U30', calc.waterAnnual, FMT.usd), 'waterAnnual');
+                blank();
+            }
+
+            push('METERING & CAM RECOVERY', '');
+            push('Metering Type', metering === 'submetered' ? 'Submetered' : 'Master-metered');
+            push('Landlord-Paid Share %', numCell(landlordSharePct, FMT.pctWhole), 'landlordShare');
+            push('CAM Recovery %', numCell(camRecoveryPct, FMT.pctWhole), 'camRecovery');
+            push('CAM-Recoverable Annual', formulaCell('=B' + R.annualTotal + '*B' + R.landlordShare + '/100*B' + R.camRecovery + '/100', camRecoverableAnnualCalc, FMT.usd), 'camRecoverable');
+            blank();
+
+            if (grossUpEnabled) {
+                const grossUpTotal = computeScenario(mode, { occOverride: grossUpOccPct / 100 }).annualTotal;
+                push('CAM GROSS-UP (ANNUAL MODE)', '');
+                push('Gross-Up Occupancy %', numCell(grossUpOccPct, FMT.pctWhole), 'grossUpOcc');
+                push('Note', 'Gross-up scales the occupancy-driven portion of cost up to what it would be at the Gross-Up Occ % above (e.g. 95%, a stabilized building) -- so CAM billed to tenants reflects a stabilized building instead of today\'s vacancy. The portion of cost that doesn\'t change with occupancy is left as-is. Value below is computed independently (not a live formula chain) using the same methodology as the RESULTS section.');
+                push('Gross-Up Adjusted Annual Total', numCell(grossUpTotal, FMT.usd), 'grossUpTotal');
+                push('Gross-Up Adjusted Recoverable', formulaCell('=B' + R.grossUpTotal + '*B' + R.landlordShare + '/100*B' + R.camRecovery + '/100', grossUpTotal * (landlordSharePct / 100) * (camRecoveryPct / 100), FMT.usd));
+                push('Note', 'Use THIS number (not the plain CAM-Recoverable Annual above) for tenant CAM billing when gross-up applies.');
+                blank();
+            }
+
+            push('SENSITIVITY ANALYSIS (consumption × rate, combined)', '');
+            push('Consumption Sensitivity ±%', numCell(sensPct, FMT.pctWhole), 'sensPct');
+            push('Rate Sensitivity ±%', numCell(rateSensPct, FMT.pctWhole), 'rateSensPct');
+            push('Low Annual Total', formulaCell('=B' + R.annualTotal + '*(1-B' + R.sensPct + '/100)*(1-B' + R.rateSensPct + '/100)', sensLowCalc, FMT.usd));
+            push('Base Annual Total', formulaCell('=B' + R.annualTotal, calc.annualTotal, FMT.usd));
+            push('High Annual Total', formulaCell('=B' + R.annualTotal + '*(1+B' + R.sensPct + '/100)*(1+B' + R.rateSensPct + '/100)', sensHighCalc, FMT.usd));
+            push('Note', 'Low/High stress consumption and rate together (both down for Low, both up for High) -- the conservative combined case. To see consumption-only or rate-only stress, zero out the other input above and re-export.');
+            blank();
+
+            push('ESCALATION ASSUMPTIONS (see Escalation tab for year-by-year)', '');
+            push('Hold Period (Years)', numCell(holdYears, FMT.num), 'holdYears');
+            push('Electric Escalation %/yr', numCell(escE, FMT.pctWhole2), 'escE');
+            push('Gas Escalation %/yr', numCell(escG, FMT.pctWhole2), 'escG');
+            push('Water Escalation %/yr', numCell(escW, FMT.pctWhole2), 'escW');
+            blank();
+
+            push('VARIANCE ANALYSIS', '');
+            if (hasTarget) {
+                push('Target / Trailing-12 Annual Cost', numCell(targetAnnual, FMT.usd), 'target');
+                push('Estimated Annual Cost', formulaCell('=B' + R.annualTotal, calc.annualTotal, FMT.usd), 'estimated');
+                push('Variance ($)', formulaCell('=B' + R.estimated + '-B' + R.target, varianceAmtCalc, FMT.usd), 'varianceAmt');
+                // Divide by ABS(target) so the % sign always matches the $ sign, even
+                // when the target itself is negative (fixes the arrow/percent mismatch).
+                push('Variance (%)', formulaCell('=IF(B' + R.target + '=0,0,B' + R.varianceAmt + '/ABS(B' + R.target + '))', variancePctCalc, FMT.fracPct));
+            } else {
+                push('Note', 'No Trailing 12-Mo Actual / Target was entered at export time -- variance not computed. This field defaults to blank on purpose; enter the building\'s real billed trailing-12 before treating any "% over/under" figure as meaningful.');
+            }
+            blank();
+
+            push('COMP COMPARISON', '');
+            if (hasComp) {
+                push('Comp Cost per RSF', numCell(compPsfInput, FMT.usd2), 'compPsf');
+                const compAnnualRow = push('Comp Annual Cost (estimated)', formulaCell('=B' + R.compPsf + '*B' + R.rsf, compTotalCalc, FMT.usd), 'compAnnual');
+                push('Variance vs. Comp ($)', formulaCell('=B' + R.annualTotal + '-B' + R.compAnnual, varianceCompAmtCalc, FMT.usd), 'varianceCompAmt');
+                push('Variance vs. Comp (%)', formulaCell('=IF(B' + R.compAnnual + '=0,0,B' + R.varianceCompAmt + '/ABS(B' + R.compAnnual + '))', varianceCompPctCalc, FMT.fracPct));
+                push('Note', 'A large gap here is often driven by tenant-mix or building-type differences between this property and the comp, not an error -- check Tenant Mix before treating it as a red flag.');
+            } else {
+                push('Note', 'No Comp Building Cost/RSF was entered at export time -- comparison not computed. This field defaults to blank on purpose; enter a real comparable building\'s cost/RSF before treating any comp variance as meaningful.');
+            }
+            blank();
+
+            push('SOURCES', 'Consumption: CBECS 2018 (EIA); ENERGY STAR/WaterSense WUI Technical Reference 2023.');
+            push('', 'Rates: PG&E Sched. B-19 / G-NR1 (eff. Mar/Jul 2026); SFPUC FY2026-27.');
+            push('', 'Fixed/variable: PNNL-26019; NYC LL84 2020 analysis; Fort Collins 2020 meter study.');
+            push('', 'Escalation: Trailing PG&E commercial rate CAGR (2023-2026) and SFPUC\'s adopted FY2026-28 schedule.');
+
+            // NOTE: formula/row-map documentation for anyone auditing this workbook's
+            // formulas lives in the "Row Map (Technical)" tab at the very end of this
+            // workbook, not here -- usability testing showed property managers reading
+            // this Summary sheet mistook that documentation for a broken/unfinished
+            // export. Non-technical users can ignore that tab entirely.
+
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            ws['!cols'] = [{ wch: 48 }, { wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+            XLSX.utils.book_append_sheet(workbook, ws, 'Summary');
+
+            // ================= MONTHLY SHEET (Monthly mode only) =================
+            if (mode === 'monthly') {
+                const mData = [];
+                let mRow = 0;
+                function mpush(cells) { mData.push(cells); mRow++; return mRow; }
+                function mblank() { mData.push([]); mRow++; }
+
+                mpush(['MONTHLY BREAKDOWN - ' + propertyName]);
+                mblank();
+                mpush(['TENANT TYPE CONSUMPTION PROFILE (source: same constants as Summary tab)']);
+                mpush(['Type', 'Electric (kWh/RSF)', 'Gas (therms/RSF)', 'Water (CCF/RSF)']);
+                const typeKeysOrdered = Object.keys(tenantTypes); // Office, Lab, LifeSci, Medical
+                const profRowStart = mRow + 1;
+                typeKeysOrdered.forEach(t => {
+                    mpush([t, numCell(tenantTypes[t].electric, FMT.num2), numCell(tenantTypes[t].gas, FMT.num2), numCell(tenantTypes[t].water, FMT.num2)]);
+                });
+                const profRowEnd = mRow;
+                mblank();
+
+                mpush(['FIXED VS VARIABLE SPLIT (BY UTILITY) - applies to all months']);
+                const mFixedERow = mpush(['Electric Fixed %', formulaCell('=Summary!B' + R.fixedE, fixedPctE, FMT.pctWhole)]);
+                const mFixedGRow = mpush(['Gas Fixed %', formulaCell('=Summary!B' + R.fixedG, fixedPctG, FMT.pctWhole)]);
+                const mFixedWRow = mpush(['Water Fixed %', formulaCell('=Summary!B' + R.fixedW, fixedPctW, FMT.pctWhole)]);
+                const mRsfRow = mpush(['Building RSF', formulaCell('=Summary!B' + R.rsf, rsf, FMT.num)]);
+                mblank();
+
+                mpush(['Month', 'Occ %', 'Office %', 'Lab %', 'Life Sci %', 'Medical %', 'Mix Total %',
+                    'Elec $/kWh', 'Gas $/therm', 'Water $/CCF', 'Blended Elec', 'Blended Gas', 'Blended Water',
+                    'Elec Cost/RSF', 'Gas Cost/RSF', 'Water Cost/RSF', 'Monthly Cost/RSF', 'Monthly Cost ($)',
+                    'Electric ($)', 'Gas ($)', 'Water ($)']);
+
+                const monthRowStart = mRow + 1;
+                months.forEach(month => {
+                    const md = monthlyData[month];
+                    const r = mRow + 1; // this row's number, before push
+                    const occCell = 'B' + r, mixStart = 'C' + r, mixEnd = 'F' + r, mixTotalCell = 'G' + r;
+                    const eRateCell = 'H' + r, gRateCell = 'I' + r, wRateCell = 'J' + r;
+                    const beCell = 'K' + r, bgCell = 'L' + r, bwCell = 'M' + r;
+                    const ecpsCell = 'N' + r, gcpsCell = 'O' + r, wcpsCell = 'P' + r, mcpsCell = 'Q' + r;
+
+                    // Real cached values mirroring each formula above -- computed with the
+                    // same normalized-blend + per-utility-fixed-% math the formulas encode,
+                    // so a non-recalculating reader sees the correct number, not a 0.
+                    const mixTotalVal = Object.values(md.mix).reduce((a, b) => a + (parseFloat(b) || 0), 0);
+                    const blendedVal = getBlendedConsumptionFor(md.mix);
+                    const occVal = (parseFloat(md.occupancy) || 0) / 100;
+                    const eCostPerSfVal = blendedVal.electric * (parseFloat(md.electricRate) || 0) * (fixedPctE / 100 + (1 - fixedPctE / 100) * occVal) / 12;
+                    const gCostPerSfVal = blendedVal.gas * (parseFloat(md.gasRate) || 0) * (fixedPctG / 100 + (1 - fixedPctG / 100) * occVal) / 12;
+                    const wCostPerSfVal = blendedVal.water * (parseFloat(md.waterRate) || 0) * (fixedPctW / 100 + (1 - fixedPctW / 100) * occVal) / 12;
+                    const monthlyCostPerSfVal = eCostPerSfVal + gCostPerSfVal + wCostPerSfVal;
+
+                    mpush([
+                        month,
+                        numCell(md.occupancy, FMT.pctWhole),
+                        numCell(md.mix['Standard Office'], FMT.pctWhole),
+                        numCell(md.mix['Lab / Biotech'], FMT.pctWhole),
+                        numCell(md.mix['Life Sciences (Non-Lab)'], FMT.pctWhole),
+                        numCell(md.mix['Medical / Clinical'], FMT.pctWhole),
+                        formulaCell('=SUM(' + mixStart + ':' + mixEnd + ')', mixTotalVal, FMT.pctWhole),
+                        numCell(md.electricRate, FMT.usd4),
+                        numCell(md.gasRate, FMT.usd4),
+                        numCell(md.waterRate, FMT.usd4),
+                        formulaCell('=IF(' + mixTotalCell + '=0,0,SUMPRODUCT($B$' + profRowStart + ':$B$' + profRowEnd + ',' + mixStart + ':' + mixEnd + ')/' + mixTotalCell + ')', blendedVal.electric, FMT.num2),
+                        formulaCell('=IF(' + mixTotalCell + '=0,0,SUMPRODUCT($C$' + profRowStart + ':$C$' + profRowEnd + ',' + mixStart + ':' + mixEnd + ')/' + mixTotalCell + ')', blendedVal.gas, FMT.num2),
+                        formulaCell('=IF(' + mixTotalCell + '=0,0,SUMPRODUCT($D$' + profRowStart + ':$D$' + profRowEnd + ',' + mixStart + ':' + mixEnd + ')/' + mixTotalCell + ')', blendedVal.water, FMT.num2),
+                        formulaCell('=' + beCell + '*' + eRateCell + '*($B$' + mFixedERow + '/100+(1-$B$' + mFixedERow + '/100)*' + occCell + '/100)/12', eCostPerSfVal, FMT.usd4),
+                        formulaCell('=' + bgCell + '*' + gRateCell + '*($B$' + mFixedGRow + '/100+(1-$B$' + mFixedGRow + '/100)*' + occCell + '/100)/12', gCostPerSfVal, FMT.usd4),
+                        formulaCell('=' + bwCell + '*' + wRateCell + '*($B$' + mFixedWRow + '/100+(1-$B$' + mFixedWRow + '/100)*' + occCell + '/100)/12', wCostPerSfVal, FMT.usd4),
+                        formulaCell('=' + ecpsCell + '+' + gcpsCell + '+' + wcpsCell, monthlyCostPerSfVal, FMT.usd4),
+                        formulaCell('=' + mcpsCell + '*$B$' + mRsfRow, monthlyCostPerSfVal * rsf, FMT.usd),
+                        formulaCell('=' + ecpsCell + '*$B$' + mRsfRow, eCostPerSfVal * rsf, FMT.usd),
+                        formulaCell('=' + gcpsCell + '*$B$' + mRsfRow, gCostPerSfVal * rsf, FMT.usd),
+                        formulaCell('=' + wcpsCell + '*$B$' + mRsfRow, wCostPerSfVal * rsf, FMT.usd)
+                    ]);
+                });
+                const monthRowEnd = mRow;
+                mblank();
+
+                mpush(['TOTAL ANNUAL', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+                    formulaCell('=SUM(Q' + monthRowStart + ':Q' + monthRowEnd + ')', costPerSfCalc, FMT.usd2),
+                    formulaCell('=SUM(R' + monthRowStart + ':R' + monthRowEnd + ')', calc.annualTotal, FMT.usd),
+                    formulaCell('=SUM(S' + monthRowStart + ':S' + monthRowEnd + ')', calc.electricAnnual, FMT.usd),
+                    formulaCell('=SUM(T' + monthRowStart + ':T' + monthRowEnd + ')', calc.gasAnnual, FMT.usd),
+                    formulaCell('=SUM(U' + monthRowStart + ':U' + monthRowEnd + ')', calc.waterAnnual, FMT.usd)
+                ]);
+                mpush(['Note: Fixed/Variable split shown above applies to all months. Utility Breakdown columns (S/T/U) tie exactly to Monthly Cost (R) by construction.']);
+
+                const monthlyWs = XLSX.utils.aoa_to_sheet(mData);
+                monthlyWs['!cols'] = [{ wch: 10 }, { wch: 8 }, { wch: 9 }, { wch: 8 }, { wch: 9 }, { wch: 9 }, { wch: 9 },
+                    { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+                    { wch: 10 }, { wch: 12 }, { wch: 13 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+                XLSX.utils.book_append_sheet(workbook, monthlyWs, 'Monthly');
+            }
+
+            // ================= ESCALATION SHEET =================
+            const eData = [];
+            eData.push(['ESCALATION OVER HOLD PERIOD - ' + propertyName]);
+            eData.push([]);
+            eData.push(['Assumptions pulled live from Summary tab.']);
+            eData.push([]);
+            eData.push(['Year', 'Electric ($)', 'Gas ($)', 'Water ($)', 'Total ($)']);
+            const escHeaderRow = 5;
+            for (let y = 1; y <= holdYears; y++) {
+                const yr = escHeaderRow + y;
+                const eForm = 'Summary!$B$' + electricCostRow + '*(1+Summary!$B$' + R.escE + '/100)^(A' + yr + '-1)';
+                const gForm = 'Summary!$B$' + gasCostRow + '*(1+Summary!$B$' + R.escG + '/100)^(A' + yr + '-1)';
+                const wForm = 'Summary!$B$' + waterCostRow + '*(1+Summary!$B$' + R.escW + '/100)^(A' + yr + '-1)';
+                const eVal = computeScenario(mode, { rateMultipliers: { electric: Math.pow(1 + escE / 100, y - 1), gas: 1, water: 1 } }).electricAnnual;
+                const gVal = computeScenario(mode, { rateMultipliers: { electric: 1, gas: Math.pow(1 + escG / 100, y - 1), water: 1 } }).gasAnnual;
+                const wVal = computeScenario(mode, { rateMultipliers: { electric: 1, gas: 1, water: Math.pow(1 + escW / 100, y - 1) } }).waterAnnual;
+                eData.push([
+                    numCell(y, FMT.num),
+                    { t: 'n', f: eForm, v: Number(eVal.toFixed(6)), z: FMT.usd },
+                    { t: 'n', f: gForm, v: Number(gVal.toFixed(6)), z: FMT.usd },
+                    { t: 'n', f: wForm, v: Number(wVal.toFixed(6)), z: FMT.usd },
+                    { t: 'n', f: 'B' + yr + '+C' + yr + '+D' + yr, v: Number((eVal + gVal + wVal).toFixed(6)), z: FMT.usd }
+                ]);
+            }
+            const escWs = XLSX.utils.aoa_to_sheet(eData);
+            escWs['!cols'] = [{ wch: 8 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
+            XLSX.utils.book_append_sheet(workbook, escWs, 'Escalation');
+
+            // ================= ROW MAP (TECHNICAL) SHEET =================
+            // For anyone auditing or linking into this workbook's formulas only --
+            // property managers can ignore this tab entirely. Kept as the LAST
+            // sheet in the workbook (not inline in Summary) after usability testing
+            // showed this kind of content read as leaked/broken developer output
+            // when it appeared in the sheet a property manager actually opens.
+            const rmData = [];
+            rmData.push(['ROW MAP (TECHNICAL) - not needed for normal use']);
+            rmData.push(['This tab documents this specific export\'s formula structure for anyone auditing or linking into it externally. Property managers can ignore this tab.']);
+            rmData.push([]);
+            rmData.push(['Sheet layout note', 'This workbook\'s Summary tab has the same row layout every export EXCEPT the "TENANT MIX BLENDED CONSUMPTION" / "Blended Consumption Calculation" / "FULL OCCUPANCY COST PER RSF" / "OCCUPANCY-ADJUSTED COST" block, which only appears in Annual-mode exports. Row numbers below are specific to THIS export (' + (mode === 'monthly' ? 'Monthly mode' : 'Annual mode') + ') -- do not reuse them against an export from the other mode.']);
+            rmData.push(mode === 'monthly'
+                ? ['Monthly tab note', 'This is a Monthly-mode export. Its Monthly tab\'s TOTAL ANNUAL row (Monthly Cost / Electric / Gas / Water) is at row 30 for the current fixed 12-month, 4-tenant-type layout; the Summary tab\'s RESULTS section links to Monthly!R30/S30/T30/U30. If tenant types or months are ever made dynamic, these references would need to change.']
+                : ['Monthly tab note', 'This is an Annual-mode export -- it has no Monthly tab. (Monthly-mode exports add one, with cross-sheet links from the Summary tab\'s RESULTS section.)']);
+            rmData.push([]);
+            rmData.push(['KEY (row numbers in THIS export)', '']);
+            Object.keys(R).sort((a, b) => R[a] - R[b]).forEach(key => {
+                rmData.push([key, 'Summary!Row ' + R[key]]);
+            });
+            const rmWs = XLSX.utils.aoa_to_sheet(rmData);
+            rmWs['!cols'] = [{ wch: 30 }, { wch: 90 }];
+            XLSX.utils.book_append_sheet(workbook, rmWs, 'Row Map (Technical)');
+
+            const filename = `${propertyName.replace(/\s+/g, '_')}_Utilities_Forecast.xlsx`;
+            XLSX.writeFile(workbook, filename);
+
+            // On-screen confirmation -- usability testing found every tester had to
+            // rely solely on the browser's own download indicator with no signal
+            // from the tool itself that the click actually worked.
+            const confirmEl = document.getElementById('export-confirmation');
+            document.getElementById('export-confirmation-filename').textContent = filename;
+            confirmEl.style.display = 'block';
+            clearTimeout(window._exportConfirmTimeout);
+            window._exportConfirmTimeout = setTimeout(() => { confirmEl.style.display = 'none'; }, 6000);
+        }
+
+        // Monthly parameters: occupancy, tenant mix, and rates per month
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const tenantTypeKeys = Object.keys(tenantTypes);
+
+        function defaultMonthData() {
+            return {
+                occupancy: 50,
+                // Same safe default as Annual mode: 100% Standard Office / 0% else,
+                // not an even split across space types (see initTenantMix note).
+                mix: { 'Standard Office': 100, 'Lab / Biotech': 0, 'Life Sciences (Non-Lab)': 0, 'Medical / Clinical': 0 },
+                electricRate: 0.28,
+                gasRate: 1.92,
+                waterRate: 24.47
+            };
+        }
+
+        const monthlyData = {};
+        months.forEach(m => monthlyData[m] = defaultMonthData());
+        const monthlyRowInputs = {}; // month -> { occ, mix: {type: input}, electricRate, gasRate, waterRate, mixTotalSpan }
+
+        function updateMonthMixTotal(month) {
+            const row = monthlyRowInputs[month];
+            let total = 0;
+            Object.values(row.mix).forEach(inp => { total += parseFloat(inp.value) || 0; });
+            row.mixTotalSpan.textContent = total.toFixed(0) + '%';
+            row.mixTotalSpan.style.color = total <= 0 ? '#c62828' : (Math.abs(total - 100) < 0.5 ? '#2e7d32' : '#e65100');
+        }
+
+        // Initialize monthly table
+        function initMonthlyTable() {
+            const tbody = document.getElementById('monthly-table-body');
+            tbody.innerHTML = '';
+
+            months.forEach(month => {
+                const data = monthlyData[month];
+                const row = document.createElement('tr');
+
+                const cellStyle = 'padding: 3px 6px; border-bottom: 1px solid #eee;';
+                const inputStyle = 'width: 50px; padding: 3px; font-size: 11px;';
+
+                const monthCell = document.createElement('td');
+                monthCell.style.cssText = cellStyle;
+                monthCell.textContent = month.slice(0, 3);
+                row.appendChild(monthCell);
+
+                monthlyRowInputs[month] = { mix: {} };
+
+                const occCell = document.createElement('td');
+                occCell.style.cssText = cellStyle;
+                const occInput = document.createElement('input');
+                occInput.type = 'number';
+                occInput.min = '0'; occInput.max = '100'; occInput.step = '5';
+                occInput.value = data.occupancy;
+                occInput.style.cssText = inputStyle;
+                occInput.addEventListener('input', () => { monthlyData[month].occupancy = parseFloat(occInput.value) || 0; calculate(); });
+                occCell.appendChild(occInput);
+                row.appendChild(occCell);
+                monthlyRowInputs[month].occ = occInput;
+
+                tenantTypeKeys.forEach(type => {
+                    const mixCell = document.createElement('td');
+                    mixCell.style.cssText = cellStyle;
+                    const mixInput = document.createElement('input');
+                    mixInput.type = 'number';
+                    mixInput.min = '0'; mixInput.max = '100'; mixInput.step = '1';
+                    mixInput.value = data.mix[type];
+                    mixInput.style.cssText = inputStyle;
+                    mixInput.addEventListener('input', () => {
+                        monthlyData[month].mix[type] = parseFloat(mixInput.value) || 0;
+                        updateMonthMixTotal(month);
+                        calculate();
+                    });
+                    mixCell.appendChild(mixInput);
+                    row.appendChild(mixCell);
+                    monthlyRowInputs[month].mix[type] = mixInput;
+                });
+
+                const mixTotalCell = document.createElement('td');
+                mixTotalCell.style.cssText = cellStyle + 'font-weight:600;';
+                const mixTotalSpan = document.createElement('span');
+                mixTotalSpan.textContent = '100%';
+                mixTotalCell.appendChild(mixTotalSpan);
+                row.appendChild(mixTotalCell);
+                monthlyRowInputs[month].mixTotalSpan = mixTotalSpan;
+
+                const rateFields = [
+                    { key: 'electricRate', step: '0.01' },
+                    { key: 'gasRate', step: '0.01' },
+                    { key: 'waterRate', step: '0.25' }
+                ];
+                rateFields.forEach(field => {
+                    const rateCell = document.createElement('td');
+                    rateCell.style.cssText = cellStyle;
+                    const rateInput = document.createElement('input');
+                    rateInput.type = 'number';
+                    rateInput.min = '0'; rateInput.step = field.step;
+                    rateInput.value = data[field.key];
+                    rateInput.style.cssText = inputStyle;
+                    rateInput.addEventListener('input', () => { monthlyData[month][field.key] = parseFloat(rateInput.value) || 0; calculate(); });
+                    rateCell.appendChild(rateInput);
+                    row.appendChild(rateCell);
+                    monthlyRowInputs[month][field.key] = rateInput;
+                });
+
+                tbody.appendChild(row);
+                updateMonthMixTotal(month);
+            });
+        }
+
+        function copyJanuaryToAllMonths() {
+            const src = monthlyData['January'];
+            months.forEach(month => {
+                if (month === 'January') return;
+                monthlyData[month] = JSON.parse(JSON.stringify(src));
+                const row = monthlyRowInputs[month];
+                row.occ.value = src.occupancy;
+                tenantTypeKeys.forEach(type => { row.mix[type].value = src.mix[type]; });
+                row.electricRate.value = src.electricRate;
+                row.gasRate.value = src.gasRate;
+                row.waterRate.value = src.waterRate;
+                updateMonthMixTotal(month);
+            });
+            calculate();
+        }
+
+        function applyOccupancyRamp() {
+            const startOcc = Math.min(100, Math.max(0, parseFloat(document.getElementById('ramp-start-occ').value) || 0));
+            const stabilizedOcc = Math.min(100, Math.max(0, parseFloat(document.getElementById('ramp-stabilized-occ').value) || 0));
+            const rampMonths = Math.min(12, Math.max(1, parseInt(document.getElementById('ramp-months').value) || 1));
+
+            months.forEach((month, i) => {
+                let occ;
+                if (rampMonths <= 1 || i >= rampMonths - 1) {
+                    occ = i >= rampMonths - 1 ? stabilizedOcc : startOcc;
+                } else {
+                    occ = startOcc + (stabilizedOcc - startOcc) * (i / (rampMonths - 1));
+                }
+                occ = Math.round(occ * 10) / 10;
+                monthlyData[month].occupancy = occ;
+                monthlyRowInputs[month].occ.value = occ;
+            });
+            calculate();
+        }
+
+        // Get average occupancy across months (for display)
+        function getAverageOccupancy() {
+            const values = months.map(m => parseFloat(monthlyData[m].occupancy) || 0);
+            return values.reduce((a, b) => a + b, 0) / values.length;
+        }
+
+        // Gross-up is Annual-mode only. Rather than let the checkbox silently no-op in
+        // Monthly mode (the bug the Property Manager persona test caught), disable the
+        // controls outright and show an explicit reason so it's never ambiguous whether
+        // gross-up is actually in effect.
+        function syncGrossUpAvailability(mode) {
+            const monthly = mode === 'monthly';
+            inputs.grossUpEnabled.disabled = monthly;
+            inputs.grossUpOcc.disabled = monthly;
+            // Show the explanation any time the control is disabled -- not just when
+            // the checkbox happens to already be checked. A usability tester who
+            // switched straight to Monthly mode and then tried the (silently)
+            // disabled checkbox got no explanation at all; this makes the reason
+            // visible the moment the control becomes unusable, regardless of state.
+            document.getElementById('grossup-monthly-warning').classList.toggle('show', monthly);
+        }
+
+        // Mode switching
+        document.querySelectorAll('input[name="mode"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const mode = e.target.value;
+                document.getElementById('annual-inputs').style.display = mode === 'annual' ? 'block' : 'none';
+                document.getElementById('monthly-inputs').style.display = mode === 'monthly' ? 'block' : 'none';
+
+                if (mode === 'monthly') {
+                    document.getElementById('monthly-fixed-pct-e-display').textContent = inputs.fixedPctElectric.value;
+                    document.getElementById('monthly-fixed-pct-g-display').textContent = inputs.fixedPctGas.value;
+                    document.getElementById('monthly-fixed-pct-w-display').textContent = inputs.fixedPctWater.value;
+                }
+
+                syncGrossUpAvailability(mode);
+                calculate();
+            });
+        });
+
+        inputs.grossUpEnabled.addEventListener('change', () => {
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            syncGrossUpAvailability(mode);
+        });
+
+        // Keep monthly fixed% note in sync with the shared fixed-pct inputs
+        [inputs.fixedPctElectric, inputs.fixedPctGas, inputs.fixedPctWater].forEach(el => {
+            el.addEventListener('input', () => {
+                document.getElementById('monthly-fixed-pct-e-display').textContent = inputs.fixedPctElectric.value;
+                document.getElementById('monthly-fixed-pct-g-display').textContent = inputs.fixedPctGas.value;
+                document.getElementById('monthly-fixed-pct-w-display').textContent = inputs.fixedPctWater.value;
+            });
+        });
+        clampOnBlur(inputs.fixedPctElectric, 0, 100);
+        clampOnBlur(inputs.fixedPctGas, 0, 100);
+        clampOnBlur(inputs.fixedPctWater, 0, 100);
+        clampOnBlur(inputs.landlordShare, 0, 100);
+        clampOnBlur(inputs.camRecovery, 0, 100);
+        clampOnBlur(inputs.grossUpOcc, 0, 100);
+        clampOnBlur(inputs.sensitivity, 0, 100);
+        clampOnBlur(inputs.rateSensitivity, 0, 100);
+        clampOnBlur(inputs.holdYears, 1, 15);
+
+        // Metering type toggling
+        document.querySelectorAll('input[name="metering"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const submetered = e.target.value === 'submetered';
+                inputs.landlordShare.disabled = !submetered;
+                if (!submetered) inputs.landlordShare.value = 100;
+                calculate();
+            });
+        });
+
+        // Monthly UX buttons
+        document.getElementById('monthly-copy-btn').addEventListener('click', copyJanuaryToAllMonths);
+        document.getElementById('ramp-apply-btn').addEventListener('click', applyOccupancyRamp);
+
+        // Export button listener
+        document.getElementById('export-btn').addEventListener('click', exportToExcel);
+
+        // Recalculate on any input change
+        Object.values(inputs).forEach(input => {
+            if (!input) return;
+            const evt = input.type === 'checkbox' ? 'change' : 'input';
+            input.addEventListener(evt, calculate);
+        });
+
+        // Update subtitle displays
+        inputs.propertyName.addEventListener('input', () => {
+            displays.propertyNameDisplay.textContent = inputs.propertyName.value || 'Property Name';
+        });
+
+        inputs.rsf.addEventListener('input', () => {
+            const rsfValue = parseFloat(inputs.rsf.value);
+            displays.rsfDisplay.textContent = Number.isFinite(rsfValue) && rsfValue > 0 ? rsfValue.toLocaleString('en-US') : '—';
+        });
+
+        inputs.occupancy.addEventListener('input', () => {
+            displays.occupancyDisplay.textContent = inputs.occupancy.value + '%';
+        });
+
+        // Initialize
+        initTenantMix();
+        initMonthlyTable();
+        const initRsf = parseInt(inputs.rsf.value);
+        displays.rsfDisplay.textContent = Number.isFinite(initRsf) && initRsf > 0 ? initRsf.toLocaleString('en-US') : '—';
+        syncGrossUpAvailability(document.querySelector('input[name="mode"]:checked').value);
+        calculate();
+    </script>
+
+<!-- Optional signup / login modal (opened from the banner CTA). Closing it always
+     leaves full tool access — auth is never required. -->
+<div id="authModal" role="dialog" aria-modal="true" aria-label="Account">
+    <div class="am-card" id="authModalCard">
+        <button class="am-x" id="authModalClose" type="button" aria-label="Close">&#10005;</button>
+        <h2 id="amTitle">Create a free account</h2>
+        <p class="am-sub" id="amSub">Optional — all tools stay fully usable without an account.</p>
+        <button class="am-google" id="amGoogle" type="button">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>
+                <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z"/>
+                <path fill="#FBBC05" d="M3.97 10.71a5.4 5.4 0 0 1 0-3.42V4.96H.96a9 9 0 0 0 0 8.08l3.01-2.33z"/>
+                <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.9 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>
+            </svg>
+            Continue with Google
+        </button>
+        <div class="am-divider" aria-hidden="true"><span class="line"></span><span>or</span><span class="line"></span></div>
+        <form id="amForm">
+            <label for="amEmail">Email</label>
+            <input id="amEmail" type="email" autocomplete="email" required>
+            <label for="amPassword">Password</label>
+            <input id="amPassword" type="password" autocomplete="new-password" required>
+            <button class="am-submit" id="amSubmit" type="submit">Create account</button>
+        </form>
+        <div class="am-msg" id="amMsg" style="display:none" role="status"></div>
+        <div class="am-toggle" id="amToggle"></div>
+    </div>
+</div>
+
+<!-- =====================================================================
+     ChiefEO analytics — fire-and-forget usage tracking. Mirrors src/lib/track.js
+     (the canonical impl used by vng + stacking + chiefeo-inspector) verbatim:
+     same Supabase endpoint, same publishable anon key, the same
+     "chiefeo_session_id" localStorage key, and the #internal URL-flag self-tag.
+     Inlined (not imported) because this is a zero-build static page. Never
+     throws and never blocks the tool.
+     ===================================================================== -->
+<script>
+(function () {
+    "use strict";
+    var SUPABASE_URL = "https://dsmbppzvembacitwdrsj.supabase.co";
+    var SUPABASE_KEY = "sb_publishable_jqiREpSEu8ItzSEcjTypsQ_41EivRsM";
+
+    function getSessionId() {
+        try {
+            var id = localStorage.getItem("chiefeo_session_id");
+            if (!id) {
+                id = (typeof crypto !== "undefined" && crypto.randomUUID)
+                    ? crypto.randomUUID()
+                    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+                localStorage.setItem("chiefeo_session_id", id);
+            }
+            return id;
+        } catch (e) { return "unknown"; }
+    }
+
+    function isInternal() {
+        try {
+            if (/[#?&]internal\b/.test(location.hash + location.search)) {
+                localStorage.setItem("chiefeo_internal", "1");
+            }
+            return localStorage.getItem("chiefeo_internal") === "1";
+        } catch (e) { return false; }
+    }
+
+    window.chiefeoTrack = function (app, event, properties) {
+        try {
+            var props = Object.assign({}, properties || {}, isInternal() ? { internal: true } : {});
+            if (location.protocol === "file:") return;
+            fetch(SUPABASE_URL + "/rest/v1/app_events", {
+                method: "POST",
+                headers: {
+                    apikey: SUPABASE_KEY,
+                    Authorization: "Bearer " + SUPABASE_KEY,
+                    "Content-Type": "application/json",
+                    Prefer: "return=minimal",
+                },
+                body: JSON.stringify({
+                    app: app,
+                    event: event,
+                    session_id: getSessionId(),
+                    properties: props,
+                    path: window.location.pathname,
+                    user_agent: navigator.userAgent,
+                }),
+                keepalive: true,
+            }).catch(function () {});
+        } catch (e) {}
+    };
+
+    window.chiefeoTrack("utilities-forecaster", "app_opened");
+})();
+</script>
+
+<!-- =====================================================================
+     Optional ChiefEO account layer. Additive and non-blocking:
+       • No gating — anonymous users keep 100% of the tool, offline or not.
+       • Same-origin with the hub, so a hub session (localStorage) and the
+         chiefeo_ref cookie are already shared; a signed-in hub user sees the
+         account menu here with no extra sign-in.
+       • The tool's own calculation logic (above) never reads or transmits
+         file/input data through this layer — it only touches auth/session state.
+       • supabase-js is loaded from the CDN and the framework-free core is
+         imported from /auth/core (a vendored copy of shared/chiefeo-auth/core,
+         already deployed for the Stacking Plan tool — reused here as-is).
+       • Skipped entirely under file:// so an offline regression harness never
+         depends on the network or ES-module file:// loading.
+     ===================================================================== -->
+<script>
+(function () {
+    "use strict";
+
+    if (location.protocol === "file:") return;
+
+    var SUPABASE_URL = "https://dsmbppzvembacitwdrsj.supabase.co";
+    // Public anon key ONLY (never service_role). Safe to ship in client code.
+    var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRzbWJwcHp2ZW1iYWNpdHdkcnNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3ODgwOTAsImV4cCI6MjA5MjM2NDA5MH0.Tt_xcENjIQF7KvlhFZX46U1MWfwrYZLtZEAluZzDzN0";
+    var SITE_URL = "https://www.chiefeotool.com";
+    var SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js";
+
+    var $ = function (id) { return document.getElementById(id); };
+
+    function loadSupabaseCDN() {
+        return new Promise(function (resolve) {
+            if (window.supabase && window.supabase.createClient) return resolve(true);
+            var s = document.createElement("script");
+            s.src = SUPABASE_CDN;
+            s.async = true;
+            s.onload = function () { resolve(!!(window.supabase && window.supabase.createClient)); };
+            s.onerror = function () { resolve(false); };
+            document.head.appendChild(s);
+        });
+    }
+
+    import("./auth/core/index.js").then(function (core) {
+        try { core.captureReferralCode(); } catch (e) {}
+
+        loadSupabaseCDN().then(function (ok) {
+            if (!ok) return;
+            core.configureAuth({
+                supabaseUrl: SUPABASE_URL,
+                supabaseAnonKey: SUPABASE_ANON_KEY,
+                siteUrl: SITE_URL,
+                createClient: window.supabase.createClient,
+            });
+            wireAccountUI(core);
+        });
+    }).catch(function () {});
+
+    function wireAccountUI(core) {
+        var supabase = core.getSupabase();
+        if (!supabase) return;
+
+        var account = $("authAccount");
+        var banner = $("authBanner");
+        var menu = $("authMenu");
+        var trigger = $("acctTrigger");
+        var modal = $("authModal");
+
+        var bannerDismissed = false;
+        var menuOpen = false;
+
+        function identityFrom(user) {
+            var meta = (user && user.user_metadata) || {};
+            var email = (user && user.email) || "";
+            var name = meta.full_name || meta.name || meta.user_name || email || "Account";
+            var avatar = meta.avatar_url || meta.picture || null;
+            var initial = (name || email || "?").trim().charAt(0).toUpperCase();
+            return { email: email, name: name, avatar: avatar, initial: initial };
+        }
+
+        function render(user) {
+            if (user) {
+                var id = identityFrom(user);
+                if (id.avatar) {
+                    trigger.innerHTML = "";
+                    var img = document.createElement("img");
+                    img.src = id.avatar; img.alt = ""; img.referrerPolicy = "no-referrer";
+                    trigger.appendChild(img);
+                } else {
+                    trigger.textContent = id.initial;
+                }
+                trigger.setAttribute("aria-label", "Account: " + id.name);
+                trigger.title = id.name;
+                $("acctName").textContent = id.name !== id.email ? id.name : "";
+                $("acctName").style.display = id.name && id.name !== id.email ? "block" : "none";
+                $("acctEmail").textContent = id.email;
+                account.hidden = false;
+                banner.classList.remove("show");
+            } else {
+                account.hidden = true;
+                closeMenu();
+                if (!bannerDismissed) banner.classList.add("show");
+            }
+        }
+
+        function closeMenu() {
+            menuOpen = false;
+            menu.classList.remove("open");
+            trigger.setAttribute("aria-expanded", "false");
+        }
+        function toggleMenu() {
+            menuOpen = !menuOpen;
+            menu.classList.toggle("open", menuOpen);
+            trigger.setAttribute("aria-expanded", menuOpen ? "true" : "false");
+        }
+
+        trigger.addEventListener("click", function (e) { e.stopPropagation(); toggleMenu(); });
+        document.addEventListener("click", function (e) {
+            if (menuOpen && !account.contains(e.target)) closeMenu();
+        });
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") { if (menuOpen) closeMenu(); if (modal.classList.contains("show")) closeModal(); }
+        });
+
+        $("acctSignout").addEventListener("click", function () {
+            $("acctSignout").disabled = true;
+            core.signOut().then(function () {
+                $("acctSignout").disabled = false;
+                closeMenu();
+            });
+        });
+
+        $("authBannerDismiss").addEventListener("click", function () {
+            bannerDismissed = true;
+            banner.classList.remove("show");
+        });
+        $("authBannerCta").addEventListener("click", openModal);
+
+        var mode = "signup";
+        var busy = false;
+
+        function setMsg(text, ok) {
+            var el = $("amMsg");
+            if (!text) { el.style.display = "none"; el.innerHTML = ""; return; }
+            el.className = "am-msg " + (ok ? "ok" : "err");
+            el.textContent = text;
+            el.style.display = "block";
+        }
+
+        function renderModalMode() {
+            var signup = mode === "signup";
+            $("amTitle").textContent = signup ? "Create a free account" : "Log in";
+            $("amSub").textContent = signup
+                ? "Optional — all tools stay fully usable without an account."
+                : "Welcome back.";
+            $("amSubmit").textContent = signup ? "Create account" : "Log in";
+            $("amPassword").setAttribute("autocomplete", signup ? "new-password" : "current-password");
+            $("amToggle").innerHTML = signup
+                ? 'Already have an account? <button type="button" class="am-link" id="amSwitch">Log in</button>'
+                : 'Need an account? <button type="button" class="am-link" id="amSwitch">Sign up</button>';
+            $("amSwitch").addEventListener("click", function () {
+                mode = signup ? "login" : "signup";
+                setMsg("");
+                renderModalMode();
+            });
+        }
+
+        function openModal() {
+            mode = "signup";
+            setMsg("");
+            renderModalMode();
+            modal.classList.add("show");
+            setTimeout(function () { $("amEmail").focus(); }, 0);
+        }
+        function closeModal() { modal.classList.remove("show"); }
+
+        $("authModalClose").addEventListener("click", closeModal);
+        modal.addEventListener("click", function (e) { if (e.target === modal) closeModal(); });
+
+        $("amForm").addEventListener("submit", function (e) {
+            e.preventDefault();
+            if (busy) return;
+            busy = true;
+            $("amSubmit").disabled = true;
+            setMsg("");
+            var email = $("amEmail").value, pw = $("amPassword").value;
+            var p = mode === "signup"
+                ? core.signUpWithEmail(email, pw)
+                : core.signInWithEmail(email, pw);
+            p.then(function (r) {
+                busy = false;
+                $("amSubmit").disabled = false;
+                if (r.ok && r.code === "ok") { closeModal(); return; }
+                if (r.code === "needs_verification") {
+                    setMsg(r.message + "  ", r.ok);
+                    var b = document.createElement("button");
+                    b.type = "button"; b.className = "am-link"; b.textContent = "Resend link";
+                    b.addEventListener("click", function () {
+                        core.resendVerification(email).then(function (rr) { setMsg(rr.message, rr.ok); });
+                    });
+                    $("amMsg").appendChild(b);
+                } else {
+                    setMsg(r.message, r.ok);
+                }
+            });
+        });
+
+        $("amGoogle").addEventListener("click", function () {
+            if (busy) return;
+            busy = true;
+            $("amGoogle").disabled = true;
+            setMsg("");
+            core.signInWithGoogle().then(function (r) {
+                if (!r.ok) { busy = false; $("amGoogle").disabled = false; setMsg(r.message, false); }
+            });
+        });
+
+        supabase.auth.getUser().then(function (res) {
+            render(res && res.data ? res.data.user : null);
+        });
+        supabase.auth.onAuthStateChange(function (_event, session) {
+            render(session ? session.user : null);
+        });
+    }
+})();
+</script>
+</body>
+</html>

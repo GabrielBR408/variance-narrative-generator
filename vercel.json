@@ -37,6 +37,10 @@
       "destination": "/stacking.html"
     },
     {
+      "source": "/utilities-forecaster",
+      "destination": "/utilities-forecaster.html"
+    },
+    {
       "source": "/downdriller",
       "destination": "https://chiefeo-gl-down-driller.vercel.app"
     },

@@ -36,6 +36,11 @@ const TOOLS = [
     label: 'Owner Report Generator (Beta)',
     href: '/orgen',
     desc: 'Compiles monthly owner reports.'
+  },
+  {
+    label: 'Utilities Forecaster (Beta)',
+    href: '/utilities-forecaster',
+    desc: 'Estimate a building’s annual/monthly utility costs from RSF, tenant mix, and rates — with a formula-driven Excel export.'
   }
 ]
 
