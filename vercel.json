@@ -77,16 +77,16 @@
       "destination": "https://chiefeo-inspector.vercel.app/:path*"
     },
     {
+      "source": "/vng",
+      "destination": "https://chiefeo-vng.vercel.app/vng"
+    },
+    {
+      "source": "/vng/:path*",
+      "destination": "https://chiefeo-vng.vercel.app/vng/:path*"
+    },
+    {
       "source": "/((?!api/|assets/).*)",
       "destination": "/index.html"
     }
-  ],
-  "functions": {
-    "api/generate.js": {
-      "maxDuration": 60
-    },
-    "api/ocr.js": {
-      "maxDuration": 60
-    }
-  }
+  ]
 }

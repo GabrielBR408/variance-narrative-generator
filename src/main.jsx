@@ -1,6 +1,5 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
-import App from './App.jsx'
 import Hub from './routes/Hub.jsx'
 import Skills from './routes/Skills.jsx'
 import './styles/app.css'
@@ -16,14 +15,16 @@ const Privacy = React.lazy(() => import('./routes/Privacy.jsx'))
 
 // --- Lightweight path routing ---------------------------------------------
 // The app has no router dependency; a single pathname switch keeps it that way.
-//   /vng (and anything under it) → the Variance Narrative Generator app
+//   /skills → the skills page
 //   /tos, /privacy → the legal pages (deep-linked as /tos#5-2, /privacy#7-2)
 //   /    → the hub landing page (and any other in-app path falls back to it)
 // Deep paths still load index.html (the SPA rewrite in vercel.json), so this
-// switch decides what renders — a stale or mistyped /vng/... deep link must
-// land in the app, not silently render the hub. /downdriller and /orgen never
-// reach here — vercel.json proxies them to other Vercel projects. The document
-// title is set per route so the hub doesn't carry the VNG title from index.html.
+// switch decides what renders. /vng, /downdriller, /orgen and /chiefeoinspector
+// never reach here — vercel.json proxies them to other Vercel projects. VNG in
+// particular was extracted out of this repo into `chiefeo-vng`; there is no
+// longer a /vng branch here, and the SPA must never answer that path (see the
+// navigateFallbackDenylist in vite.config.js). The document title is set per
+// route so each page carries its own, not the static one from index.html.
 // Vercel Web Analytics only works where Vercel serves the /_vercel/insights
 // script — the production domains and *.vercel.app preview deploys. Everywhere
 // else (local `vite preview`, GitHub Pages, any static mirror) the <Analytics />
@@ -40,10 +41,6 @@ function analyticsEnabled() {
 
 function pickRoute() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
-  if (path === '/vng' || path.startsWith('/vng/')) {
-    document.title = 'Variance Narrative Generator'
-    return <App />
-  }
   if (path === '/skills' || path.startsWith('/skills/')) {
     document.title = 'Skills — ChiefEO Tool'
     return <Skills />
@@ -71,8 +68,8 @@ createRoot(document.getElementById('root')).render(
       <React.Suspense fallback={<main className="page" />}>{pickRoute()}</React.Suspense>
     </AccountShell>
     {/* App-wide Vercel Web Analytics (page views/traffic) for this single
-        deployment — covers the hub and every route/proxied view. Unrelated to
-        the /vng-only `app_opened` custom event, which is fired inside App.jsx.
+        deployment — covers the hub and its routes. Proxied tools (/vng and the
+        rest) report under their own Vercel projects now.
         Rendered only on hosts Vercel actually serves (see analyticsEnabled). */}
     {analyticsEnabled() && <Analytics />}
   </React.StrictMode>

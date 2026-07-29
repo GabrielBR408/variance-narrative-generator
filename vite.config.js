@@ -3,12 +3,11 @@ import { execSync } from 'node:child_process'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import { handleGenerate } from './server/generate.js'
 
 // --- Build stamp (version + commit SHA) -------------------------------------
-// Surfaced in the /vng footer and attached to feedback events so a report can
-// be tied to the exact deploy it came from. Vercel provides the SHA via env;
-// local builds fall back to git; 'unknown' only if neither is available.
+// Ties a built bundle to the exact deploy it came from. Vercel provides the SHA
+// via env; local builds fall back to git; 'unknown' only if neither is
+// available.
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 function buildCommitSha() {
   const fromEnv = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA
@@ -17,36 +16,6 @@ function buildCommitSha() {
     return execSync('git rev-parse --short=7 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
   } catch {
     return 'unknown'
-  }
-}
-
-// --- Local /generate endpoint (dev + preview middleware) -------------------
-// The real request handler now lives in server/generate.js so it can graduate
-// to a production Node/Express server unchanged. Here it is simply mounted in
-// the Vite middleware chain so the front end has a real HTTP round-trip during
-// dev and preview.
-// Phase 5: receives multipart/form-data with actual file bytes, verifies
-// surface facts (filename, size, MIME, role), and returns a placeholder
-// response. No parsing, AI, storage, calculations, persistence, or export.
-function generateEndpoint() {
-  const mount = (server) => {
-    server.middlewares.use('/api/generate', (req, res) => {
-      if (req.method !== 'POST') {
-        // Match production (api/generate.js): non-POST gets a clean 405 with an
-        // Allow header instead of falling through to the SPA shell.
-        res.statusCode = 405
-        res.setHeader('Allow', 'POST')
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ success: false, error: 'Method not allowed.' }))
-        return
-      }
-      handleGenerate(req, res)
-    })
-  }
-  return {
-    name: 'generate-endpoint',
-    configureServer: mount,   // dev
-    configurePreviewServer: mount // preview
   }
 }
 
@@ -63,7 +32,6 @@ export default defineConfig({
   },
   plugins: [
     react(),
-    generateEndpoint(),
     VitePWA({
       // 'prompt' (not 'autoUpdate') so a freshly deployed service worker waits
       // and surfaces an "update available" banner via onNeedRefresh instead of
@@ -79,26 +47,27 @@ export default defineConfig({
       // acceptable for these server-backed routing changes.
       selfDestroying: true,
       // Belt-and-suspenders: never let the SPA navigate-fallback answer the proxied
-      // / moved paths, so they always hit the network (and the Vercel rewrites).
+      // paths, so they always hit the network (and the Vercel rewrites). /vng is
+      // now proxied to the extracted `chiefeo-vng` project like the other three,
+      // so this entry is load-bearing — the SPA has no /vng route to fall back to.
       workbox: {
         navigateFallbackDenylist: [/^\/downdriller/, /^\/orgen/, /^\/chiefeoinspector/, /^\/vng/]
       },
       includeAssets: ['favicon.svg', 'icons/icon-180.png'],
       manifest: {
-        // Canonical site identity is now the hub (ChiefEO Tool), so the installed
-        // PWA and its apple-mobile-web-app-title carry the hub brand — even though
-        // start_url launches into the /vng app.
+        // Canonical site identity is the hub (ChiefEO Tool), so the installed PWA
+        // and its apple-mobile-web-app-title carry the hub brand.
         name: 'ChiefEO Tool',
         short_name: 'ChiefEO',
         description: 'Practical tools for commercial property management.',
         theme_color: '#1c2a3a',
         background_color: '#f4f5f7',
         display: 'standalone',
-        // Hub restructure: the VNG app itself lives at /vng (the root is the
-        // hub), so an installed PWA must launch into the app, not the hub. The
-        // scope stays at the base — it must contain start_url. Under a GitHub
-        // Pages sub-path deploy the base IS the app, so start_url stays there.
-        start_url: base === '/' ? '/vng' : base,
+        // VNG has been extracted to its own repo/Vercel project and is reached
+        // through a rewrite, so it is no longer part of this PWA's scope and
+        // must not be the launch target — an installed app that started at /vng
+        // would leave its own scope on first paint. Launch into the hub instead.
+        start_url: base,
         scope: base,
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
