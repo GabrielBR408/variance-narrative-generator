@@ -53,6 +53,10 @@
       "destination": "/tools/chiefeoinspector.html"
     },
     {
+      "source": "/tools/vng",
+      "destination": "/tools/vng.html"
+    },
+    {
       "source": "/downdriller",
       "destination": "https://chiefeo-gl-down-driller.vercel.app"
     },

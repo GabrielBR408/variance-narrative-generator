@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1c2a3a">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+
+  <!-- VNG's landing surface. Until the extraction this copy lived on the hub
+       homepage (src/components/HomeLandingContent.jsx), because VNG had no URL
+       of its own separate from '/'. Now that /vng is a vercel.json proxy to the
+       chiefeo-vng project — whose <head> this repo never serves — the copy and
+       markup belong here, matching the other three tools. All builder-identity
+       copy is deliberately excluded: the "why trust it" answer leans on
+       auditability, not a byline. See docs/seo-integration-notes.md. -->
+  <title>Variance Narrative Generator | ChiefEO</title>
+  <meta name="description" content="Turn GL variance data into owner-ready narratives, grounded in the actual transactions. Every line traces back to the GL. Auditable, not a black box.">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="VNG: Variance Narratives Grounded in Your GL">
+  <meta property="og:description" content="Every variance narrative traces back to real GL transactions. No black-box AI guessing — just faster write-ups.">
+  <meta property="og:url" content="https://chiefeotool.com/tools/vng">
+  <meta property="og:site_name" content="ChiefEO">
+  <!-- Absolute URL: relative og:image paths don't resolve in link previews.
+       chiefeo-vng's own og:image points at this same asset. -->
+  <meta property="og:image" content="https://chiefeotool.com/images/og-vng.png">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="VNG: Variance Narratives Grounded in Your GL">
+  <meta name="twitter:description" content="Every variance narrative traces back to real GL transactions. No black-box AI guessing — just faster write-ups.">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "VNG — Variance Narrative Generator",
+    "description": "Converts general ledger variance data into owner-ready narrative commentary, grounded directly in GL transactions. Built for property accountants and PMs who need auditable, defensible variance explanations without manual write-ups.",
+    "applicationCategory": "BusinessApplication",
+    "applicationSubCategory": "Commercial Real Estate Accounting Tool",
+    "operatingSystem": "Web",
+    "browserRequirements": "Requires a modern browser with JavaScript enabled (Chrome, Edge, Firefox, Safari — current versions)",
+    "url": "https://chiefeotool.com/vng",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Golden Real Estate Ventures and Exchanges LLC",
+      "url": "https://chiefeotool.com"
+    }
+  }
+  </script>
+  <link rel="stylesheet" href="/tools/landing.css">
+</head>
+<body>
+  <main class="page">
+    <a class="back-to-hub" href="/">← ChiefEO Tool</a>
+
+    <header class="hero">
+      <p class="eyebrow">Variance Narrative Generator</p>
+      <h1>Your GL already knows why the number moved. VNG just writes it down.</h1>
+      <p class="lede">Every month, someone on your accounting team stares at a budget-vs-actual report, finds the line items that jumped, and starts typing an explanation an owner will actually accept. VNG reads your GL variance data and drafts that narrative for you — grounded in the actual transactions behind the number, not a guess at what probably happened.</p>
+      <a class="cta" href="/vng">Try VNG Now →</a>
+    </header>
+
+    <section>
+      <h2>Who this is for</h2>
+      <ul>
+        <li><strong>Property accountants</strong> who own the monthly variance write-up and want a grounded first draft instead of a blank page.</li>
+        <li><strong>Property managers</strong> who have to explain the numbers to an owner and need the explanation to hold up when someone asks how they know.</li>
+        <li><strong>Anyone reporting on multiple properties</strong>, where the same variance conversation gets rewritten from scratch several times a month.</li>
+        <li><strong>Teams who value speed and transparency.</strong> No setup, no contracts — just drop a file and get instant value.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>What it solves</h2>
+      <p>Variance commentary is a research problem disguised as a writing problem. The hard part isn't phrasing it — it's going and finding out what actually happened in the ledger before you can say anything defensible about it. So the account jumped $7,650; now you're pulling GL detail, hunting for the invoice, working out whether it was a one-time repair or the new run rate.</p>
+      <p>Done by hand, that's the same investigation repeated for every material line, every month, across every property. And because it's tedious, it's exactly where vague commentary creeps in — "increased due to timing" written because the number moved and something had to be said, not because anyone traced it.</p>
+      <p>VNG does the tracing. It reads your variance data, pulls the GL detail behind each material line, and drafts commentary from what's actually in the ledger. Your figures are never altered — the numbers in your report come from your source data, exactly as reported. What you get back is a first draft you can check, not a black box you have to trust.</p>
+    </section>
+
+    <section>
+      <h2>Features</h2>
+      <ul>
+        <li><strong>GL-grounded narrative drafting.</strong> Narratives are generated from the transactions that make up the variance, not a generic template — so "increased due to timing of janitorial invoice" is a statement VNG can actually back up, not a guess.</li>
+        <li><strong>Materiality-aware output.</strong> VNG focuses commentary on variances that clear a materiality threshold, so you're not writing three sentences to explain a $40 rounding difference.</li>
+        <li><strong>Owner-ready tone out of the box.</strong> Drafts read like something a PM would actually send an owner — direct, specific, no filler — so editing is fast rather than a full rewrite.</li>
+        <li><strong>Transparent sourcing.</strong> Every narrative can be traced back to the underlying GL lines it was drawn from, which matters when an owner or asset manager asks "how do you know that."</li>
+        <li><strong>Built for the monthly cadence.</strong> Designed around the reality of a recurring reporting cycle, not a one-off analysis — bring this month's numbers, get this month's narratives.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>How it works</h2>
+      <ol>
+        <li><strong>Bring your variance data.</strong> Upload or paste your budget-vs-actual GL export — the same variance report you'd normally work from line by line.</li>
+        <li><strong>VNG matches variances to the transactions behind them.</strong> It identifies the material variances, pulls the underlying GL detail for each one, and drafts a narrative grounded in what actually happened in the ledger — not a generic explanation of what a variance "usually" means.</li>
+        <li><strong>You review, adjust, and export.</strong> Read through the drafted narratives, tighten anything that needs your judgment (a lease event, a one-time capital item, context only you know), and export commentary that's ready to sit next to your income statement.</li>
+      </ol>
+      <p>Typical input: a monthly GL variance export with budget and actual columns by account. Typical output: a narrative for each material variance, written in owner-facing language and traceable back to the transactions that generated it.</p>
+    </section>
+
+    <section>
+      <h2>Real use-case example</h2>
+      <p><strong>Input</strong> (anonymized GL variance excerpt):</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Account</th><th>Budget</th><th>Actual</th><th>Variance</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Repairs &amp; Maintenance — HVAC</td><td>$4,200</td><td>$11,850</td><td>+$7,650 (182%)</td></tr>
+            <tr><td>Janitorial Services</td><td>$8,500</td><td>$6,100</td><td>-$2,400 (-28%)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>VNG-drafted narrative:</strong></p>
+      <blockquote class="quote">
+        <p><em>Repairs &amp; Maintenance — HVAC came in $7,650 over budget due to an unplanned compressor repair on the rooftop unit serving the 4th floor, invoiced mid-month. This was a one-time repair, not a recurring cost increase.</em></p>
+        <p><em>Janitorial Services came in $2,400 under budget because the March invoice was received after month-end close and will post in the following period; year-to-date janitorial spend remains on track with budget.</em></p>
+      </blockquote>
+      <p>Both narratives are pulled directly from the GL detail underneath the variance line — the invoice date, the vendor, the account activity — not inferred from the size of the number alone.</p>
+    </section>
+
+    <section>
+      <h2>FAQ</h2>
+      <dl class="faq">
+        <dt>Does VNG make up numbers or just explain them?</dt>
+        <dd>VNG doesn't touch or alter your figures — it reads the GL detail behind a variance and drafts language to explain it. The numbers in your report come from your source data, exactly as reported.</dd>
+
+        <dt>What counts as a "material" variance?</dt>
+        <dd>You can set the materiality threshold — a dollar amount, a percentage, or both — so VNG focuses on the variances that actually warrant commentary instead of narrating every account.</dd>
+
+        <dt>Can I edit the narratives before sending them?</dt>
+        <dd>Yes, and you should. VNG produces a strong first draft grounded in real transaction data, but you still bring the judgment calls only a PM on the ground would know — a tenant conversation, a planned capital project, context that isn't in the GL.</dd>
+
+        <dt>What GL formats does VNG accept?</dt>
+        <dd>VNG is built to work with standard budget-vs-actual GL exports. If your export format doesn't parse cleanly, that's worth flagging — the goal is to handle real-world exports, not a single idealized format.</dd>
+
+        <dt>Is this still labeled a prototype?</dt>
+        <dd>No — VNG is a stable, production tool in active use. It's not a proof-of-concept; it's built to be part of your actual monthly reporting workflow.</dd>
+
+        <dt>Why should I trust the output?</dt>
+        <dd>Because you can check it. Every narrative traces back to a specific line of GL detail — the invoice, the vendor, the account activity — so you can verify any sentence against your own source data. The figures themselves are parsed deterministically and never rewritten, and you review and edit every draft before it goes out. It's auditable, not a black box.</dd>
+      </dl>
+    </section>
+
+    <section class="cta-block">
+      <h2>Stop writing the same variance explanation three different ways across three different properties.</h2>
+      <a class="cta" href="/vng">Try VNG Now →</a>
+    </section>
+
+    <nav class="tool-links">
+      <a href="/tools/orgen">Owner Report Generator</a>
+      <a href="/tools/downdriller">GL Down Driller</a>
+      <a href="/tools/chiefeoinspector">ChiefEO Inspector</a>
+      <a href="/">All ChiefEO tools</a>
+    </nav>
+
+  </main>
+<footer class="site-footer">
+  <nav class="site-footer-links" aria-label="Legal">
+    <a href="/tos">Terms of Service</a>
+    <span class="site-footer-sep" aria-hidden="true">|</span>
+    <a href="/privacy">Privacy Policy</a>
+    <span class="site-footer-sep" aria-hidden="true">|</span>
+    <a href="mailto:support@chiefeotool.com">Contact</a>
+  </nav>
+  <p class="site-footer-copy">&copy; 2026 Golden Real Estate Ventures and Exchanges LLC. All rights reserved.</p>
+</footer>
+
+</body>
+</html>

@@ -19,9 +19,9 @@ function buildCommitSha() {
   }
 }
 
-// Base public path. Defaults to '/' for local dev/preview and any server deploy;
-// the GitHub Pages workflow sets VITE_BASE to the project sub-path
-// ('/variance-narrative-generator/') so built asset URLs resolve there.
+// Base public path. '/' for local dev/preview and the Vercel deploy, which is
+// the only deploy target now that the GitHub Pages mirror is retired. Kept as an
+// env override so a sub-path deploy stays possible without code changes.
 const base = process.env.VITE_BASE || '/'
 
 export default defineConfig({
