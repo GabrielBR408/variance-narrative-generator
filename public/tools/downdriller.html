@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1c2a3a">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+
+  <!-- SEO package: meta_og_tags.md block 3 + schema_markup.md block 3.
+       The package maps these to chiefeotool.com/downdriller, but that path is a
+       vercel.json proxy to the GL Down Driller's own Vercel project — this repo
+       never serves its <head>. This standalone landing page carries the copy and
+       markup instead, and links through to the live tool. -->
+  <title>GL Down Driller — GL Detail Analysis Tool | ChiefEO</title>
+  <meta name="description" content="Auto-detects GL export formats and drills into detail across multiple entities, entirely in your browser. No GL data ever leaves your device.">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="GL Down Driller: Drill GL Detail Without the Data Risk">
+  <meta property="og:description" content="Two-pass column matching, multi-entity support, zero data exfiltration. All processing stays local in your browser.">
+  <meta property="og:url" content="https://chiefeotool.com/downdriller">
+  <meta property="og:site_name" content="ChiefEO">
+  <!-- og:image / twitter:image omitted: the package specifies
+       /images/gl-down-driller-screenshot.png, which does not exist in this repo. -->
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="GL Down Driller: Drill GL Detail Without the Data Risk">
+  <meta name="twitter:description" content="Two-pass column matching, multi-entity support, zero data exfiltration. All processing stays local in your browser.">
+
+  <!-- "image" omitted for the same missing-asset reason. "price": "0" is the
+       package's assumption — confirm before this goes live. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "GL Down Driller",
+    "description": "Auto-detects general ledger export formats across systems and drills down through GL detail with two-pass column matching and multi-entity support. All processing happens in-browser — no GL data ever leaves the device.",
+    "applicationCategory": "BusinessApplication",
+    "applicationSubCategory": "Commercial Real Estate Accounting Tool",
+    "operatingSystem": "Web",
+    "browserRequirements": "Requires a modern browser with JavaScript enabled (Chrome, Edge, Firefox, Safari — current versions)",
+    "softwareVersion": "1.1.0",
+    "url": "https://chiefeotool.com/downdriller",
+    "sameAs": [
+      "https://chiefeo-gl-down-driller.vercel.app",
+      "https://github.com/GabrielBR408/GL-Down-Driller"
+    ],
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "Gabriel Roberts",
+      "jobTitle": "General Manager, Property Management",
+      "worksFor": {
+        "@type": "Organization",
+        "name": "Lincoln Property Company"
+      },
+      "url": "https://www.linkedin.com/in/gabrielbroberts/"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Golden Real Estate Ventures and Exchanges LLC",
+      "url": "https://chiefeotool.com"
+    }
+  }
+  </script>
+  <link rel="stylesheet" href="/tools/landing.css">
+</head>
+<body>
+  <main class="page">
+    <a class="back-to-hub" href="/">← ChiefEO Tool</a>
+
+    <header class="hero">
+      <p class="eyebrow">GL Down Driller</p>
+      <h1>Every GL export looks different. GL Down Driller doesn't care.</h1>
+      <p class="lede">Yardi, MRI, RealPage, a controller's custom export from who-knows-what system — GL formats are never consistent, and neither is the time it takes to figure out which column is which before you can actually drill into the detail. GL Down Driller auto-detects the format, matches columns automatically, and lets you drill into GL detail across multiple entities — entirely in your browser, with nothing uploaded anywhere.</p>
+      <a class="cta" href="/downdriller">Try GL Down Driller Now →</a>
+    </header>
+
+    <section>
+      <h2>Who this is for</h2>
+      <ul>
+        <li><strong>Accountants</strong> who spend the first ten minutes of every GL review just figuring out which columns are which in a new or unfamiliar export.</li>
+        <li><strong>Controllers</strong> overseeing multiple entities or properties who need to drill into GL detail without opening a different tool or template for each system's export format.</li>
+        <li><strong>Junior FP&amp;A analysts</strong> learning to navigate GL detail who need a tool that adapts to the data instead of forcing the data into a rigid template.</li>
+        <li><strong>Anyone handling sensitive financial data</strong> who wants GL analysis without uploading a general ledger export to a third-party server.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>What it solves</h2>
+      <p>Drilling into GL detail sounds simple until you're staring at an export from a system you don't normally work in, with column headers that don't match what you expected, and no clean way to get to the transaction-level detail behind a summary number. Every accounting system exports GL data a little differently — different column orders, different naming conventions, different ways of handling multi-entity data. That inconsistency turns a five-minute drill-down into a twenty-minute exercise in reverse-engineering the file.</p>
+      <p>There's also a data-handling problem most tools ignore: GL exports contain real financial detail, and uploading that to a third-party server to get it analyzed is a legitimate concern for anyone handling client, tenant, or owner financials.</p>
+      <p>GL Down Driller addresses both. It auto-detects the format of whatever GL export you bring — using a two-pass column-matching process to correctly identify what each column represents, even across formats it hasn't seen structured exactly that way before. And because all processing happens in your browser, the file never leaves your device. There's no upload, no server-side storage, no third party ever touching your GL data.</p>
+    </section>
+
+    <section>
+      <h2>Features</h2>
+      <ul>
+        <li><strong>Automatic GL format detection.</strong> No manual column mapping required for standard exports — the tool identifies the structure of the file you bring.</li>
+        <li><strong>Two-pass column matching.</strong> A first pass identifies likely column matches; a second pass verifies and corrects them, which is what makes the auto-detection reliable across inconsistent export formats instead of just guessing once and hoping.</li>
+        <li><strong>Multi-entity support.</strong> Drill into GL detail across multiple entities or properties in the same session without re-uploading or reconfiguring for each one.</li>
+        <li><strong>In-browser processing — no data leaves your device.</strong> There's no server-side upload. Your GL data is processed locally, which matters when the file in front of you includes real financial detail you're responsible for protecting.</li>
+        <li><strong>Built and hardened through real QA cycles.</strong> Currently at v1.1.0 with all 21 identified QA defects resolved and 28 regression checks passing — this has been through actual bug-fixing rounds, not shipped once and left alone.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>How it works</h2>
+      <ol>
+        <li><strong>Bring your GL export.</strong> Drop in a GL export from whatever system you're working with — Yardi, MRI, RealPage, or a custom export. No pre-formatting required.</li>
+        <li><strong>GL Down Driller auto-detects the format and matches columns.</strong> The two-pass matching process identifies which columns represent account, date, amount, entity, description, and so on — even if the export's structure doesn't match a format the tool has seen labeled that way before.</li>
+        <li><strong>Drill into the detail.</strong> Once the format is matched, drill down into GL detail by account, entity, date range, or transaction — all inside your browser, with nothing sent anywhere.</li>
+      </ol>
+      <p>Typical input: a raw GL export file (CSV or similar) from any standard property accounting system. Typical output: a drillable, correctly-mapped view of that GL data, ready for line-item analysis.</p>
+    </section>
+
+    <section>
+      <h2>Real use-case example</h2>
+      <p><strong>Input</strong> (anonymized GL export excerpt, unfamiliar column order):</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>GLDate</th><th>Acct#</th><th>AcctDesc</th><th>Ent</th><th>Amt</th><th>RefNo</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>03/14/2026</td><td>6410</td><td>R&amp;M-HVAC</td><td>PROP-04</td><td>7,650.00</td><td>INV-88213</td></tr>
+            <tr><td>03/22/2026</td><td>5220</td><td>Janitorial Svc</td><td>PROP-04</td><td>-2,400.00</td><td>CR-4471</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>What GL Down Driller does with it:</strong></p>
+      <p>The two-pass column matcher identifies <code>GLDate</code> as the transaction date, <code>Acct#</code>/<code>AcctDesc</code> as the account identifier and name, <code>Ent</code> as the entity/property code, <code>Amt</code> as the transaction amount, and <code>RefNo</code> as the reference number — despite none of those headers being the "expected" labels. From there, you can drill into every transaction under Account 6410 across <code>PROP-04</code>, or pull every R&amp;M transaction across all entities in the export, without manually remapping a single column.</p>
+    </section>
+
+    <section>
+      <h2>FAQ</h2>
+      <dl class="faq">
+        <dt>Does my GL data get uploaded anywhere?</dt>
+        <dd>No. All processing happens in your browser. There's no server-side upload and no third party sees your GL data.</dd>
+
+        <dt>What GL export formats does it handle?</dt>
+        <dd>It's built to auto-detect standard property-accounting GL exports (Yardi, MRI, RealPage, and similar), and the two-pass matching is designed to adapt to export formats it hasn't seen in that exact structure before. If a file genuinely can't be parsed, that's useful feedback — flag it.</dd>
+
+        <dt>What does "multi-entity support" actually mean here?</dt>
+        <dd>You can drill into GL data across more than one entity or property within the same session, rather than needing a separate upload or reset for each one.</dd>
+
+        <dt>How stable is this tool?</dt>
+        <dd>Currently at v1.1.0. All 21 QA defects identified during testing have been resolved, and it's passing 28 regression checks. It's had real bug-fixing cycles behind it, not a single release with no follow-up.</dd>
+
+        <dt>Is the code available to review?</dt>
+        <dd>Yes — GL Down Driller is open source. See the <a href="https://github.com/GabrielBR408/GL-Down-Driller" target="_blank" rel="noopener">GitHub repo</a> for the code itself.</dd>
+
+        <dt>Who built this?</dt>
+        <dd>GL Down Driller was built by a practicing CRE General Manager who works with GL exports across multiple accounting systems regularly — not a generic data tool repurposed for real estate.</dd>
+      </dl>
+    </section>
+
+    <section class="cta-block">
+      <h2>Stop reverse-engineering GL exports by hand. Drop it in and drill down.</h2>
+      <a class="cta" href="/downdriller">Try GL Down Driller Now →</a>
+    </section>
+
+    <section class="about-builder">
+      <h2>About the Builder</h2>
+      <p>ChiefEO's tools are built by Gabriel Roberts, a General Manager in Property Management with 10+ years of hands-on experience in commercial real estate, currently overseeing Class A office assets at Lincoln Property Company.</p>
+      <p>That background is the point. Every tool in this suite exists because Gabriel needed it first — writing variance narratives against a real GL, compiling owner reports on a deadline, drilling into GL exports from more than one accounting system, and dictating inspection notes hands-free while actually walking a property. These aren't features designed from a spec sheet; they're built from the workflow of someone doing the job every month.</p>
+      <p>That's also why auditability matters so much here. A practitioner building for other practitioners knows that "the AI said so" isn't good enough when an owner asks a follow-up question — the numbers and findings need to trace back to something real. Where these tools use AI, it's scoped narrowly to drafting and narrative work, never to deciding what a GL transaction says or what an inspection finding is.</p>
+      <p>Connect with Gabriel on <a href="https://www.linkedin.com/in/gabrielbroberts/" target="_blank" rel="noopener">LinkedIn</a>.</p>
+    </section>
+
+    <nav class="tool-links">
+      <a href="/tools/orgen">Owner Report Generator</a>
+      <a href="/tools/chiefeoinspector">ChiefEO Inspector</a>
+      <a href="/">All ChiefEO tools</a>
+    </nav>
+  </main>
+</body>
+</html>
