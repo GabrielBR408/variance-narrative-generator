@@ -7,7 +7,6 @@
 import React from 'react'
 import chiefeoLogo from '../assets/chiefeo-logo.png'
 import { shareHub } from '../lib/share.js'
-import HomeLandingContent from '../components/HomeLandingContent.jsx'
 import Footer from '../components/Footer.jsx'
 
 // One entry per tool button. `href` may be a rewritten external path
@@ -95,9 +94,19 @@ export default function Hub() {
         )}
       </div>
 
-      {/* Indexable landing copy, appended below the tool list so the "pick a
-          tool" flow above is untouched. */}
-      <HomeLandingContent />
+      {/* Internal links so the static /tools/* landing pages aren't orphaned —
+          they carry each proxied tool's meta/JSON-LD, which the proxied apps
+          can't serve from this repo. This nav is all that remains of the old
+          HomeLandingContent block: the VNG marketing copy that sat here moved
+          to its own landing page at /tools/vng when VNG was extracted, so the
+          hub no longer sells one tool out of six. */}
+      <nav className="hub-tool-links">
+        <span>More on the tools:</span>
+        <a href="/tools/vng">Variance Narrative Generator</a>
+        <a href="/tools/orgen">Owner Report Generator</a>
+        <a href="/tools/downdriller">GL Down Driller</a>
+        <a href="/tools/chiefeoinspector">ChiefEO Inspector</a>
+      </nav>
 
       <Footer />
     </main>
