@@ -2,8 +2,9 @@
 // Indexable copy for chiefeotool.com/, rendered by the hub below the tool
 // buttons. Content is the SEO package's landing_page_vng.md; DEPLOYMENT_CHECKLIST.md
 // maps the VNG landing copy to the homepage, since VNG has no URL of its own
-// separate from it. The package's practitioner byline is deliberately not
-// included — see docs/seo-integration-notes.md.
+// separate from it. All builder-identity copy is deliberately excluded — the
+// "why trust it" answer leans on auditability, not a byline. See
+// docs/seo-integration-notes.md.
 //
 // Deliberately appended *after* the tool list and share row: the hub's job is
 // still "pick a tool" above the fold — this is additive content below it,
@@ -222,10 +223,13 @@ export default function HomeLandingContent() {
             built to be part of your actual monthly reporting workflow.
           </dd>
 
-          <dt>Who built this and why should I trust it?</dt>
+          <dt>Why should I trust the output?</dt>
           <dd>
-            VNG was built by a practicing CRE General Manager who writes variance narratives as part
-            of the job, not a software vendor guessing at the workflow.
+            Because you can check it. Every narrative traces back to a specific line of GL detail —
+            the invoice, the vendor, the account activity — so you can verify any sentence against
+            your own source data. The figures themselves are parsed deterministically and never
+            rewritten, and you review and edit every draft before it goes out. It's auditable, not a
+            black box.
           </dd>
         </dl>
       </section>

@@ -21,7 +21,7 @@ instead:
 | `landing_page_orgen.md` + block 2 | `/orgen` | `public/tools/orgen.html` → `/tools/orgen` | `/orgen` is a proxy to another Vercel project |
 | `landing_page_driller.md` + block 3 | `/downdriller` | `public/tools/downdriller.html` → `/tools/downdriller` | same |
 | `landing_page_inspector.md` + block 4 | `/chiefeoinspector` | `public/tools/chiefeoinspector.html` → `/tools/chiefeoinspector` | same |
-| `practitioner_byline.md` | About page / footer | **not applied** (removed) | Named the builder, employer, and LinkedIn; dropped at the owner's request to avoid personal identification. The `author` Person block was removed from all four JSON-LD blocks for the same reason. Non-identifying "built by a practicing CRE GM" phrasing is retained. |
+| `practitioner_byline.md` | About page / footer | **not applied** (removed) | Named the builder, employer, and LinkedIn; dropped at the owner's request to avoid personal identification. The `author` Person block was removed from all four JSON-LD blocks for the same reason. The remaining non-identifying "built by a practicing CRE GM" phrasing was also removed at the owner's request — "who built this" trust copy is now answered by the tool's auditability (traceable numbers, deterministic parsing, in-browser processing) instead of by a byline. Don't reintroduce builder-identity phrasing. |
 | `sitemap.xml` | site root | `public/sitemap.xml` → `/sitemap.xml` | Copied verbatim |
 | `readme_gl_driller.md`, `readme_inspector.md` | other GitHub repos | **not applied** | Out of scope for this repo |
 
