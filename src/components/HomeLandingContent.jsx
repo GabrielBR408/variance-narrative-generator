@@ -1,8 +1,9 @@
 // --- Homepage SEO landing content -----------------------------------------
 // Indexable copy for chiefeotool.com/, rendered by the hub below the tool
-// buttons. Content is the SEO package verbatim (landing_page_vng.md +
-// practitioner_byline.md); DEPLOYMENT_CHECKLIST.md maps the VNG landing copy to
-// the homepage, since VNG has no URL of its own separate from it.
+// buttons. Content is the SEO package's landing_page_vng.md; DEPLOYMENT_CHECKLIST.md
+// maps the VNG landing copy to the homepage, since VNG has no URL of its own
+// separate from it. The package's practitioner byline is deliberately not
+// included — see docs/seo-integration-notes.md.
 //
 // Deliberately appended *after* the tool list and share row: the hub's job is
 // still "pick a tool" above the fold — this is additive content below it,
@@ -215,11 +216,16 @@ export default function HomeLandingContent() {
             not a single idealized format.
           </dd>
 
+          <dt>Is this still labeled a prototype?</dt>
+          <dd>
+            No — VNG is a stable, production tool in active use. It's not a proof-of-concept; it's
+            built to be part of your actual monthly reporting workflow.
+          </dd>
+
           <dt>Who built this and why should I trust it?</dt>
           <dd>
             VNG was built by a practicing CRE General Manager who writes variance narratives as part
-            of the job, not a software vendor guessing at the workflow. See “About the Builder”
-            below for background.
+            of the job, not a software vendor guessing at the workflow.
           </dd>
         </dl>
       </section>
@@ -230,41 +236,6 @@ export default function HomeLandingContent() {
           properties.
         </h3>
         <a className="home-landing-cta" href="/vng">Try VNG Now →</a>
-      </section>
-
-      {/* practitioner_byline.md. Placed at the foot of the homepage: the hub is
-          the site's front door and the only page this repo owns end to end, so
-          it's the natural home for the site-wide author/E-E-A-T signal. The same
-          section is repeated on each /tools/* landing page. */}
-      <section className="about-builder">
-        <h2>About the Builder</h2>
-        <p>
-          ChiefEO's tools are built by Gabriel Roberts, a General Manager in Property Management
-          with 10+ years of hands-on experience in commercial real estate, currently overseeing
-          Class A office assets at Lincoln Property Company.
-        </p>
-        <p>
-          That background is the point. Every tool in this suite exists because Gabriel needed it
-          first — writing variance narratives against a real GL, compiling owner reports on a
-          deadline, drilling into GL exports from more than one accounting system, and dictating
-          inspection notes hands-free while actually walking a property. These aren't features
-          designed from a spec sheet; they're built from the workflow of someone doing the job every
-          month.
-        </p>
-        <p>
-          That's also why auditability matters so much here. A practitioner building for other
-          practitioners knows that “the AI said so” isn't good enough when an owner asks a follow-up
-          question — the numbers and findings need to trace back to something real. Where these
-          tools use AI, it's scoped narrowly to drafting and narrative work, never to deciding what
-          a GL transaction says or what an inspection finding is.
-        </p>
-        <p>
-          Connect with Gabriel on{' '}
-          <a href="https://www.linkedin.com/in/gabrielbroberts/" target="_blank" rel="noopener noreferrer">
-            LinkedIn
-          </a>
-          .
-        </p>
       </section>
 
       {/* Internal links so the static /tools/* landing pages aren't orphaned —
