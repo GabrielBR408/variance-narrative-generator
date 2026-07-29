@@ -7,6 +7,7 @@
 
 import React from 'react'
 import chiefeoLogo from '../assets/chiefeo-logo.png'
+import Footer from '../components/Footer.jsx'
 
 const FEATURES = [
   'Answer specific lease questions — permissions, obligations, defined terms, options',
@@ -119,11 +120,7 @@ export default function Skills() {
         </section>
       </div>
 
-      <footer className="site-footer">
-        <p className="site-footer-line site-footer-line--muted">
-          &copy; 2026 GREVE, operating as ChiefEO. All rights reserved.
-        </p>
-      </footer>
+      <Footer />
     </main>
   )
 }

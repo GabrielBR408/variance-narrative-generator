@@ -8,6 +8,7 @@ import React from 'react'
 import chiefeoLogo from '../assets/chiefeo-logo.png'
 import { shareHub } from '../lib/share.js'
 import HomeLandingContent from '../components/HomeLandingContent.jsx'
+import Footer from '../components/Footer.jsx'
 
 // One entry per tool button. `href` may be a rewritten external path
 // (/downdriller, /orgen) or an in-app route (/vng). Add more here as tools come
@@ -97,6 +98,8 @@ export default function Hub() {
       {/* Indexable landing copy, appended below the tool list so the "pick a
           tool" flow above is untouched. */}
       <HomeLandingContent />
+
+      <Footer />
     </main>
   )
 }
