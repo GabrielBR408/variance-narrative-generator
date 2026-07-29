@@ -6,6 +6,7 @@ import GeneratePanel from './components/GeneratePanel.jsx'
 import ResultPanel from './components/ResultPanel.jsx'
 import DisclosureModal from './components/DisclosureModal.jsx'
 import PrivacyModal from './components/PrivacyModal.jsx'
+import ClaudeApiDisclosure from './components/ClaudeApiDisclosure.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
 import UploadGuidance from './components/UploadGuidance.jsx'
 import PreviewBasis from './components/PreviewBasis.jsx'
@@ -384,6 +385,17 @@ export default function App() {
         Upload your variance report and year-to-date GL, and click Generate Narrative
       </p>
       <div className="workflow">
+        {/* Compliance Phase 1: standing notice that variance input is sent to
+            the Anthropic Claude API. Sits above the input form and shows on
+            load; advisory only, so it never blocks upload or generation. It
+            complements — does not replace — the first-visit PrivacyModal and
+            the on-Generate DisclosureModal, which are consent gates. */}
+        <ClaudeApiDisclosure
+          variant="banner"
+          storageKey="vng_claude_warning_dismissed"
+          message="Your input will be sent to Anthropic Claude API for narrative generation. Do not include SSNs, passwords, or confidential data. See ToS §5.2"
+        />
+
         {/* Default view: only the upload area + file confirmation. */}
         <SourceFiles
           baseReport={baseReport}
