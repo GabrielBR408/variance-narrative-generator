@@ -32,6 +32,12 @@
   </url>
 
   <url>
+    <loc>https://chiefeotool.com/skills</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
     <loc>https://chiefeotool.com/tools/vng</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -53,6 +59,18 @@
     <loc>https://chiefeotool.com/tools/chiefeoinspector</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://chiefeotool.com/tos</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <url>
+    <loc>https://chiefeotool.com/privacy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
   </url>
 
 </urlset>
