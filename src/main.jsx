@@ -8,9 +8,16 @@ import { registerUpdatePrompt } from './pwa/registerUpdate.js'
 import { Analytics } from '@vercel/analytics/react'
 import AccountShell from './components/auth/AccountShell.jsx'
 
+// The legal pages pull in the markdown renderer and the full ToS/Privacy text,
+// which no other route needs — lazy so that weight stays out of the hub and
+// tool bundles.
+const Tos = React.lazy(() => import('./routes/Tos.jsx'))
+const Privacy = React.lazy(() => import('./routes/Privacy.jsx'))
+
 // --- Lightweight path routing ---------------------------------------------
 // The app has no router dependency; a single pathname switch keeps it that way.
 //   /vng (and anything under it) → the Variance Narrative Generator app
+//   /tos, /privacy → the legal pages (deep-linked as /tos#5-2, /privacy#7-2)
 //   /    → the hub landing page (and any other in-app path falls back to it)
 // Deep paths still load index.html (the SPA rewrite in vercel.json), so this
 // switch decides what renders — a stale or mistyped /vng/... deep link must
@@ -41,6 +48,14 @@ function pickRoute() {
     document.title = 'Skills — ChiefEO Tool'
     return <Skills />
   }
+  if (path === '/tos') {
+    document.title = 'Terms of Service — ChiefEO'
+    return <Tos />
+  }
+  if (path === '/privacy') {
+    document.title = 'Privacy Policy — ChiefEO'
+    return <Privacy />
+  }
   document.title = 'ChiefEO Tools'
   return <Hub />
 }
@@ -50,7 +65,11 @@ createRoot(document.getElementById('root')).render(
     {/* Optional-auth wrapper: ?ref= capture + email-verify session pickup for
         the whole SPA, plus the dismissible anon signup banner + modal. Anon
         users keep 100% tool access — this never gates or redirects. */}
-    <AccountShell>{pickRoute()}</AccountShell>
+    <AccountShell>
+      {/* Suspense boundary for the lazily-loaded legal routes; every other
+          route is statically imported and never suspends. */}
+      <React.Suspense fallback={<main className="page" />}>{pickRoute()}</React.Suspense>
+    </AccountShell>
     {/* App-wide Vercel Web Analytics (page views/traffic) for this single
         deployment — covers the hub and every route/proxied view. Unrelated to
         the /vng-only `app_opened` custom event, which is fired inside App.jsx.
