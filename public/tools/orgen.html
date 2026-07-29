@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1c2a3a">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+
+  <!-- SEO package: meta_og_tags.md block 2 + schema_markup.md block 2.
+       The package maps these to chiefeotool.com/orgen, but that path is a
+       vercel.json proxy to the Owner Report Generator's own Vercel project —
+       this repo never serves its <head>. This standalone landing page carries
+       the copy and markup instead, and links through to the live tool. -->
+  <title>Owner Report Generator | ChiefEO</title>
+  <meta name="description" content="Compile owner-ready reports from prior-month PDFs and current-month data. Deterministic number parsing — the LLM never touches your figures.">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Owner Report Generator: Deterministic, Not AI-Guessed">
+  <meta property="og:description" content="Prior report + current data in, compiled owner report out. Numbers are parsed deterministically, every time — 346/346 tests passing.">
+  <meta property="og:url" content="https://chiefeotool.com/orgen">
+  <meta property="og:site_name" content="ChiefEO">
+  <!-- og:image / twitter:image omitted: the package specifies
+       /images/orgen-screenshot.png, which does not exist in this repo. -->
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Owner Report Generator: Deterministic, Not AI-Guessed">
+  <meta name="twitter:description" content="Prior report + current data in, compiled owner report out. Numbers are parsed deterministically, every time — 346/346 tests passing.">
+
+  <!-- "image" omitted for the same missing-asset reason. "price": "0" is the
+       package's assumption — confirm before this goes live. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Owner Report Generator",
+    "description": "Ingests a prior-month owner report PDF and current-month financial data to produce a compiled, owner-ready report PDF. Uses deterministic income-statement parsing — the LLM never touches the numbers — so figures stay auditable start to finish.",
+    "applicationCategory": "BusinessApplication",
+    "applicationSubCategory": "Commercial Real Estate Reporting Tool",
+    "operatingSystem": "Web",
+    "browserRequirements": "Requires a modern browser with JavaScript enabled (Chrome, Edge, Firefox, Safari — current versions)",
+    "url": "https://chiefeotool.com/orgen",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "Gabriel Roberts",
+      "jobTitle": "General Manager, Property Management",
+      "worksFor": {
+        "@type": "Organization",
+        "name": "Lincoln Property Company"
+      },
+      "url": "https://www.linkedin.com/in/gabrielbroberts/"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Golden Real Estate Ventures and Exchanges LLC",
+      "url": "https://chiefeotool.com"
+    }
+  }
+  </script>
+  <link rel="stylesheet" href="/tools/landing.css">
+</head>
+<body>
+  <main class="page">
+    <a class="back-to-hub" href="/">← ChiefEO Tool</a>
+
+    <header class="hero">
+      <p class="eyebrow">Owner Report Generator</p>
+      <h1>Owner reports shouldn't take a full day to assemble. Now they don't have to.</h1>
+      <p class="lede">You already know the drill: pull last month's report as a template, drop in this month's numbers, format it to match, write the commentary, proof it twice because owners notice everything. The Owner Report Generator takes your prior-month report and current-month data and compiles the next one — with the numbers parsed deterministically, so the figures are never left to an AI's judgment.</p>
+      <a class="cta" href="/orgen">Try Owner Report Generator Now →</a>
+    </header>
+
+    <section>
+      <h2>Who this is for</h2>
+      <ul>
+        <li><strong>Property accountants</strong> who own the monthly owner-reporting cycle and want the compilation work automated without giving up control over what the numbers say.</li>
+        <li><strong>Junior PMs</strong> handling reporting for a property or two who don't have a dedicated accountant and need the formatting and structure to just be right, consistently.</li>
+        <li><strong>Anyone managing multiple properties on different reporting templates</strong>, where every owner wants their report to look a certain way and manually rebuilding that format every month gets old fast.</li>
+        <li><strong>Teams onboarding a new property</strong> where there's a prior report to match but no existing muscle memory for exactly how that owner likes things laid out.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>What it solves</h2>
+      <p>Owner reporting is a compilation problem disguised as a writing problem. The financial data is usually already correct — it's sitting in your income statement, your budget, your GL. The actual work is stitching it into the format a specific owner expects, month after month, without introducing errors or inconsistencies along the way.</p>
+      <p>Doing this by hand means opening last month's PDF, using it as a visual template, manually re-entering or copy-pasting this month's figures, checking that totals tie out, and formatting commentary to match the established structure. It's tedious, and tedious work is exactly where copy-paste errors sneak in — a number that doesn't update, a total that's off by one row, a section that gets skipped because the report has grown to include an unusual number of moving parts.</p>
+      <p>The Owner Report Generator handles the compilation: give it your prior-month report as the format reference and your current-month data, and it produces the next report in that same structure. Critically, the income-statement parsing is deterministic — meaning the LLM in this tool never touches or interprets your financial figures. Numbers go in, numbers come out unchanged, formatted into the report. The AI's job is limited to compiling and structuring, not deciding what your P&amp;L says.</p>
+    </section>
+
+    <section>
+      <h2>Features</h2>
+      <ul>
+        <li><strong>Deterministic income-statement parsing.</strong> Your financial figures are parsed and placed programmatically — not summarized or interpreted by an LLM. What's in your source data is what ends up in the report.</li>
+        <li><strong>Prior-report-as-template.</strong> Feed it last month's owner report PDF and it matches that structure, so every owner keeps getting the format they're used to without you rebuilding it from scratch.</li>
+        <li><strong>Regression-tested reliability.</strong> 346 out of 346 regression tests passing — this isn't a tool that's still finding its footing on edge cases.</li>
+        <li><strong>Compiled, owner-ready PDF output.</strong> The end product is a finished report, not a set of pieces you still need to assemble.</li>
+        <li><strong>Built around the real reporting cycle.</strong> Designed for the actual monthly rhythm of prior report + current data → next report, not a generic document generator retrofitted to real estate.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>How it works</h2>
+      <ol>
+        <li><strong>Provide the prior-month owner report.</strong> Upload the PDF of last month's report for that property — this is what sets the format and structure the new report will follow.</li>
+        <li><strong>Provide current-month data.</strong> Bring your current-month income statement, budget data, and any commentary you want included.</li>
+        <li><strong>Get a compiled owner-ready report.</strong> The tool matches the established format, drops in the current figures via deterministic parsing, and produces a finished PDF ready for final review.</li>
+      </ol>
+      <p>Typical input: a prior-month owner report PDF plus current-month income statement and budget data. Typical output: a compiled, formatted owner report PDF matching the established template, ready for a final read-through before it goes out.</p>
+    </section>
+
+    <section>
+      <h2>Real use-case example</h2>
+      <p><strong>Input:</strong> Prior-month owner report PDF (established format: cover page, executive summary, income statement with variance commentary column, budget comparison) + current-month income statement export.</p>
+      <p><strong>Output</strong> (anonymized excerpt from a compiled income statement section):</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Account</th><th>Current Actual</th><th>Current Budget</th><th>Variance</th><th>Commentary</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Total Revenue</td><td>$412,300</td><td>$405,000</td><td>+$7,300</td><td>Above budget due to parking income exceeding projection</td></tr>
+            <tr><td>Total Operating Expenses</td><td>$148,900</td><td>$151,200</td><td>-$2,300</td><td>Slightly under budget; utilities trending favorably YTD</td></tr>
+            <tr><td><strong>Net Operating Income</strong></td><td><strong>$263,400</strong></td><td><strong>$253,800</strong></td><td><strong>+$9,600</strong></td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The figures above are placed by the deterministic parser directly from the source income statement — not generated or estimated by the AI — and slotted into the same table structure the prior month's report used.</p>
+    </section>
+
+    <section>
+      <h2>FAQ</h2>
+      <dl class="faq">
+        <dt>Does the AI ever change or estimate my financial numbers?</dt>
+        <dd>No. The income-statement parsing is deterministic — the LLM is not involved in interpreting or generating the numbers. It handles formatting and compilation; your source data determines every figure.</dd>
+
+        <dt>What if this month's report needs a section the prior report didn't have?</dt>
+        <dd>The tool works best when matching an existing format closely. For structural changes — a new section, a different table layout — plan on a manual adjustment pass after generation, at least until that new format has run once as the "prior report" reference.</dd>
+
+        <dt>How reliable is this, really?</dt>
+        <dd>346 out of 346 regression tests are currently passing. That's not a claim of perfection, but it reflects a tool that's been tested against a wide range of real report scenarios, not just the happy path.</dd>
+
+        <dt>Do I still need to review the output before sending it to an owner?</dt>
+        <dd>Yes — always. This tool compiles the report; it doesn't replace a final human review before something goes to an owner or asset manager.</dd>
+
+        <dt>What file formats does it accept?</dt>
+        <dd>The prior-month report is provided as a PDF; current-month data comes from your income statement and budget exports.</dd>
+
+        <dt>Is this a prototype or something I can rely on month to month?</dt>
+        <dd>It's a stable, production tool with a strong regression-testing track record — built to be part of your actual reporting cycle, not a proof-of-concept.</dd>
+      </dl>
+    </section>
+
+    <section class="cta-block">
+      <h2>Give it last month's report and this month's numbers. Get next month's report back.</h2>
+      <a class="cta" href="/orgen">Try Owner Report Generator Now →</a>
+    </section>
+
+    <section class="about-builder">
+      <h2>About the Builder</h2>
+      <p>ChiefEO's tools are built by Gabriel Roberts, a General Manager in Property Management with 10+ years of hands-on experience in commercial real estate, currently overseeing Class A office assets at Lincoln Property Company.</p>
+      <p>That background is the point. Every tool in this suite exists because Gabriel needed it first — writing variance narratives against a real GL, compiling owner reports on a deadline, drilling into GL exports from more than one accounting system, and dictating inspection notes hands-free while actually walking a property. These aren't features designed from a spec sheet; they're built from the workflow of someone doing the job every month.</p>
+      <p>That's also why auditability matters so much here. A practitioner building for other practitioners knows that "the AI said so" isn't good enough when an owner asks a follow-up question — the numbers and findings need to trace back to something real. Where these tools use AI, it's scoped narrowly to drafting and narrative work, never to deciding what a GL transaction says or what an inspection finding is.</p>
+      <p>Connect with Gabriel on <a href="https://www.linkedin.com/in/gabrielbroberts/" target="_blank" rel="noopener">LinkedIn</a>.</p>
+    </section>
+
+    <nav class="tool-links">
+      <a href="/tools/downdriller">GL Down Driller</a>
+      <a href="/tools/chiefeoinspector">ChiefEO Inspector</a>
+      <a href="/">All ChiefEO tools</a>
+    </nav>
+  </main>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1c2a3a">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+
+  <!-- SEO package: meta_og_tags.md block 4 + schema_markup.md block 4.
+       The package maps these to chiefeotool.com/chiefeoinspector, but that path
+       is a vercel.json proxy to the Inspector's own Vercel project — this repo
+       never serves its <head>. This standalone landing page carries the copy and
+       markup instead, and links through to the live tool. -->
+  <title>ChiefEO Inspector — Property Inspection Tool | ChiefEO</title>
+  <meta name="description" content="Voice-dictated property inspections with AI-assisted drafting. Deterministic field capture keeps your data structured, not AI-hallucinated.">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ChiefEO Inspector: Voice Inspections, Real Structure">
+  <meta property="og:description" content="Push-to-talk inspection dictation with AI-assisted drafting on top of deterministic field capture. Works offline.">
+  <meta property="og:url" content="https://chiefeotool.com/chiefeoinspector">
+  <meta property="og:site_name" content="ChiefEO">
+  <!-- og:image / twitter:image omitted: the package specifies
+       /images/chiefeo-inspector-screenshot.png, which does not exist in this repo. -->
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="ChiefEO Inspector: Voice Inspections, Real Structure">
+  <meta name="twitter:description" content="Push-to-talk inspection dictation with AI-assisted drafting on top of deterministic field capture. Works offline.">
+
+  <!-- "image" omitted for the same missing-asset reason. "price": "0" is the
+       package's assumption — confirm before this goes live. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ChiefEO Inspector",
+    "description": "Commercial property inspection tool with push-to-talk voice dictation and AI-assisted report drafting. Deterministic field capture keeps the data structured while the LLM handles narrative drafting — built for walkthroughs on Class A office and mixed-use properties.",
+    "applicationCategory": "BusinessApplication",
+    "applicationSubCategory": "Commercial Real Estate Inspection Tool",
+    "operatingSystem": "Web, PWA (installable, works offline via IndexedDB)",
+    "browserRequirements": "Requires a modern browser with JavaScript enabled (Chrome, Edge, Firefox, Safari — current versions); installable as a Progressive Web App on desktop and mobile",
+    "softwareVersion": "0.2.1",
+    "url": "https://chiefeotool.com/chiefeoinspector",
+    "sameAs": [
+      "https://chiefeo-inspector.vercel.app",
+      "https://github.com/GabrielBR408/chiefeo-inspector"
+    ],
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "Gabriel Roberts",
+      "jobTitle": "General Manager, Property Management",
+      "worksFor": {
+        "@type": "Organization",
+        "name": "Lincoln Property Company"
+      },
+      "url": "https://www.linkedin.com/in/gabrielbroberts/"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Golden Real Estate Ventures and Exchanges LLC",
+      "url": "https://chiefeotool.com"
+    }
+  }
+  </script>
+  <link rel="stylesheet" href="/tools/landing.css">
+</head>
+<body>
+  <main class="page">
+    <a class="back-to-hub" href="/">← ChiefEO Tool</a>
+
+    <header class="hero">
+      <p class="eyebrow">ChiefEO Inspector</p>
+      <h1>Walk the property. Talk your notes. Get a structured report — not a voice memo you'll transcribe later.</h1>
+      <p class="lede">Property inspections generate a lot of notes fast, and typing them out on-site while you're walking a roof, a garage, or a mechanical room isn't realistic. ChiefEO Inspector lets you dictate findings hands-free with push-to-talk, captures the structured fields that matter, and drafts the narrative write-up — so you leave the walkthrough with a report, not a pile of raw notes to organize later.</p>
+      <a class="cta" href="/chiefeoinspector">Try ChiefEO Inspector Now →</a>
+    </header>
+
+    <section>
+      <h2>Who this is for</h2>
+      <ul>
+        <li><strong>General managers</strong> doing regular property walkthroughs who need inspection documentation that doesn't eat an hour of desk time after every site visit.</li>
+        <li><strong>Assistant property managers</strong> covering inspections across multiple properties who need consistent, structured findings regardless of who's holding the phone that day.</li>
+        <li><strong>Property managers</strong> handling vendor walk-throughs, capital project punch lists, or routine condition assessments who need findings tied to specific locations and categories, not a loose paragraph.</li>
+        <li><strong>Anyone inspecting a property solo</strong> who needs both hands free — climbing, holding a flashlight, opening a panel — while still capturing detailed notes in real time.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>What it solves</h2>
+      <p>The standard property inspection workflow has a gap between what happens on-site and what ends up in the report. You walk the property, you notice things, and then — often hours later, at a desk — you try to reconstruct what you saw into something structured enough to act on. Details get lost in that gap. A note like "roof drain near the northeast corner had some ponding" written from memory an hour later is a worse data point than the same observation captured the moment you saw it.</p>
+      <p>Typing notes in real time while inspecting isn't realistic either — you often need both hands, and phones are slow to type on while standing in a mechanical room. Voice memos solve the hands-free problem but just push the reconstruction work later: now you're transcribing an unstructured recording instead of typing from memory.</p>
+      <p>ChiefEO Inspector closes that gap. Push-to-talk dictation captures your observations as you make them, in the moment, hands-free. Deterministic field capture means the structured data — location, category, severity, whatever fields your inspection template requires — gets recorded as data, not buried inside a paragraph you'll have to parse later. The AI's role is narrowly scoped: drafting the narrative write-up from what you dictated and captured, on top of that structured foundation, not deciding what the structured facts are.</p>
+    </section>
+
+    <section>
+      <h2>Features</h2>
+      <ul>
+        <li><strong>Push-to-talk voice dictation.</strong> Capture findings hands-free while you're actually walking the property, not after the fact from memory.</li>
+        <li><strong>Deterministic field capture.</strong> Structured data — location, category, condition, whatever your inspection format calls for — is captured as actual data fields, not left buried in unstructured text.</li>
+        <li><strong>AI-assisted narrative drafting on top of structured data.</strong> The AI drafts readable write-ups from your captured findings; it doesn't replace the structured capture, it builds on it.</li>
+        <li><strong>Offline-capable PWA.</strong> Installable as a Progressive Web App with IndexedDB storage, so you can keep inspecting in a basement, a parking structure, or anywhere else cell signal doesn't reach, and sync once you're back online.</li>
+        <li><strong>Built for real walkthroughs, not staged demos.</strong> Field capture and dictation are designed around how an inspection actually happens — moving through a property, noticing things in sequence — not a form you fill out at a desk.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>How it works</h2>
+      <ol>
+        <li><strong>Start an inspection and walk the property.</strong> Open ChiefEO Inspector on your phone or tablet and begin the walkthrough as you normally would.</li>
+        <li><strong>Dictate findings with push-to-talk as you go.</strong> Hold to talk, describe what you're seeing, and the tool captures both the structured fields (location, category, severity) and your spoken observations in real time — hands-free.</li>
+        <li><strong>Review the AI-drafted report and finalize.</strong> When the walkthrough's done, review the narrative draft built from your structured findings and dictation, make any adjustments, and finalize the report.</li>
+      </ol>
+      <p>Typical input: voice-dictated observations plus structured field selections captured during a live walkthrough. Typical output: a structured inspection report with categorized findings and AI-drafted narrative write-ups, ready for review and distribution.</p>
+    </section>
+
+    <section>
+      <h2>Real use-case example</h2>
+      <p><strong>Input</strong> (anonymized, captured during a walkthrough):</p>
+      <ul>
+        <li>Location: Parking Structure — Level 2, Bay 14</li>
+        <li>Category: Structural / Concrete</li>
+        <li>Dictated note (push-to-talk): "There's spalling on the column here, looks like it's been going on a while, maybe six inches across, exposed rebar visible, this should probably go on the capital list for next year."</li>
+      </ul>
+      <p><strong>AI-drafted narrative</strong> (from structured fields + dictation):</p>
+      <p class="quote"><em>Parking Structure, Level 2, Bay 14 — Concrete spalling observed on structural column, approximately 6 inches in diameter with visible exposed rebar. Condition appears longstanding rather than recent. Recommend inclusion in next fiscal year's capital planning for structural repair.</em></p>
+      <p>The structured fields (location, category) stay intact as data, while the narrative is drafted from what was actually said and captured on-site — not written cold at a desk later.</p>
+    </section>
+
+    <section>
+      <h2>FAQ</h2>
+      <dl class="faq">
+        <dt>Does the AI decide what the inspection findings are?</dt>
+        <dd>No. Field capture — location, category, severity — is deterministic and comes directly from what you select or dictate. The AI's role is drafting the narrative write-up from that captured data, not generating findings on its own.</dd>
+
+        <dt>Does it work without cell signal?</dt>
+        <dd>Yes. It's built as a Progressive Web App with IndexedDB storage, so you can keep working offline and sync once you're back in range.</dd>
+
+        <dt>Can I use it one-handed or hands-free?</dt>
+        <dd>That's the core design goal — push-to-talk dictation is meant to let you capture findings while your hands are occupied with the actual inspection.</dd>
+
+        <dt>What kind of properties is this built for?</dt>
+        <dd>It's built around commercial property walkthroughs — office, mixed-use, and similar — informed by real Class A office property inspections.</dd>
+
+        <dt>How mature is this tool?</dt>
+        <dd>Currently at v0.2.1, passing 242 out of 242 self-checks. It's an actively developed tool, not a finished-forever product, but the current version has been tested against a substantial self-check suite.</dd>
+
+        <dt>Is the code available to review?</dt>
+        <dd>Yes — ChiefEO Inspector is open source. See the <a href="https://github.com/GabrielBR408/chiefeo-inspector" target="_blank" rel="noopener">GitHub repo</a> for the code itself.</dd>
+      </dl>
+    </section>
+
+    <section class="cta-block">
+      <h2>Walk the property once. Leave with the report, not just the notes.</h2>
+      <a class="cta" href="/chiefeoinspector">Try ChiefEO Inspector Now →</a>
+    </section>
+
+    <section class="about-builder">
+      <h2>About the Builder</h2>
+      <p>ChiefEO's tools are built by Gabriel Roberts, a General Manager in Property Management with 10+ years of hands-on experience in commercial real estate, currently overseeing Class A office assets at Lincoln Property Company.</p>
+      <p>That background is the point. Every tool in this suite exists because Gabriel needed it first — writing variance narratives against a real GL, compiling owner reports on a deadline, drilling into GL exports from more than one accounting system, and dictating inspection notes hands-free while actually walking a property. These aren't features designed from a spec sheet; they're built from the workflow of someone doing the job every month.</p>
+      <p>That's also why auditability matters so much here. A practitioner building for other practitioners knows that "the AI said so" isn't good enough when an owner asks a follow-up question — the numbers and findings need to trace back to something real. Where these tools use AI, it's scoped narrowly to drafting and narrative work, never to deciding what a GL transaction says or what an inspection finding is.</p>
+      <p>Connect with Gabriel on <a href="https://www.linkedin.com/in/gabrielbroberts/" target="_blank" rel="noopener">LinkedIn</a>.</p>
+    </section>
+
+    <nav class="tool-links">
+      <a href="/tools/orgen">Owner Report Generator</a>
+      <a href="/tools/downdriller">GL Down Driller</a>
+      <a href="/">All ChiefEO tools</a>
+    </nav>
+  </main>
+</body>
+</html>

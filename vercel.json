@@ -41,6 +41,18 @@
       "destination": "/utilities-forecaster.html"
     },
     {
+      "source": "/tools/orgen",
+      "destination": "/tools/orgen.html"
+    },
+    {
+      "source": "/tools/downdriller",
+      "destination": "/tools/downdriller.html"
+    },
+    {
+      "source": "/tools/chiefeoinspector",
+      "destination": "/tools/chiefeoinspector.html"
+    },
+    {
       "source": "/downdriller",
       "destination": "https://chiefeo-gl-down-driller.vercel.app"
     },
