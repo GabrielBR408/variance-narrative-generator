@@ -14,6 +14,7 @@ import ExtractionPreview from './components/ExtractionPreview.jsx'
 import TruncationNotice from './components/TruncationNotice.jsx'
 import VariancePreview from './components/VariancePreview.jsx'
 import NarrativeSummary from './components/NarrativeSummary.jsx'
+import Footer from './components/Footer.jsx'
 import {
   extractionReadiness,
   resultFreshness,
@@ -462,17 +463,10 @@ export default function App() {
 
       {showPrivacyDisclosure && <PrivacyModal onAccept={handlePrivacyDisclosureAccept} />}
 
-      <footer className="site-footer">
-        <p className="site-footer-line">
-          AI-generated narratives may contain errors. Always verify figures against source documents before distribution.
-        </p>
-        <p className="site-footer-line site-footer-line--muted">
-          &copy; 2026 GREVE, operating as ChiefEO. All rights reserved.
-        </p>
-        <p className="site-footer-line site-footer-line--muted">
-          v{APP_VERSION} · build {COMMIT_SHA}
-        </p>
-      </footer>
+      <Footer
+        notice="AI-generated narratives may contain errors. Always verify figures against source documents before distribution."
+        meta={`v${APP_VERSION} · build ${COMMIT_SHA}`}
+      />
 
       <FeedbackWidget screen={feedbackScreen} />
     </main>
