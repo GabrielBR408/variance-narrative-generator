@@ -27,51 +27,9 @@ export default function HomeLandingContent() {
       </section>
 
       <section>
-        <h3>Who this is for</h3>
-        <ul>
-          <li>
-            <strong>Assistant property managers</strong> who inherit “write the variance narratives”
-            as a monthly task and want it done in minutes instead of an afternoon.
-          </li>
-          <li>
-            <strong>Junior PMs</strong> still learning which variances matter and which are noise —
-            VNG shows its work, so it doubles as a way to see how a variance actually traces back to
-            GL activity.
-          </li>
-          <li>
-            <strong>Property accountants</strong> who need commentary that will hold up when an
-            owner or asset manager asks a follow-up question, because the narrative is tied to real
-            transaction detail, not a plausible-sounding paragraph.
-          </li>
-          <li>
-            <strong>Anyone covering for someone else this month</strong> — new to the property, new
-            to the chart of accounts, and still on the hook for owner-ready commentary by the
-            deadline.
-          </li>
-        </ul>
-      </section>
-
-      <section>
-        <h3>What it solves</h3>
         <p>
-          Variance narratives are one of the most repetitive, highest-stakes writing tasks in
-          property management reporting. They're repetitive because you do them every month for
-          every property. They're high-stakes because owners read them closely, and a vague or wrong
-          explanation erodes trust fast.
-        </p>
-        <p>
-          The usual approach is manual: pull the variance report, open the GL, trace the line item,
-          write a sentence, repeat — for every material variance, every property, every month. It's
-          slow, it's easy to get inconsistent across properties or team members, and it's easy to
-          write something that sounds right but doesn't actually match what happened in the ledger.
-        </p>
-        <p>
-          VNG collapses that process. You bring the variance data; it drafts narratives directly
-          from the GL transactions that drove each variance. You're not starting from a blank page
-          or trusting a summary — you're reviewing and refining commentary that's already anchored
-          to the source data. What used to take an afternoon of tracing and writing typically takes
-          a fraction of that, and the narrative is defensible because it's built from the actual
-          transaction detail, not inferred from a general sense of the account.
+          <strong>Built for property professionals</strong> who value speed and transparency. No
+          setup, no contracts—just drop a file and get instant value.
         </p>
       </section>
 
