@@ -29,7 +29,7 @@ const TOOLS = [
     desc: 'Drop a rent roll → instant stacking plan. Recolor, edit suites, export PNG/PDF/PPTX/Excel.'
   },
   {
-    label: 'Variance Narrative Generator (Beta)',
+    label: 'Variance Narrative Generator',
     href: '/vng',
     desc: 'Turns a budget-vs-actual statement into owner-ready variance narratives.'
   },

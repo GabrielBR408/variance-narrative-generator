@@ -215,6 +215,12 @@ export default function HomeLandingContent() {
             not a single idealized format.
           </dd>
 
+          <dt>Is this still labeled a prototype?</dt>
+          <dd>
+            No — VNG is a stable, production tool in active use. It's not a proof-of-concept; it's
+            built to be part of your actual monthly reporting workflow.
+          </dd>
+
           <dt>Who built this and why should I trust it?</dt>
           <dd>
             VNG was built by a practicing CRE General Manager who writes variance narratives as part
