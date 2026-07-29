@@ -1046,3 +1046,72 @@ body {
 }
 .home-landing-links a { color: var(--muted); text-decoration: none; }
 .home-landing-links a:hover { color: var(--accent-ink); text-decoration: underline; }
+
+/* --- Claude API disclosure (compliance Phase 1) ---------------------------
+   Informational notice that user input is sent to the Anthropic Claude API.
+   Purely advisory — it never gates generation. Two dismiss levels: the X
+   (this page view only) and "Don't show again" (persisted in localStorage).
+   Link colour is --accent-ink-hover rather than --accent-ink so it still
+   clears WCAG AA against the tinted panel background. */
+.claude-disclosure {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 0.75rem;
+  align-items: start;
+  background: #eef6fa;
+  border: 1px solid #cfe3ee;
+  border-left: 4px solid var(--accent-ink);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.85rem;
+  margin: 0 0 1rem;
+}
+.claude-disclosure--action { margin: 0.75rem 0 0; }
+.claude-disclosure__text {
+  grid-column: 1;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.claude-disclosure__link {
+  color: var(--accent-ink-hover);
+  font-weight: 600;
+  text-decoration: underline;
+}
+.claude-disclosure__link:hover { color: var(--ink); }
+.claude-disclosure__optout {
+  grid-column: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.claude-disclosure__optout input { margin: 0; }
+.claude-disclosure__close {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  /* Sized as a real touch target, not just a glyph — 36px square on phones. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  align-self: start;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1.35rem;
+  line-height: 1;
+  padding: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.claude-disclosure__close:hover { color: var(--ink); background: rgba(28, 42, 58, 0.07); }
+
+/* 375px-class screens: keep the copy readable and the X out of its way. */
+@media (max-width: 420px) {
+  .claude-disclosure { padding: 0.7rem 0.75rem; gap: 0.3rem 0.5rem; }
+  .claude-disclosure__text { font-size: 0.8125rem; }
+}
