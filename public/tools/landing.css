@@ -116,15 +116,6 @@ th { background: #eef1f4; font-weight: 650; }
 }
 .cta-block h2 { margin-bottom: 1rem; }
 
-.about-builder {
-  border-top: 1px solid var(--line);
-  padding-top: 1.5rem;
-  color: var(--muted);
-  font-size: 0.92rem;
-}
-.about-builder h2 { color: var(--ink); }
-.about-builder a { color: var(--accent-ink); }
-
 .tool-links {
   display: flex;
   flex-wrap: wrap;

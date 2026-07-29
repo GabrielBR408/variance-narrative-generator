@@ -94,8 +94,8 @@ export default function Hub() {
         )}
       </div>
 
-      {/* Indexable landing copy + practitioner byline, appended below the tool
-          list so the "pick a tool" flow above is untouched. */}
+      {/* Indexable landing copy, appended below the tool list so the "pick a
+          tool" flow above is untouched. */}
       <HomeLandingContent />
     </main>
   )
