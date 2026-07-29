@@ -34,7 +34,7 @@ const TOOLS = [
     desc: 'Turns a budget-vs-actual statement into owner-ready variance narratives.'
   },
   {
-    label: 'Owner Report Generator (Beta)',
+    label: 'Owner Report Generator',
     href: '/orgen',
     desc: 'Compiles monthly owner reports.'
   },
