@@ -89,6 +89,14 @@
       "destination": "https://chiefeo-vng.vercel.app/vng/:path*"
     },
     {
+      "source": "/textytalky",
+      "destination": "https://texty-talky.vercel.app/textytalky"
+    },
+    {
+      "source": "/textytalky/:path*",
+      "destination": "https://texty-talky.vercel.app/textytalky/:path*"
+    },
+    {
       "source": "/((?!api/|assets/).*)",
       "destination": "/index.html"
     }
