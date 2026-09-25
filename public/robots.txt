@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /ibardin2
 
 Sitemap: https://chiefeotool.com/sitemap.xml
