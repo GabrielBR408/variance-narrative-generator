@@ -73,6 +73,14 @@
       "destination": "https://owner-report-generator.vercel.app/:path*"
     },
     {
+      "source": "/ibardin2",
+      "destination": "https://ibardin2.californialandguide.com/ibardin2"
+    },
+    {
+      "source": "/ibardin2/:path*",
+      "destination": "https://ibardin2.californialandguide.com/ibardin2/:path*"
+    },
+    {
       "source": "/chiefeoinspector",
       "destination": "https://chiefeo-inspector.vercel.app/chiefeoinspector/"
     },
