@@ -29,6 +29,16 @@
   ],
   "rewrites": [
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "book.chiefeotool.com"
+        }
+      ],
+      "destination": "https://promptbook.californialandguide.com/"
+    },
+    {
       "source": "/:path*",
       "has": [
         {
