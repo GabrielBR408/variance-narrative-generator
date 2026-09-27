@@ -9,6 +9,17 @@
       "has": [
         {
           "type": "host",
+          "value": "book.chiefeotool.com"
+        }
+      ],
+      "destination": "/remote/",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
           "value": "variance-narrative-generator.vercel.app"
         }
       ],
@@ -28,16 +39,6 @@
     }
   ],
   "rewrites": [
-    {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "book.chiefeotool.com"
-        }
-      ],
-      "destination": "https://promptbook.californialandguide.com/"
-    },
     {
       "source": "/:path*",
       "has": [
